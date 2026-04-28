@@ -14,12 +14,12 @@
 
 <table>
   <tr>
-    <td><img src="./screenshots/chat.png" alt="Chat"/></td>
-    <td><img src="./screenshots/nodes.png" alt="Nodes"/></td>
+    <td><img src="./screenshots/chat.png?v=1" alt="Chat"/></td>
+    <td><img src="./screenshots/nodes.png?v=1" alt="Nodes"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/settings.png" alt="Settings"/></td>
-    <td><img src="./screenshots/connection.png" alt="Connection"/></td>
+    <td><img src="./screenshots/settings.png?v=1" alt="Settings"/></td>
+    <td><img src="./screenshots/connection.png?v=1" alt="Connection"/></td>
   </tr>
 </table>
 
@@ -96,7 +96,7 @@
 - [x] Device
 - [x] Position
 - [x] Power
-- [ ] Display
+- [x] Display
 - [ ] Bluetooth
 
 #### Module

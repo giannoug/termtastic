@@ -68,23 +68,17 @@ impl Component for Logs {
     ) -> anyhow::Result<bool> {
         if self.popup_record.is_some() {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
-                    match code {
-                        KeyCode::Up => {
-                            self.popup_scroll_offset = self.popup_scroll_offset.saturating_sub(1)
-                        }
-                        KeyCode::Down => {
-                            self.popup_scroll_offset = self.popup_scroll_offset.saturating_add(1);
-                        }
-                        KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
-                            emit(AppEvent::CopyToClipboardRequested(
-                                state.logs[i].clone().into(),
-                            ))?;
-                        }
-                        KeyCode::Esc => self.popup_record = None,
-                        _ => {}
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Up => self.popup_scroll_offset = self.popup_scroll_offset.saturating_sub(1),
+                    KeyCode::Down => {
+                        self.popup_scroll_offset = self.popup_scroll_offset.saturating_add(1);
                     }
-                }
+                    KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
+                        emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
+                    }
+                    KeyCode::Esc => self.popup_record = None,
+                    _ => {}
+                },
                 _ => {}
             }
 
@@ -119,9 +113,7 @@ impl Component for Logs {
                     self.list_state.select(Some(state.logs.len() - 1));
                 }
                 KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
-                    emit(AppEvent::CopyToClipboardRequested(
-                        state.logs[i].clone().into(),
-                    ))?;
+                    emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
                 }
                 _ => {}
             },
@@ -150,13 +142,9 @@ impl Component for Logs {
             self.list_state.select(Some(state.logs.len() - 1));
         }
 
-        let v = ratatui::layout::Layout::default()
+        let v = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
             .split(area);
 
         if !state.logs.is_empty() {
@@ -237,23 +225,14 @@ impl<'a> Widget for LogRecordWidget<'a> {
         let tz = Local;
 
         let mut p = Paragraph::new(Line::from(vec![
-            Span::from(
-                self.record
-                    .datetime
-                    .with_timezone(&tz)
-                    .format("%H:%M:%S")
-                    .to_string(),
-            )
-            .dark_gray(),
+            Span::from(self.record.datetime.with_timezone(&tz).format("%H:%M:%S").to_string()).dark_gray(),
             Span::from(" ").dark_gray(),
-            Span::from(format!("{:<5}", self.record.level.to_string())).style(
-                match self.record.level {
-                    Level::TRACE | Level::DEBUG => Style::default().green(),
-                    Level::INFO => Style::default().blue(),
-                    Level::WARN => Style::default().yellow(),
-                    Level::ERROR => Style::default().red(),
-                },
-            ),
+            Span::from(format!("{:<5}", self.record.level.to_string())).style(match self.record.level {
+                Level::TRACE | Level::DEBUG => Style::default().green(),
+                Level::INFO => Style::default().blue(),
+                Level::WARN => Style::default().yellow(),
+                Level::ERROR => Style::default().red(),
+            }),
             Span::from(" ").dark_gray(),
             Span::from(format!("{}: ", self.record.source)).dark_gray(),
             Span::from(self.record.message.clone()),

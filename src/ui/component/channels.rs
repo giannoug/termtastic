@@ -59,7 +59,7 @@ impl<'a> Component for Channels {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = ratatui::layout::Layout::default()
+        let v = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);

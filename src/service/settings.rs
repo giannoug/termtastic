@@ -3,9 +3,10 @@ use std::sync::LazyLock;
 
 use meshtastic::Message;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
+use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
 use meshtastic::protobufs::config::lo_ra_config::{ModemPreset, RegionCode};
 use meshtastic::protobufs::config::position_config::{GpsMode, PositionFlags};
-use meshtastic::protobufs::config::{self, DeviceConfig, LoRaConfig, PositionConfig, PowerConfig};
+use meshtastic::protobufs::config::{self, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig};
 use meshtastic::protobufs::{
     AdminMessage, Config, ModuleConfig, PortNum, User, admin_message, from_radio, mesh_packet,
 };
@@ -208,6 +209,13 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Power config not loaded"))?,
             )?,
+            FormId::DeviceDisplay => to_formdata(
+                state
+                    .device_config
+                    .display
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Display config not loaded"))?,
+            )?,
             _ => return Err(anyhow::anyhow!("Loader not implemented for FormId: {}", id)),
         };
 
@@ -247,6 +255,12 @@ impl SettingsService {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     my_node_id: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Power(from_formdata::<PowerConfig>(&form_data)?),
+                })?;
+            }
+            FormId::DeviceDisplay => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: config::PayloadVariant::Display(from_formdata::<DisplayConfig>(&form_data)?),
                 })?;
             }
             _ => unimplemented!(),
@@ -1005,6 +1019,164 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         .then_some(())
                         .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
                 },
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::DeviceDisplay,
+        Vec::from([
+            FormItem::new(
+                name_of!(use_12h_clock in DisplayConfig),
+                "Use 12h Clock Format",
+                Some("When enabled, the device will display the time in 12-hour format on screen."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(heading_bold in DisplayConfig),
+                "Bold Heading",
+                Some("Bold the heading text on the screen."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(units in DisplayConfig),
+                "Display Units",
+                None,
+                FormItemKind::Enum(
+                    DisplayUnits::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    DisplayUnits::try_from(v.as_i32().expect("invalid FormValue"))
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(screen_on_secs in DisplayConfig),
+                "Screen On For",
+                Some("Number of seconds the screen stays on after pressing the user button or receiving a message."),
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Always On", 0 as u32),
+                    FormEnumVariant::new("15 second", 15 as u32),
+                    FormEnumVariant::new("30 seconds", 30 as u32),
+                    FormEnumVariant::new("1 minute", 60 as u32),
+                    FormEnumVariant::new("5 minutes", 5 * 60 as u32),
+                    FormEnumVariant::new("10 minutes", 10 * 60 as u32),
+                    FormEnumVariant::new("15 minutes", 15 * 60 as u32),
+                    FormEnumVariant::new("30 minutes", 30 * 60 as u32),
+                    FormEnumVariant::new("1 hour", 60 * 60 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32().expect("invalid value");
+
+                    match secs {
+                        0 => "Always On".to_string(),
+                        1..60 => format!("{} seconds", secs),
+                        60 => "1 minute".to_string(),
+                        3600 => "1 hour".to_string(),
+                        61..=u32::MAX => format!("{} minutes", secs / 60),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(auto_screen_carousel_secs in DisplayConfig),
+                "Carousel Interval",
+                Some(
+                    "Automatically toggles to the next page on the screen like a carousel, based the specified \
+                     interval in seconds.",
+                ),
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("15 second", 15 as u32),
+                    FormEnumVariant::new("30 seconds", 30 as u32),
+                    FormEnumVariant::new("1 minute", 60 as u32),
+                    FormEnumVariant::new("5 minutes", 5 * 60 as u32),
+                    FormEnumVariant::new("10 minutes", 10 * 60 as u32),
+                    FormEnumVariant::new("15 minutes", 15 * 60 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32().expect("invalid value");
+
+                    match secs {
+                        0 => "Unset".to_string(),
+                        1..60 => format!("{} seconds", secs),
+                        60 => "1 minute".to_string(),
+                        61..=u32::MAX => format!("{} minutes", secs / 60),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(wake_on_tap_or_motion in DisplayConfig),
+                "Wake On Tap or Motion",
+                Some("Requires that there be an accelerometer on your device."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(flip_screen in DisplayConfig),
+                "Flip Screen",
+                Some("Flip screen vertically."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(displaymode in DisplayConfig),
+                "Display Mode",
+                None,
+                FormItemKind::Enum(
+                    DisplayMode::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    DisplayMode::try_from(v.as_i32().expect("invalid FormValue"))
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(oled in DisplayConfig),
+                "OLED Type",
+                None,
+                FormItemKind::Enum(
+                    OledType::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    OledType::try_from(v.as_i32().expect("invalid FormValue"))
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(compass_orientation in DisplayConfig),
+                "Compass Orientation",
+                None,
+                FormItemKind::Enum(
+                    CompassOrientation::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    CompassOrientation::try_from(v.as_i32().expect("invalid FormValue"))
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
             ),
         ]),
     );
