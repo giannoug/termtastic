@@ -67,8 +67,8 @@
 - [x] Display the number of hops for the routed nodes
 - [x] Display the ID of the nodes
 - [x] Display the humanized last heard time of the nodes
-- [ ] Sort nodes by different fields: last heard, hops count, distance, etc
-- [ ] Nodes fuzzy search
+- [x] Sort nodes by different fields: last heard, hops count, distance, etc
+- [x] Nodes fuzzy search
 
 #### Single node expanded view
 
