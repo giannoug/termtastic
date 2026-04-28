@@ -12,16 +12,13 @@ pub mod prelude {
     pub use crate::types::*;
     pub use crate::ui::component::Component;
     pub use crate::ui::widget::*;
-    pub use crossterm::event::{
-        Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind,
-    };
-    pub use ratatui::layout::Flex;
+    pub use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
+    pub use ratatui::layout::{Flex, Spacing};
     pub use ratatui::prelude::*;
-    pub use ratatui::symbols::scrollbar::Set as ScrollbarSet;
+    pub use ratatui::symbols::{merge::MergeStrategy, scrollbar::Set as ScrollbarSet};
     pub use ratatui::text::Text;
     pub use ratatui::widgets::{
-        Block, BorderType, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation,
-        Wrap,
+        Block, BorderType, Borders, Clear, Padding, Paragraph, Scrollbar, ScrollbarOrientation, Wrap,
     };
     pub use ratatui_textarea::{TextArea, WrapMode};
     pub use tui_widget_list::{ListBuilder, ListState, ListView};

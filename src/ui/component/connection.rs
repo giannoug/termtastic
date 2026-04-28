@@ -1,28 +1,19 @@
 use hostaddr::HostAddr;
-use itertools::Itertools;
 
 use crate::ui::{helpers::default_scrollbar, prelude::*};
 
 pub struct Connection<'a> {
-    devices: Vec<Device>,
     list_state: ListState,
     is_form_visible: bool,
-    form_error: Option<String>,
-    form_input: TextArea<'a>,
+    popup_input_state: PopupInputState<'a>,
 }
 
 impl<'a> Connection<'a> {
     pub fn new() -> Self {
-        let mut textarea = TextArea::default();
-        textarea.set_cursor_line_style(Style::default());
-        textarea.set_placeholder_text("host[:port=4403]");
-
         Self {
-            devices: vec![],
             list_state: ListState::default(),
             is_form_visible: false,
-            form_error: None,
-            form_input: textarea,
+            popup_input_state: PopupInputState::new(Some("TCP device"), Some("host[:port=4403]"), ""),
         }
     }
 
@@ -67,7 +58,7 @@ impl<'a> Connection<'a> {
         ];
 
         if let Some(index) = self.list_state.selected
-            && let Device::Tcp(_) = &self.devices[index]
+            && let Device::Tcp(_) = &state.aggregated_devices[index]
         {
             hotkeys.push(Hotkey {
                 key: "del".to_string(),
@@ -88,27 +79,23 @@ impl<'a> Component for Connection<'a> {
     ) -> anyhow::Result<bool> {
         if self.is_form_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
-                    match code {
-                        KeyCode::Enter => {
-                            match self.form_input.lines()[0].parse::<HostAddr<String>>() {
-                                Ok(addr) => {
-                                    emit(AppEvent::TcpDeviceSubmitted(addr))?;
-                                    self.is_form_visible = false;
-                                }
-                                Err(e) => {
-                                    self.form_error = Some(format!("invalid address: {}", e));
-                                }
-                            }
-                        }
-                        KeyCode::Esc => {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
+                        Ok(addr) => {
+                            emit(AppEvent::TcpDeviceSubmitted(addr))?;
                             self.is_form_visible = false;
                         }
-                        _ => {
-                            self.form_input.input(event.clone());
+                        Err(e) => {
+                            self.popup_input_state.set_error(format!("invalid address: {}", e));
                         }
+                    },
+                    KeyCode::Esc => {
+                        self.is_form_visible = false;
                     }
-                }
+                    _ => {
+                        self.popup_input_state.handle_event(event.clone());
+                    }
+                },
                 _ => {}
             }
 
@@ -133,17 +120,17 @@ impl<'a> Component for Connection<'a> {
                 KeyCode::Down => self.list_state.next(),
                 KeyCode::Char('r') => emit(AppEvent::DeviceRediscoverRequested)?,
                 KeyCode::Char('t') => {
-                    self.form_error = None;
+                    self.popup_input_state.reset();
                     self.is_form_visible = true;
                 }
                 KeyCode::Enter => {
                     if let Some(index) = self.list_state.selected {
-                        emit(AppEvent::DeviceSelected(self.devices[index].clone()))?
+                        emit(AppEvent::DeviceSelected(state.aggregated_devices[index].clone()))?
                     }
                 }
                 KeyCode::Delete | KeyCode::Backspace => {
                     if let Some(index) = self.list_state.selected
-                        && let Device::Tcp(hostaddr) = &self.devices[index]
+                        && let Device::Tcp(hostaddr) = &state.aggregated_devices[index]
                     {
                         emit(AppEvent::TcpDeviceRemoved(hostaddr.clone()))?
                     }
@@ -167,29 +154,21 @@ impl<'a> Component for Connection<'a> {
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);
 
-        self.devices = state
-            .tcp_devices
-            .iter()
-            .map(|h| Device::Tcp(h.clone()))
-            .chain(state.discovered_devices.clone())
-            .sorted()
-            .collect();
-
-        if !self.devices.is_empty() {
+        if !state.aggregated_devices.is_empty() {
             if self.list_state.selected.is_none()
                 && state.device_discovering_state == DeviceDiscoveringState::Done
-                && !self.devices.is_empty()
+                && !state.aggregated_devices.is_empty()
             {
                 if let Some(active) = &state.active_device {
                     self.list_state
-                        .select(self.devices.iter().position(|d| active == d));
+                        .select(state.aggregated_devices.iter().position(|d| active == d));
                 } else {
                     self.list_state.select(Some(0));
                 }
             }
 
             let list_builder = ListBuilder::new(|context| {
-                let device = self.devices.iter().nth(context.index).unwrap();
+                let device = state.aggregated_devices.iter().nth(context.index).unwrap();
 
                 let item = DeviceWidget {
                     device,
@@ -201,7 +180,7 @@ impl<'a> Component for Connection<'a> {
                 (item, 1)
             });
 
-            let list = ListView::new(list_builder, self.devices.len())
+            let list = ListView::new(list_builder, state.aggregated_devices.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
 
@@ -211,28 +190,7 @@ impl<'a> Component for Connection<'a> {
         }
 
         if self.is_form_visible {
-            let popup_area = Rect {
-                x: v[0].x + v[0].width / 2 - 20,
-                y: v[0].y + v[0].height / 2 - 2,
-                width: 40,
-                height: 3,
-            };
-
-            let popup_block = Block::bordered()
-                .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(if self.form_error.is_none() {
-                    Color::Reset
-                } else {
-                    Color::Red
-                }))
-                .padding(Padding::symmetric(1, 0))
-                .title(" TCP connection ");
-
-            let popup_block_area = popup_block.inner(popup_area);
-
-            frame.render_widget(Clear, popup_area);
-            frame.render_widget(popup_block, popup_area);
-            frame.render_widget(&self.form_input, popup_block_area);
+            PopupInputWidget::new(36).render(v[0], frame.buffer_mut(), &mut self.popup_input_state);
         }
 
         if let Some(active_device) = &state.active_device {
@@ -327,18 +285,12 @@ impl<'a> Widget for DeviceWidget<'a> {
                 Span::from(name).patch_style(dim_style),
             ],
             Device::Tcp(hostaddr) => vec![
-                Span::from(" TCP ")
-                    .black()
-                    .on_green()
-                    .patch_style(dim_style),
+                Span::from(" TCP ").black().on_green().patch_style(dim_style),
                 Span::from(" "),
                 Span::from(hostaddr.to_string()).patch_style(dim_style),
             ],
             Device::Serial(address) => vec![
-                Span::from(" COM ")
-                    .black()
-                    .on_magenta()
-                    .patch_style(dim_style),
+                Span::from(" COM ").black().on_magenta().patch_style(dim_style),
                 Span::from(" "),
                 Span::from(address).patch_style(dim_style),
             ],

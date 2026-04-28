@@ -4,8 +4,7 @@ use hostaddr::HostAddr;
 use meshtastic::protobufs::{User, config, module_config};
 
 use crate::types::{
-    AppConfig, Channel, Device, FormData, FormId, FormValue, LogRecord, Message, Node, NodesSortBy,
-    Tab, Toast,
+    AppConfig, Channel, Device, FormData, FormId, FormValue, LogRecord, Message, Node, NodesSortBy, Tab, Toast,
 };
 
 #[derive(Debug)]
@@ -45,8 +44,8 @@ pub enum StateAction {
         hops: u32,
         snr: f32,
     },
-    #[allow(dead_code)]
     NodesSortBySet(NodesSortBy),
+    NodesFilterSet(String),
     NodesOnlineSet(u16),
     RxTrigger,
     SplashLogo,

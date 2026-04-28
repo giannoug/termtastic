@@ -34,11 +34,7 @@ impl Component for Header {
         frame.render_widget(Paragraph::new(Line::from(app_info)), v[0]);
 
         let my_node_info = if let Some(my_node) = state.get_my_node() {
-            vec![
-                Span::from("node ").dark_gray(),
-                my_node.to_span(),
-                Span::from("  "),
-            ]
+            vec![Span::from("node ").dark_gray(), my_node.to_span(), Span::from("  ")]
         } else {
             vec![]
         };
@@ -61,11 +57,7 @@ impl Component for Header {
             ConnectionState::Connected => vec![
                 Span::from("online ").dark_gray(),
                 Span::from(format!("{}/{} ", state.online_nodes, state.nodes.len())).green(),
-                Span::from("■").fg(if state.rx {
-                    Color::Green
-                } else {
-                    Color::DarkGray
-                }),
+                Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
             ],
         };
 

@@ -52,8 +52,7 @@ impl NodesService {
     }
 
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
-        let mut online_nodes_interval =
-            time::interval(Duration::from_secs(UPDATE_ONLINE_NODES_INTERVAL_SECS));
+        let mut online_nodes_interval = time::interval(Duration::from_secs(UPDATE_ONLINE_NODES_INTERVAL_SECS));
 
         loop {
             tokio::select! {
@@ -71,10 +70,18 @@ impl NodesService {
     }
 
     fn handle_app_event(&self, event: AppEvent) -> anyhow::Result<()> {
+        let state = &self.state_rx.borrow();
+
         match event {
             AppEvent::DirectChatRequested(node_key) => {
+                self.state_action_tx.send(StateAction::DirectChatStart(node_key))?;
+            }
+            AppEvent::NodesSortByCyclePressed => {
                 self.state_action_tx
-                    .send(StateAction::DirectChatStart(node_key))?;
+                    .send(StateAction::NodesSortBySet(state.nodes_sort_by.next()))?;
+            }
+            AppEvent::NodesFilterChanged(filter) => {
+                self.state_action_tx.send(StateAction::NodesFilterSet(filter))?;
             }
             _ => {}
         }
@@ -91,10 +98,7 @@ impl NodesService {
         Ok(())
     }
 
-    fn handle_meshtastic_packet(
-        &mut self,
-        packet: from_radio::PayloadVariant,
-    ) -> anyhow::Result<()> {
+    fn handle_meshtastic_packet(&mut self, packet: from_radio::PayloadVariant) -> anyhow::Result<()> {
         match packet {
             from_radio::PayloadVariant::MyInfo(my_info) => {
                 self.local_my_node_num = Some(my_info.my_node_num);
@@ -109,18 +113,13 @@ impl NodesService {
                         self.update_online_nodes()?;
                     }
                     Err(e) => {
-                        tracing::debug!(
-                            node_key = node_info.num,
-                            "can't convert NodeInfo into Node: {}",
-                            e
-                        );
+                        tracing::debug!(node_key = node_info.num, "can't convert NodeInfo into Node: {}", e);
                     }
                 };
 
                 if Some(node_info.num) == self.local_my_node_num {
-                    self.state_action_tx.send(StateAction::DeviceUserSet(
-                        node_info.user.expect("should be Some"),
-                    ))?;
+                    self.state_action_tx
+                        .send(StateAction::DeviceUserSet(node_info.user.expect("should be Some")))?;
                 }
             }
             from_radio::PayloadVariant::Packet(mesh_packet) => {
@@ -129,9 +128,7 @@ impl NodesService {
                         PortNum::NodeinfoApp => match User::decode(&*data.payload) {
                             Ok(user) => {
                                 match Node::try_from((&mesh_packet, &user)) {
-                                    Ok(node) => {
-                                        self.state_action_tx.send(StateAction::NodeAdd(node))?
-                                    }
+                                    Ok(node) => self.state_action_tx.send(StateAction::NodeAdd(node))?,
                                     Err(e) => {
                                         tracing::debug!(
                                             node_key = mesh_packet.from,
@@ -148,8 +145,7 @@ impl NodesService {
                         PortNum::AdminApp => match AdminMessage::decode(&*data.payload) {
                             Ok(admin_message) => match admin_message.payload_variant {
                                 Some(admin_message::PayloadVariant::SetOwner(user)) => {
-                                    self.state_action_tx
-                                        .send(StateAction::DeviceUserSet(user))?;
+                                    self.state_action_tx.send(StateAction::DeviceUserSet(user))?;
                                 }
                                 _ => {}
                             },
@@ -171,12 +167,11 @@ impl NodesService {
     }
 
     fn send_node_update_last_heard(&self, packet: &MeshPacket) -> anyhow::Result<()> {
-        self.state_action_tx
-            .send(StateAction::NodeUpdateLastHeard {
-                node_key: packet.from,
-                hops: packet.hop_start.saturating_sub(packet.hop_limit),
-                snr: packet.rx_snr,
-            })?;
+        self.state_action_tx.send(StateAction::NodeUpdateLastHeard {
+            node_key: packet.from,
+            hops: packet.hop_start.saturating_sub(packet.hop_limit),
+            snr: packet.rx_snr,
+        })?;
 
         self.update_online_nodes()?;
 
@@ -197,8 +192,7 @@ impl NodesService {
             counter
         });
 
-        self.state_action_tx
-            .send(StateAction::NodesOnlineSet(count))?;
+        self.state_action_tx.send(StateAction::NodesOnlineSet(count))?;
 
         Ok(())
     }

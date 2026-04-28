@@ -68,6 +68,8 @@ pub enum AppEvent {
     SettingsFormSaveRequested(FormId),
     SettingsFormItemSubmitted(&'static FormItem, FormValue),
     CopyToClipboardRequested(String),
+    NodesSortByCyclePressed,
+    NodesFilterChanged(String),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
@@ -89,8 +91,7 @@ impl Ord for Device {
             (
                 Device::Ble { address, .. },
                 Device::Ble {
-                    address: other_address,
-                    ..
+                    address: other_address, ..
                 },
             ) => address.cmp(other_address),
 
@@ -122,7 +123,7 @@ pub enum ConnectionState {
     Connected,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LogRecord {
     pub datetime: DateTime<Utc>,
     pub level: Level,
@@ -143,18 +144,7 @@ impl Into<String> for LogRecord {
 }
 
 #[derive(
-    Debug,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Display,
-    FromRepr,
-    EnumIter,
-    EnumCount,
-    Serialize,
-    Deserialize,
-    Hash,
+    Debug, Default, Clone, Copy, PartialEq, Display, FromRepr, EnumIter, EnumCount, Serialize, Deserialize, Hash,
 )]
 pub enum Tab {
     #[default]
@@ -175,24 +165,14 @@ impl Tab {
         let current_index: usize = self as usize;
         let (previous_index, overflowed) = current_index.overflowing_sub(1);
 
-        Self::from_repr(if overflowed {
-            Tab::COUNT - 1
-        } else {
-            previous_index
-        })
-        .unwrap_or(self)
+        Self::from_repr(if overflowed { Tab::COUNT - 1 } else { previous_index }).unwrap_or(self)
     }
 
     pub fn next(self) -> Self {
         let current_index = self as usize;
         let next_index = current_index.saturating_add(1);
 
-        Self::from_repr(if next_index > Tab::COUNT - 1 {
-            0
-        } else {
-            next_index
-        })
-        .unwrap_or(self)
+        Self::from_repr(if next_index > Tab::COUNT - 1 { 0 } else { next_index }).unwrap_or(self)
     }
 }
 
@@ -269,15 +249,48 @@ impl Toast {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Hash, Default)]
+#[derive(Debug, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, Serialize, Deserialize, Hash, Default)]
 pub enum NodesSortBy {
     #[default]
+    #[strum(to_string = "Hops / SNR")]
     Hops,
+    #[strum(to_string = "Short Name")]
     ShortName,
+    #[strum(to_string = "Long Name")]
     LongName,
+    #[strum(to_string = "Last Heard")]
     LastHeard,
+    #[strum(to_string = "Role / Hops / SNR")]
     Role,
+    #[strum(to_string = "HW Model / Short Name")]
     HwModel,
+}
+
+#[allow(dead_code)]
+impl NodesSortBy {
+    pub fn prev(self) -> Self {
+        let current_index: usize = self as usize;
+        let (previous_index, overflowed) = current_index.overflowing_sub(1);
+
+        Self::from_repr(if overflowed {
+            NodesSortBy::COUNT - 1
+        } else {
+            previous_index
+        })
+        .unwrap_or(self)
+    }
+
+    pub fn next(self) -> Self {
+        let current_index = self as usize;
+        let next_index = current_index.saturating_add(1);
+
+        Self::from_repr(if next_index > NodesSortBy::COUNT - 1 {
+            0
+        } else {
+            next_index
+        })
+        .unwrap_or(self)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -292,6 +305,7 @@ pub struct Node {
     pub role: String,
     pub hw_model: String,
     pub my: bool,
+    pub fulltext: String,
 }
 
 impl Node {
@@ -307,6 +321,7 @@ impl Node {
             role: "UNKNOWN".to_owned(),
             hw_model: "UNKNOWN".to_owned(),
             my: false,
+            fulltext: "UNKNOWN".to_owned(),
         }
     }
 
@@ -327,6 +342,8 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
     fn try_from(value: &meshtastic::protobufs::NodeInfo) -> Result<Self, Self::Error> {
         let user = value.user.as_ref().ok_or(anyhow!("no user information"))?;
         let last_heard = DateTime::from_timestamp(value.last_heard as i64, 0);
+        let role = user.role().as_str_name();
+        let hw_model = user.hw_model().as_str_name();
 
         Ok(Self {
             id: user.id.clone(),
@@ -336,9 +353,17 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
             hops_away: value.hops_away,
             last_heard,
             snr: value.snr,
-            role: user.role().as_str_name().to_string(),
-            hw_model: user.hw_model().as_str_name().to_string(),
+            role: role.to_string(),
+            hw_model: hw_model.to_string(),
             my: false,
+            fulltext: format!(
+                "{} {} {} {} {}",
+                user.short_name.to_lowercase(),
+                user.long_name.to_lowercase(),
+                role.to_lowercase(),
+                hw_model.to_lowercase(),
+                user.id,
+            ),
         })
     }
 }
@@ -348,6 +373,8 @@ impl TryFrom<(&MeshPacket, &User)> for Node {
 
     fn try_from((packet, user): (&MeshPacket, &User)) -> Result<Self, Self::Error> {
         let last_heard = DateTime::from_timestamp(packet.rx_time as i64, 0);
+        let role = user.role().as_str_name();
+        let hw_model = user.hw_model().as_str_name();
 
         Ok(Self {
             id: user.id.clone(),
@@ -357,9 +384,17 @@ impl TryFrom<(&MeshPacket, &User)> for Node {
             hops_away: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard,
             snr: packet.rx_snr,
-            role: user.role().as_str_name().to_string(),
-            hw_model: user.hw_model().as_str_name().to_string(),
+            role: role.to_string(),
+            hw_model: hw_model.to_string(),
             my: false,
+            fulltext: format!(
+                "{} {} {} {} {}",
+                user.short_name.to_lowercase(),
+                user.long_name.to_lowercase(),
+                role.to_lowercase(),
+                hw_model.to_lowercase(),
+                user.id,
+            ),
         })
     }
 }
@@ -450,19 +485,11 @@ pub struct Message {
     pub acked: bool,
 }
 
-impl
-    TryFrom<(
-        &meshtastic::protobufs::MeshPacket,
-        &meshtastic::protobufs::Data,
-    )> for Message
-{
+impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for Message {
     type Error = anyhow::Error;
 
     fn try_from(
-        (packet, data): (
-            &meshtastic::protobufs::MeshPacket,
-            &meshtastic::protobufs::Data,
-        ),
+        (packet, data): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data),
     ) -> Result<Self, Self::Error> {
         if data.payload.is_empty() {
             return Err(anyhow!("payload is empty"));
@@ -621,11 +648,7 @@ impl FormValue {
     }
 
     pub fn as_vec(&self) -> Option<&Vec<Self>> {
-        if let Self::Vec(value) = self {
-            Some(value)
-        } else {
-            None
-        }
+        if let Self::Vec(value) = self { Some(value) } else { None }
     }
 }
 

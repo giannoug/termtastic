@@ -19,9 +19,7 @@ use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::{
     state::{State, StateAction},
-    types::{
-        Channel, ConnectionState, DeviceDiscoveringState, NodesSortBy, SettingsFormState, Tab,
-    },
+    types::{Channel, ConnectionState, Device, DeviceDiscoveringState, NodesSortBy, SettingsFormState, Tab},
 };
 
 const TICK_INTERVAL_MILLIS: u64 = 33;
@@ -36,9 +34,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(
-        initial_state: State,
-    ) -> (Self, UnboundedSender<StateAction>, watch::Receiver<State>) {
+    pub fn new(initial_state: State) -> (Self, UnboundedSender<StateAction>, watch::Receiver<State>) {
         let (action_tx, action_rx) = unbounded_channel::<StateAction>();
         let (state_tx, state_rx) = watch::channel(initial_state.clone());
 
@@ -84,6 +80,7 @@ impl Store {
                 self.state.active_device = cfg.active_device;
                 self.state.tcp_devices = cfg.tcp_devices;
                 self.state.nodes_sort_by = cfg.nodes_sort_by;
+                self.update_aggregated_devices();
                 is_changed = true;
             }
             StateAction::TabSwitchTo(tab) => {
@@ -133,7 +130,7 @@ impl Store {
                 self.state.device_module_config = Default::default();
                 self.state.device_user = Default::default();
                 self.state.channels.clear();
-                self.state.nodes_sort.clear();
+                self.state.nodes_view.clear();
                 self.state.nodes.clear();
                 self.state.online_nodes = 0;
                 is_changed = true;
@@ -163,11 +160,13 @@ impl Store {
             StateAction::DeviceDiscoveringDone(devices) => {
                 self.state.discovered_devices = devices;
                 self.state.device_discovering_state = DeviceDiscoveringState::Done;
+                self.update_aggregated_devices();
                 is_changed = true;
             }
             StateAction::DevicesAddTcp(hostaddr) => {
                 if !self.state.tcp_devices.contains(&hostaddr) {
                     self.state.tcp_devices.push(hostaddr);
+                    self.update_aggregated_devices();
                     is_changed = true;
                 }
             }
@@ -269,6 +268,7 @@ impl Store {
                     .position(|addr| addr == &hostaddr)
                     .map(|index| {
                         self.state.tcp_devices.remove(index);
+                        self.update_aggregated_devices();
                         is_changed = true;
                     });
             }
@@ -281,11 +281,12 @@ impl Store {
 
                 self.state.nodes.insert(node.key, node);
 
-                self.update_nodes_sort();
+                self.update_nodes_view();
                 is_changed = true;
             }
             StateAction::ChannelEnsure(key, channel) => {
                 self.state.channels.entry(key).or_insert(channel);
+                self.state.channels.sort_keys();
                 is_changed = true;
             }
             StateAction::ChannelActiveSet(id) => {
@@ -303,7 +304,12 @@ impl Store {
             }
             StateAction::NodesSortBySet(sort_by) => {
                 self.state.nodes_sort_by = sort_by;
-                self.update_nodes_sort();
+                self.update_nodes_view();
+                is_changed = true;
+            }
+            StateAction::NodesFilterSet(filter) => {
+                self.state.nodes_sort_filter = filter.to_lowercase();
+                self.update_nodes_view();
                 is_changed = true;
             }
             StateAction::NodesOnlineSet(count) => {
@@ -312,11 +318,7 @@ impl Store {
                     is_changed = true;
                 }
             }
-            StateAction::NodeUpdateLastHeard {
-                node_key,
-                hops,
-                snr,
-            } => {
+            StateAction::NodeUpdateLastHeard { node_key, hops, snr } => {
                 if let Some(node) = self.state.nodes.get_mut(&node_key) {
                     node.last_heard = Some(Utc::now());
                     node.hops_away = Some(hops);
@@ -325,13 +327,12 @@ impl Store {
                         node.snr = snr;
                     }
 
-                    self.update_nodes_sort();
+                    self.update_nodes_view();
                     is_changed = true;
                 }
             }
             StateAction::MyNodeKeySet(number) => {
                 self.state.my_node_key = Some(number);
-                tracing::debug!("MyInfo!!!!");
 
                 if let Some(node) = self.state.nodes.get_mut(&number) {
                     node.my = true;
@@ -339,10 +340,7 @@ impl Store {
                 }
             }
             StateAction::DirectChatStart(node_key) => {
-                self.state
-                    .channels
-                    .entry(node_key)
-                    .or_insert(Channel::direct(node_key));
+                self.state.channels.entry(node_key).or_insert(Channel::direct(node_key));
 
                 self.state.active_channel_key = Some(node_key);
                 self.state.active_tab = Tab::Chat;
@@ -352,9 +350,7 @@ impl Store {
                 if let Some(messages_vec) = self.state.messages.get_mut(&channel_key) {
                     messages_vec.push_back(message);
                 } else {
-                    self.state
-                        .messages
-                        .insert(channel_key, VecDeque::from(vec![message]));
+                    self.state.messages.insert(channel_key, VecDeque::from(vec![message]));
                 }
 
                 is_changed = true;
@@ -462,23 +458,18 @@ impl Store {
             self.state_tx.send(self.state.clone())?;
         }
 
-        if self.state.splash_logo
-            && self.state.splash_logo_t.elapsed().as_millis() > SPLASH_LOGO_TIMEOUT_MILLIS
-        {
+        if self.state.splash_logo && self.state.splash_logo_t.elapsed().as_millis() > SPLASH_LOGO_TIMEOUT_MILLIS {
             self.state.splash_logo = false;
             self.state_tx.send(self.state.clone())?;
         }
 
         if let Some(toast) = &self.state.toast {
             // skip toast quickly if there is another in queue
-            let timeout = toast
-                .kind
-                .timeout()
-                .min(if self.state.toast_queue.is_empty() {
-                    u128::MAX
-                } else {
-                    TOAST_QUICK_TIMEOUT_MILLIS
-                });
+            let timeout = toast.kind.timeout().min(if self.state.toast_queue.is_empty() {
+                u128::MAX
+            } else {
+                TOAST_QUICK_TIMEOUT_MILLIS
+            });
 
             if self.state.toast_t.elapsed().as_millis() > timeout {
                 self.state.toast = None;
@@ -495,11 +486,20 @@ impl Store {
         Ok(())
     }
 
-    fn update_nodes_sort(&mut self) {
-        self.state.nodes_sort = self
+    fn update_nodes_view(&mut self) {
+        let filter = &self.state.nodes_sort_filter;
+
+        self.state.nodes_view = self
             .state
             .nodes
             .values()
+            .filter(|n| {
+                if filter.is_empty() {
+                    return true;
+                }
+
+                n.fulltext.contains(filter)
+            })
             .sorted_by(|n1, n2| {
                 match (n1.my, n2.my) {
                     (true, true) => return Ordering::Equal,
@@ -521,10 +521,7 @@ impl Store {
                         .reverse(),
                     NodesSortBy::ShortName => n1.short_name.cmp(&n2.short_name),
                     NodesSortBy::LongName => n1.long_name.cmp(&n2.long_name),
-                    NodesSortBy::HwModel => n1
-                        .hw_model
-                        .cmp(&n2.hw_model)
-                        .then(n1.short_name.cmp(&n2.short_name)),
+                    NodesSortBy::HwModel => n1.hw_model.cmp(&n2.hw_model).then(n1.short_name.cmp(&n2.short_name)),
                     NodesSortBy::Role => n1.role.cmp(&n2.role).then(
                         n1.hops_away
                             .unwrap_or(u32::MAX)
@@ -534,6 +531,17 @@ impl Store {
                 }
             })
             .map(|node| node.key)
+            .collect();
+    }
+
+    fn update_aggregated_devices(&mut self) {
+        self.state.aggregated_devices = self
+            .state
+            .tcp_devices
+            .iter()
+            .map(|h| Device::Tcp(h.clone()))
+            .chain(self.state.discovered_devices.clone())
+            .sorted()
             .collect();
     }
 }

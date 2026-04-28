@@ -5,15 +5,22 @@ use crate::ui::{
     prelude::*,
 };
 
-pub struct Nodes {
+pub struct Nodes<'a> {
     list_state: ListState,
+    filter_input: TextArea<'a>,
     hotkeys: Vec<Hotkey>,
 }
 
-impl Nodes {
+impl<'a> Nodes<'a> {
     pub fn new() -> Self {
+        let mut filter_input = TextArea::default();
+        filter_input.set_placeholder_text("nodes filter...");
+        filter_input.set_cursor_line_style(Style::default());
+        filter_input.select_all();
+
         Self {
             list_state: ListState::default(),
+            filter_input,
             hotkeys: vec![
                 Hotkey {
                     key: "↑↓".to_string(),
@@ -28,7 +35,7 @@ impl Nodes {
                     label: "direct".to_string(),
                 },
                 Hotkey {
-                    key: "s".to_string(),
+                    key: "F6".to_string(),
                     label: "sort by".to_string(),
                 },
             ],
@@ -36,7 +43,7 @@ impl Nodes {
     }
 }
 
-impl Component for Nodes {
+impl<'a> Component for Nodes<'a> {
     fn handle_event(
         &mut self,
         state: &State,
@@ -51,18 +58,21 @@ impl Component for Nodes {
                     self.list_state.select(Some(0));
                 }
                 KeyCode::End => {
-                    self.list_state.select(Some(state.nodes_sort.len() - 1));
+                    self.list_state.select(Some(state.nodes_view.len() - 1));
+                }
+                KeyCode::F(6) => {
+                    emit(AppEvent::NodesSortByCyclePressed)?;
                 }
                 KeyCode::F(2) => {
-                    if let Some(node_key) = self
-                        .list_state
-                        .selected
-                        .and_then(|index| state.nodes_sort.get(index))
-                    {
+                    if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
                         emit(AppEvent::DirectChatRequested(*node_key))?;
                     }
                 }
-                _ => {}
+                _ => {
+                    if self.filter_input.input(event.clone()) {
+                        emit(AppEvent::NodesFilterChanged(self.filter_input.lines()[0].clone()))?;
+                    }
+                }
             },
             Event::Mouse(MouseEvent { kind, .. }) => match kind {
                 MouseEventKind::ScrollUp => self.list_state.previous(),
@@ -76,22 +86,27 @@ impl Component for Nodes {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        if !state.nodes_sort.is_empty() && self.list_state.selected.is_none() {
+        if self
+            .list_state
+            .selected
+            .and_then(|i| Some(i >= state.nodes_view.len()))
+            .unwrap_or(false)
+        {
+            self.list_state.selected = None;
+        }
+
+        if !state.nodes_view.is_empty() && self.list_state.selected.is_none() {
             self.list_state.select(Some(0));
         }
 
-        let v = ratatui::layout::Layout::default()
+        let v = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)])
             .split(area);
 
-        if !state.nodes_sort.is_empty() {
+        if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {
-                let node = &state.nodes[&state.nodes_sort[context.index as usize]];
+                let node = &state.nodes[&state.nodes_view[context.index as usize]];
 
                 let item = NodeWidget {
                     node,
@@ -101,7 +116,7 @@ impl Component for Nodes {
                 (item, 3)
             });
 
-            let list = ListView::new(list_builder, state.nodes_sort.len())
+            let list = ListView::new(list_builder, state.nodes_view.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
 
@@ -109,6 +124,33 @@ impl Component for Nodes {
         } else {
             PlaceholderWidget::black_on_dark_gray(" no nodes ").render(v[0], frame.buffer_mut());
         }
+
+        let v1_h = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Fill(3), Constraint::Fill(2)])
+            .split(v[1]);
+
+        let filter_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::new().dark_gray())
+            .padding(Padding::symmetric(1, 0));
+
+        let filter_block_area = filter_block.inner(v1_h[0]);
+        filter_block.render(v1_h[0], frame.buffer_mut());
+
+        self.filter_input.render(filter_block_area, frame.buffer_mut());
+
+        let sort_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::new().dark_gray())
+            .padding(Padding::symmetric(1, 0));
+
+        let sort_block_area = sort_block.inner(v1_h[1]);
+        sort_block.render(v1_h[1], frame.buffer_mut());
+
+        Line::from(Span::from(state.nodes_sort_by.to_string()).magenta())
+            .centered()
+            .render(sort_block_area, frame.buffer_mut());
 
         HotkeysWidget::new(&self.hotkeys).render(v[2], frame.buffer_mut());
     }
@@ -156,21 +198,13 @@ impl<'a> Widget for NodeWidget<'a> {
         let v0_h = Layout::default()
             .direction(Direction::Horizontal)
             .flex(layout::Flex::SpaceBetween)
-            .constraints([
-                Constraint::Fill(2),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ])
+            .constraints([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
             .split(v[0]);
 
         let v1_h = Layout::default()
             .direction(Direction::Horizontal)
             .flex(layout::Flex::SpaceBetween)
-            .constraints([
-                Constraint::Fill(2),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ])
+            .constraints([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
             .split(v[1]);
 
         // first line
@@ -182,10 +216,12 @@ impl<'a> Widget for NodeWidget<'a> {
         .render(v0_h[0], buf);
 
         Line::from(match self.node.hops_away {
-            _ if self.node.my => Span::from("✔ connected").blue(),
-            Some(0) => Span::from(format!("⁕ {}dB", self.node.snr))
-                .style(Style::new().fg(self.node.snr.snr_to_color())),
-            Some(hops) => Span::from("❱".repeat(hops as usize)).dark_gray(),
+            _ if self.node.my => Span::from("connected").blue(),
+            Some(0) => {
+                Span::from(format!("* {}dB", self.node.snr)).style(Style::new().fg(self.node.snr.snr_to_color()))
+            }
+            Some(1) => Span::from("1 hop"),
+            Some(hops) => Span::from(format!("{} hops", hops)),
             None => Span::from("unknown").dark_gray(),
         })
         .render(v0_h[1], buf);
@@ -196,9 +232,7 @@ impl<'a> Widget for NodeWidget<'a> {
             None => vec![Span::from("?").dark_gray()],
         };
 
-        Line::from(last_heard_spans)
-            .right_aligned()
-            .render(v0_h[2], buf);
+        Line::from(last_heard_spans).right_aligned().render(v0_h[2], buf);
 
         // second line
         Line::from(vec![Span::from(self.node.hw_model.clone()).magenta()]).render(v1_h[0], buf);

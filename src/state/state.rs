@@ -5,6 +5,7 @@ use std::{
 
 use hostaddr::HostAddr;
 use meshtastic::protobufs::User;
+use ordermap::OrderMap;
 
 use crate::types::*;
 
@@ -13,9 +14,10 @@ pub struct State {
     pub active_channel_key: Option<u32>,
     pub active_device: Option<Device>,
     pub active_tab: Tab,
+    pub aggregated_devices: Vec<Device>,
     pub app_name: String,
     pub app_version: String,
-    pub channels: HashMap<u32, Channel>,
+    pub channels: OrderMap<u32, Channel>,
     pub connection_attempt: u16,
     pub connection_state: ConnectionState,
     pub device_discovering_state: DeviceDiscoveringState,
@@ -28,7 +30,8 @@ pub struct State {
     pub my_node_key: Option<u32>,
     pub need_clear_frame: bool,
     pub nodes_sort_by: NodesSortBy,
-    pub nodes_sort: Vec<u32>,
+    pub nodes_sort_filter: String,
+    pub nodes_view: Vec<u32>,
     pub nodes: HashMap<u32, Node>,
     pub online_nodes: u16,
     pub reconnection_backoff: Option<Duration>,
@@ -52,9 +55,10 @@ impl Default for State {
             active_channel_key: None,
             active_device: None,
             active_tab: Default::default(),
+            aggregated_devices: Default::default(),
             app_name: crate::APP_NAME.to_owned(),
             app_version: crate::APP_VERSION.to_owned(),
-            channels: HashMap::with_capacity(10),
+            channels: OrderMap::with_capacity(10),
             connection_attempt: 0,
             connection_state: Default::default(),
             device_discovering_state: Default::default(),
@@ -67,7 +71,8 @@ impl Default for State {
             my_node_key: None,
             need_clear_frame: false,
             nodes_sort_by: Default::default(),
-            nodes_sort: Vec::with_capacity(200),
+            nodes_sort_filter: Default::default(),
+            nodes_view: Vec::with_capacity(200),
             nodes: HashMap::with_capacity(200),
             online_nodes: 0,
             reconnection_backoff: None,
@@ -93,7 +98,6 @@ impl State {
     }
 
     pub fn get_active_channel(&self) -> Option<&Channel> {
-        self.active_channel_key
-            .and_then(|key| self.channels.get(&key))
+        self.active_channel_key.and_then(|key| self.channels.get(&key))
     }
 }

@@ -1025,7 +1025,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
 }
 
 fn build_settings() -> Vec<SettingsItem> {
-    vec![
+    Vec::from([
         // Radio
         SettingsItem::group("Radio"),
         SettingsItem::form("LoRa", FormId::RadioLora),
@@ -1052,5 +1052,5 @@ fn build_settings() -> Vec<SettingsItem> {
         // App
         SettingsItem::group("App"),
         SettingsItem::form("UI", FormId::AppUi),
-    ]
+    ])
 }

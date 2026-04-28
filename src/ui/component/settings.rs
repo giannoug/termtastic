@@ -30,20 +30,15 @@ impl<'a> Settings<'a> {
 
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         match &state.settings_form_state {
-            SettingsFormState::Inactive => vec![
-                Some(Hotkey::new("↑↓", "scroll")),
-                Some(Hotkey::new("enter", "open")),
-            ],
+            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("enter", "open"))],
             SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("esc", "cancel"))],
             SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("esc", "return"))],
-            SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => vec![
-                Some(Hotkey::new("enter", "submit")),
-                Some(Hotkey::new("esc", "cancel")),
-            ],
-            SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => vec![
-                Some(Hotkey::new("enter", "select")),
-                Some(Hotkey::new("esc", "cancel")),
-            ],
+            SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => {
+                vec![Some(Hotkey::new("enter", "submit")), Some(Hotkey::new("esc", "cancel"))]
+            }
+            SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => {
+                vec![Some(Hotkey::new("enter", "select")), Some(Hotkey::new("esc", "cancel"))]
+            }
             SettingsFormState::Loaded { .. } if self.popup_dropdown_bitmask_state.is_some() => {
                 vec![
                     Some(Hotkey::new("space", "toggle")),
@@ -57,12 +52,8 @@ impl<'a> Settings<'a> {
                     .selected
                     .is_some()
                     .then_some(Hotkey::new("enter", "edit")),
-                state
-                    .settings_form_is_changed
-                    .then_some(Hotkey::new("s", "save")),
-                state
-                    .settings_form_is_changed
-                    .then_some(Hotkey::new("r", "reset")),
+                state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
+                state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
                 Some(Hotkey::new("esc", "return")),
             ],
         }
@@ -71,14 +62,7 @@ impl<'a> Settings<'a> {
         .collect()
     }
 
-    fn render_form(
-        &mut self,
-        id: &FormId,
-        data: &FormData,
-        original_data: &FormData,
-        area: Rect,
-        buf: &mut Buffer,
-    ) {
+    fn render_form(&mut self, id: &FormId, data: &FormData, original_data: &FormData, area: Rect, buf: &mut Buffer) {
         if self.form_list_state.selected.is_none() {
             self.form_list_state.select(Some(0));
         }
@@ -89,11 +73,8 @@ impl<'a> Settings<'a> {
             .and_then(|index| *&FORMS[id][index].description)
             .and_then(|desc| {
                 Some(
-                    Paragraph::new(vec![
-                        Line::from("DESCRIPTION").magenta(),
-                        Line::from(desc).dark_gray(),
-                    ])
-                    .wrap(Wrap { trim: false }),
+                    Paragraph::new(vec![Line::from("DESCRIPTION").magenta(), Line::from(desc).dark_gray()])
+                        .wrap(Wrap { trim: false }),
                 )
             });
 
@@ -103,9 +84,7 @@ impl<'a> Settings<'a> {
                 vec![
                     Some(Constraint::Length(1)),
                     Some(Constraint::Fill(1)),
-                    description_paragraph
-                        .is_some()
-                        .then_some(Constraint::Length(1)),
+                    description_paragraph.is_some().then_some(Constraint::Length(1)),
                     description_paragraph
                         .as_ref()
                         .and_then(|p| Some(Constraint::Length(p.line_count(area.width) as u16))),
@@ -117,11 +96,7 @@ impl<'a> Settings<'a> {
 
         let v0_h = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(3),
-                Constraint::Fill(4),
-                Constraint::Length(2),
-            ])
+            .constraints([Constraint::Fill(3), Constraint::Fill(4), Constraint::Length(2)])
             .split(v[0]);
 
         Span::from("FIELD").magenta().render(v0_h[0], buf);
@@ -167,19 +142,12 @@ impl<'a> Settings<'a> {
             | FormItemKind::InputOfUnsignedInt64
             | FormItemKind::InputOfFloat32 => {
                 self.active_form_item = Some(form_item);
-                self.popup_input_state = Some(PopupInputState::new(
-                    form_item.title,
-                    None,
-                    value.to_string(),
-                ));
+                self.popup_input_state = Some(PopupInputState::new(Some(form_item.title), None, value.to_string()));
             }
             FormItemKind::Enum(variants) => {
                 self.active_form_item = Some(form_item);
-                self.popup_dropdown_state = Some(PopupDropdownState::new(
-                    form_item.title,
-                    variants,
-                    Some(value.clone()),
-                ));
+                self.popup_dropdown_state =
+                    Some(PopupDropdownState::new(form_item.title, variants, Some(value.clone())));
             }
             FormItemKind::BitMask(variants) => {
                 self.active_form_item = Some(form_item);
@@ -239,18 +207,16 @@ impl<'a> Component for Settings<'a> {
                     let form_item = self.active_form_item.expect("should be Some");
 
                     match code {
-                        KeyCode::Enter => {
-                            match handle_popup_input_submit(form_item, popup_input_state) {
-                                Ok(value) => {
-                                    emit(AppEvent::SettingsFormItemSubmitted(form_item, value))?;
-                                    self.active_form_item = None;
-                                    self.popup_input_state = None;
-                                }
-                                Err(e) => {
-                                    popup_input_state.set_error(e.to_string());
-                                }
+                        KeyCode::Enter => match handle_popup_input_submit(form_item, popup_input_state) {
+                            Ok(value) => {
+                                emit(AppEvent::SettingsFormItemSubmitted(form_item, value))?;
+                                self.active_form_item = None;
+                                self.popup_input_state = None;
                             }
-                        }
+                            Err(e) => {
+                                popup_input_state.set_error(e.to_string());
+                            }
+                        },
                         KeyCode::Esc => {
                             self.active_form_item = None;
                             self.popup_input_state = None;
@@ -271,10 +237,7 @@ impl<'a> Component for Settings<'a> {
 
                     match code {
                         KeyCode::Enter => {
-                            emit(AppEvent::SettingsFormItemSubmitted(
-                                form_item,
-                                value.clone(),
-                            ))?;
+                            emit(AppEvent::SettingsFormItemSubmitted(form_item, value.clone()))?;
 
                             self.active_form_item = None;
                             self.popup_dropdown_state = None;
@@ -292,9 +255,7 @@ impl<'a> Component for Settings<'a> {
                 }
 
                 // bitmask dropdown popup
-                if let Some(popup_dropdown_bitmask_state) =
-                    self.popup_dropdown_bitmask_state.as_mut()
-                {
+                if let Some(popup_dropdown_bitmask_state) = self.popup_dropdown_bitmask_state.as_mut() {
                     let form_item = self.active_form_item.expect("should be Some");
 
                     match code {
@@ -334,10 +295,7 @@ impl<'a> Component for Settings<'a> {
                             emit(AppEvent::SettingsFormSelected(id.clone()))?;
                         }
                     }
-                    (
-                        KeyCode::Esc,
-                        SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. },
-                    ) => {
+                    (KeyCode::Esc, SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. }) => {
                         emit(AppEvent::SettingsFormCancelRequested)?;
                     }
                     (KeyCode::Up, SettingsFormState::Loaded { .. }) => {
@@ -386,11 +344,7 @@ impl<'a> Component for Settings<'a> {
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
         let v = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)])
             .split(area);
 
         let v0_h = Layout::default()
@@ -406,13 +360,11 @@ impl<'a> Component for Settings<'a> {
         let menu_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .padding(Padding::symmetric(1, 0))
-            .fg(
-                if state.settings_form_state == SettingsFormState::Inactive {
-                    Color::Yellow
-                } else {
-                    Color::DarkGray
-                },
-            );
+            .fg(if state.settings_form_state == SettingsFormState::Inactive {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            });
 
         let menu_block_area = menu_block.inner(v0_h[0]);
 
@@ -424,8 +376,7 @@ impl<'a> Component for Settings<'a> {
             let item = SettingsItemWidget {
                 settings_item,
                 is_selected: context.is_selected,
-                is_highlighted: context.is_selected
-                    && state.settings_form_state != SettingsFormState::Inactive,
+                is_highlighted: context.is_selected && state.settings_form_state != SettingsFormState::Inactive,
                 is_implemented: if let SettingsItem::Form { id, .. } = settings_item {
                     FORMS.contains_key(id)
                 } else {
@@ -440,34 +391,28 @@ impl<'a> Component for Settings<'a> {
             .infinite_scrolling(false)
             .scrollbar(default_scrollbar());
 
-        menu.render(
-            menu_block_area,
-            frame.buffer_mut(),
-            &mut self.settings_list_state,
-        );
+        menu.render(menu_block_area, frame.buffer_mut(), &mut self.settings_list_state);
 
         // Form
         let form_block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .border_style(Style::new().fg(
-                if state.settings_form_state == SettingsFormState::Inactive {
+            .border_style(
+                Style::new().fg(if state.settings_form_state == SettingsFormState::Inactive {
                     Color::DarkGray
                 } else {
                     Color::Yellow
-                },
-            ))
+                }),
+            )
             .padding(Padding::symmetric(1, 0));
 
         let form_block_area = form_block.inner(v0_h[1]);
 
         match &state.settings_form_state {
             SettingsFormState::Inactive => {
-                PlaceholderWidget::dark_gray("choose the setting")
-                    .render(form_block_area, frame.buffer_mut());
+                PlaceholderWidget::dark_gray("choose the setting").render(form_block_area, frame.buffer_mut());
             }
             SettingsFormState::Loading { .. } => {
-                PlaceholderWidget::dark_gray("loading...")
-                    .render(form_block_area, frame.buffer_mut());
+                PlaceholderWidget::dark_gray("loading...").render(form_block_area, frame.buffer_mut());
             }
             SettingsFormState::LoadingFailed { error, .. } => {
                 PlaceholderWidget::new(
@@ -483,18 +428,9 @@ impl<'a> Component for Settings<'a> {
             }
             SettingsFormState::Loaded { id } => {
                 let data = state.settings_form_data.as_ref().expect("should be Some");
-                let original_data = state
-                    .settings_form_original_data
-                    .as_ref()
-                    .expect("should be Some");
+                let original_data = state.settings_form_original_data.as_ref().expect("should be Some");
 
-                self.render_form(
-                    &id,
-                    data,
-                    original_data,
-                    form_block_area,
-                    frame.buffer_mut(),
-                );
+                self.render_form(&id, data, original_data, form_block_area, frame.buffer_mut());
 
                 // active input popup
                 if let Some(state) = self.popup_input_state.as_mut() {
@@ -508,20 +444,13 @@ impl<'a> Component for Settings<'a> {
 
                 // active bitmask dropdown popup
                 if let Some(state) = self.popup_dropdown_bitmask_state.as_mut() {
-                    PopupDropdownBitmaskWidget::new(40).render(
-                        form_block_area,
-                        frame.buffer_mut(),
-                        state,
-                    );
+                    PopupDropdownBitmaskWidget::new(40).render(form_block_area, frame.buffer_mut(), state);
                 }
 
                 // confirm popup
                 if self.is_exit_confirm_visible {
-                    PopupConfirmWidget::new(
-                        "There are unsaved settings, do you want to reset the fields?",
-                        36,
-                    )
-                    .render(form_block_area, frame.buffer_mut());
+                    PopupConfirmWidget::new("There are unsaved settings, do you want to reset the fields?", 36)
+                        .render(form_block_area, frame.buffer_mut());
                 }
             }
         }
@@ -587,15 +516,11 @@ impl<'a> Widget for SettingsItemWidget<'a> {
 
         match self.settings_item {
             SettingsItem::Group { title } => {
-                Line::from(
-                    Span::from(*title)
-                        .magenta()
-                        .add_modifier(if self.is_selected {
-                            Modifier::REVERSED
-                        } else {
-                            Modifier::empty()
-                        }),
-                )
+                Line::from(Span::from(*title).magenta().add_modifier(if self.is_selected {
+                    Modifier::REVERSED
+                } else {
+                    Modifier::empty()
+                }))
                 .render(block_area, buf);
             }
             SettingsItem::Form { title, .. } => {
@@ -611,11 +536,7 @@ impl<'a> Widget for SettingsItemWidget<'a> {
                         Modifier::empty()
                     }),
                 ])
-                .fg(if self.is_selected {
-                    Color::Yellow
-                } else {
-                    Color::Reset
-                })
+                .fg(if self.is_selected { Color::Yellow } else { Color::Reset })
                 .add_modifier(if self.is_highlighted {
                     Modifier::REVERSED
                 } else {
@@ -657,11 +578,7 @@ impl<'a> Widget for FormItemWidget<'a> {
                 } else {
                     Modifier::empty()
                 })
-                .fg(if self.is_changed {
-                    Color::Cyan
-                } else {
-                    Color::Reset
-                }),
+                .fg(if self.is_changed { Color::Cyan } else { Color::Reset }),
         )
         .render(h[0], buf);
 
@@ -684,14 +601,14 @@ impl<'a> Widget for FormItemWidget<'a> {
             (self.form_item.formatter)(self.value)
         };
 
-        Line::from(Span::from(formatted_value).patch_style(
-            match (self.is_selected, self.is_changed) {
+        Line::from(
+            Span::from(formatted_value).patch_style(match (self.is_selected, self.is_changed) {
                 (true, true) => Style::new().white().on_cyan(),
                 (true, false) => Style::new().black().on_yellow(),
                 (false, true) => Style::new().cyan(),
                 _ => Style::new(),
-            },
-        ))
+            }),
+        )
         .render(h[2], buf);
     }
 }

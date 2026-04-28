@@ -57,47 +57,37 @@ impl ChatService {
 
         match event {
             AppEvent::ChannelSelected(number) => {
-                self.state_action_tx
-                    .send(StateAction::ChannelActiveSet(number))?;
+                self.state_action_tx.send(StateAction::ChannelActiveSet(number))?;
             }
             AppEvent::SwitchChannelRequested => {
                 self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
             }
-            AppEvent::ChatMessageSubmitted {
-                text,
-                reply_message_id,
-            } => match state.get_active_channel() {
+            AppEvent::ChatMessageSubmitted { text, reply_message_id } => match state.get_active_channel() {
                 Some(Channel {
                     key,
                     role: ChannelRole::Primary | ChannelRole::Secondary,
                     ..
                 }) => {
-                    self.meshtastic_command_tx.send(
-                        CommandToMeshtastic::SendBroadcastTextMessage {
-                            my_node_id: state
-                                .my_node_key
-                                .expect_or_log("my node key should exists"),
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::SendBroadcastTextMessage {
+                            my_node_id: state.my_node_key.expect_or_log("my node key should exists"),
                             channel_id: *key,
                             reply_message_id,
                             text: TextMessage::Text(text),
-                        },
-                    )?;
+                        })?;
                 }
                 Some(Channel {
                     key,
                     role: ChannelRole::Direct,
                     ..
                 }) => {
-                    self.meshtastic_command_tx.send(
-                        CommandToMeshtastic::SendDirectTextMessage {
-                            my_node_id: state
-                                .my_node_key
-                                .expect_or_log("my node key should exists"),
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::SendDirectTextMessage {
+                            my_node_id: state.my_node_key.expect_or_log("my node key should exists"),
                             node_id: *key,
                             reply_message_id,
                             text: TextMessage::Text(text),
-                        },
-                    )?;
+                        })?;
                 }
                 _ => {}
             },
@@ -110,32 +100,26 @@ impl ChatService {
                     role: ChannelRole::Primary | ChannelRole::Secondary,
                     ..
                 }) => {
-                    self.meshtastic_command_tx.send(
-                        CommandToMeshtastic::SendBroadcastTextMessage {
-                            my_node_id: state
-                                .my_node_key
-                                .expect_or_log("my node key should exists"),
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::SendBroadcastTextMessage {
+                            my_node_id: state.my_node_key.expect_or_log("my node key should exists"),
                             channel_id: *key,
                             reply_message_id,
                             text: TextMessage::Emoji(emoji),
-                        },
-                    )?;
+                        })?;
                 }
                 Some(Channel {
                     key,
                     role: ChannelRole::Direct,
                     ..
                 }) => {
-                    self.meshtastic_command_tx.send(
-                        CommandToMeshtastic::SendDirectTextMessage {
-                            my_node_id: state
-                                .my_node_key
-                                .expect_or_log("my node key should exists"),
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::SendDirectTextMessage {
+                            my_node_id: state.my_node_key.expect_or_log("my node key should exists"),
                             node_id: *key,
                             reply_message_id,
                             text: TextMessage::Emoji(emoji),
-                        },
-                    )?;
+                        })?;
                 }
                 _ => {}
             },
@@ -157,10 +141,12 @@ impl ChatService {
     fn handle_meshtastic_packet(&mut self, payload_variant: PayloadVariant) -> anyhow::Result<()> {
         match payload_variant {
             PayloadVariant::Channel(ch) => {
-                self.state_action_tx.send(StateAction::ChannelEnsure(
-                    ch.index as u32,
-                    Channel::from(&ch),
-                ))?;
+                let channel = Channel::from(&ch);
+
+                if !channel.role.is_disabled() {
+                    self.state_action_tx
+                        .send(StateAction::ChannelEnsure(ch.index as u32, channel))?;
+                }
             }
             PayloadVariant::Packet(packet) => match &packet.payload_variant {
                 Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {
@@ -180,10 +166,8 @@ impl ChatService {
                                         packet.from
                                     };
 
-                                    self.state_action_tx.send(StateAction::MessageAck(
-                                        channel_key,
-                                        data.request_id,
-                                    ))?;
+                                    self.state_action_tx
+                                        .send(StateAction::MessageAck(channel_key, data.request_id))?;
                                 }
                             }
                         }
@@ -198,10 +182,8 @@ impl ChatService {
                         let channel_key = match (packet.from, packet.to, state.my_node_key) {
                             (_, 0 | u32::MAX, _) => packet.channel,
                             (from, to, Some(my)) if to == my => {
-                                self.state_action_tx.send(StateAction::ChannelEnsure(
-                                    from,
-                                    Channel::direct(from),
-                                ))?;
+                                self.state_action_tx
+                                    .send(StateAction::ChannelEnsure(from, Channel::direct(from)))?;
 
                                 from
                             }
@@ -244,8 +226,7 @@ impl ChatService {
                     }
                     PortNum::RangeTestApp => {
                         let state = &self.state_rx.borrow();
-                        let text = String::from_utf8(data.payload.clone())
-                            .unwrap_or("can't decode payload".to_owned());
+                        let text = String::from_utf8(data.payload.clone()).unwrap_or("can't decode payload".to_owned());
                         let unknown_node = Node::unknown();
                         let node = state.nodes.get(&packet.from).unwrap_or(&unknown_node);
 

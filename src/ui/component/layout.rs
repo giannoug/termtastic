@@ -11,7 +11,7 @@ pub struct Layout<'a> {
     header_component: Header,
     tabs_component: Tabs,
     chat_component: Chat<'a>,
-    nodes_component: Nodes,
+    nodes_component: Nodes<'a>,
     settings_component: Settings<'a>,
     connection_component: Connection<'a>,
     logs_component: Logs,

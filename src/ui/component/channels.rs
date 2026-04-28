@@ -1,12 +1,10 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Index};
 
 use chrono::Local;
-use itertools::Itertools;
 
 use crate::ui::{helpers::default_scrollbar, prelude::*};
 
 pub struct Channels {
-    channels: Vec<Channel>,
     list_state: ListState,
     hotkeys: Vec<Hotkey>,
 }
@@ -14,7 +12,6 @@ pub struct Channels {
 impl Channels {
     pub fn new() -> Self {
         Self {
-            channels: vec![],
             list_state: ListState::default(),
             hotkeys: vec![
                 Hotkey {
@@ -33,7 +30,7 @@ impl Channels {
 impl<'a> Component for Channels {
     fn handle_event(
         &mut self,
-        _state: &State,
+        state: &State,
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
@@ -43,7 +40,7 @@ impl<'a> Component for Channels {
                 KeyCode::Down => self.list_state.next(),
                 KeyCode::Enter => {
                     if let Some(i) = self.list_state.selected {
-                        let channel = self.channels.get(i).unwrap();
+                        let channel = state.channels.index(i);
 
                         emit(AppEvent::ChannelSelected(channel.key))?;
                     }
@@ -67,15 +64,7 @@ impl<'a> Component for Channels {
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);
 
-        self.channels = state
-            .channels
-            .values()
-            .filter(|ch| !ch.role.is_disabled())
-            .sorted_by_key(|ch| ch.key)
-            .cloned()
-            .collect();
-
-        if !self.channels.is_empty() {
+        if !state.channels.is_empty() {
             if self.list_state.selected.is_none() {
                 self.list_state.select(Some(0));
             }
@@ -83,16 +72,11 @@ impl<'a> Component for Channels {
             let empty_messages_vec: VecDeque<Message> = VecDeque::default();
 
             let list_builder = ListBuilder::new(|context| {
-                let channel = self.channels.get(context.index).unwrap();
-
-                let messages = state
-                    .messages
-                    .get(&channel.key)
-                    .unwrap_or(&empty_messages_vec);
+                let channel = state.channels.index(context.index);
+                let messages = state.messages.get(&channel.key).unwrap_or(&empty_messages_vec);
 
                 let last_message = messages.iter().last();
-                let last_message_node =
-                    last_message.and_then(|message| state.nodes.get(&message.from));
+                let last_message_node = last_message.and_then(|message| state.nodes.get(&message.from));
 
                 let item = ConversationWidget {
                     channel,
@@ -109,7 +93,7 @@ impl<'a> Component for Channels {
                 (item, 4)
             });
 
-            let list = ListView::new(list_builder, self.channels.len())
+            let list = ListView::new(list_builder, state.channels.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
 
@@ -165,19 +149,11 @@ impl<'a> Widget for ConversationWidget<'a> {
 
         let v0_h = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(3),
-                Constraint::Fill(1),
-                Constraint::Fill(1),
-            ])
+            .constraints([Constraint::Fill(3), Constraint::Fill(1), Constraint::Fill(1)])
             .split(v[0]);
 
         // first line
-        let name_span = match (
-            &self.channel.role,
-            self.channel.name.is_empty(),
-            self.direct_node,
-        ) {
+        let name_span = match (&self.channel.role, self.channel.name.is_empty(), self.direct_node) {
             (ChannelRole::Primary, false, _) => vec![
                 Span::from(format!("#{}", self.channel.key)).dark_gray(),
                 Span::from(" "),
@@ -202,9 +178,7 @@ impl<'a> Widget for ConversationWidget<'a> {
             }
             (ChannelRole::Direct, true, Some(node)) => {
                 vec![
-                    Span::from(format!("{:^6}", node.short_name))
-                        .black()
-                        .on_green(),
+                    Span::from(format!("{:^6}", node.short_name)).black().on_green(),
                     Span::from(" "),
                     Span::from(node.long_name.clone()),
                 ]
@@ -227,13 +201,7 @@ impl<'a> Widget for ConversationWidget<'a> {
         Line::from(type_span).magenta().render(v0_h[1], buf);
 
         Line::from(if let Some(message) = self.last_message {
-            Span::from(
-                message
-                    .datetime
-                    .with_timezone(&Local)
-                    .format("%H:%M")
-                    .to_string(),
-            )
+            Span::from(message.datetime.with_timezone(&Local).format("%H:%M").to_string())
         } else {
             Span::from("no messages").dark_gray()
         })
@@ -243,11 +211,7 @@ impl<'a> Widget for ConversationWidget<'a> {
         // second line
         let unknown_node = &Node::unknown();
 
-        let second_line_spans = match (
-            &self.channel.role,
-            self.last_message_node,
-            self.last_message,
-        ) {
+        let second_line_spans = match (&self.channel.role, self.last_message_node, self.last_message) {
             (ChannelRole::Direct, _, Some(message)) => {
                 vec![Span::from(message.text.clone()).dark_gray()]
             }

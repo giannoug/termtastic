@@ -11,14 +11,14 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 
 pub struct PopupInputState<'a> {
-    title: &'a str,
+    title: Option<&'a str>,
     textarea: TextArea<'a>,
     error: Option<String>,
 }
 
 impl<'a> PopupInputState<'a> {
-    pub fn new(title: &'a str, placeholder: Option<&'a str>, value: String) -> Self {
-        let mut textarea = TextArea::new(vec![value]);
+    pub fn new<S: Into<String>>(title: Option<&'a str>, placeholder: Option<&'a str>, value: S) -> Self {
+        let mut textarea = TextArea::new(vec![value.into()]);
         textarea.set_cursor_line_style(Style::default());
         textarea.select_all();
 
@@ -31,6 +31,11 @@ impl<'a> PopupInputState<'a> {
             textarea,
             error: None,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.error = None;
+        self.textarea.clear();
     }
 
     pub fn set_error<S: Into<String>>(&mut self, text: S) {
@@ -84,11 +89,14 @@ impl<'a> StatefulWidget for PopupInputWidget<'a> {
             Color::Reset
         };
 
-        let textarea_block = Block::bordered()
+        let mut textarea_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(Style::new().fg(color))
-            .padding(Padding::symmetric(1, 0))
-            .title(format!(" {} ", state.title));
+            .padding(Padding::symmetric(1, 0));
+
+        if let Some(title) = state.title {
+            textarea_block = textarea_block.title(format!(" {} ", title));
+        }
 
         let textarea_block_area = textarea_block.inner(v[0]);
 
