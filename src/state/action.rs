@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{User, config, module_config};
+use meshtastic::protobufs::{User, config, module_config, routing};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormValue, LogRecord, Message, Node, NodesSortBy, Tab, Toast,
@@ -36,7 +36,11 @@ pub enum StateAction {
         emoji: String,
         node_key: u32,
     },
-    MessageAck(u32, u32),
+    MessageErrorSet {
+        channel_key: u32,
+        message_id: u32,
+        error: Option<routing::Error>,
+    },
     MyNodeKeySet(u32),
     NodeAdd(Node),
     NodeUpdateLastHeard {

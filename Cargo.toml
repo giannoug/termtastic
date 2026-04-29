@@ -35,7 +35,6 @@ emoji = { version = "0.2.1" }
 futures = { version = "0.3.32" }
 hostaddr = { version = "0.2.4", features = ["serde"] }
 itertools = { version = "0.14.0" }
-maplit = { version = "1.0.2" }
 #meshtastic = { version = "0.1", features = ["bluetooth-le"] }
 meshtastic = { git = "https://github.com/acelot/rust-meshtastic", branch = "main", features = [
     "bluetooth-le",
@@ -55,3 +54,4 @@ tracing-appender = { version = "0.2.5" }
 tracing-subscriber = { version = "0.3.23", features = ["fmt", "env-filter"] }
 tracing-unwrap = { version = "1.0.1" }
 tui-widget-list = { version = "0.15.2" }
+unicode-width = { version = "0.2.2" }

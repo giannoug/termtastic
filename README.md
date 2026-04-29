@@ -97,7 +97,7 @@
 - [x] Position
 - [x] Power
 - [x] Display
-- [ ] Bluetooth
+- [x] Bluetooth
 
 #### Module
 

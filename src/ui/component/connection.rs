@@ -174,15 +174,18 @@ impl<'a> Component for Connection<'a> {
                     device,
                     is_selected: context.is_selected,
                     centered: false,
-                    dimmed: state.active_device.is_some(),
                 };
 
                 (item, 1)
             });
 
-            let list = ListView::new(list_builder, state.aggregated_devices.len())
+            let mut list = ListView::new(list_builder, state.aggregated_devices.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
+
+            if state.active_device.is_some() {
+                list = list.dim();
+            }
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
@@ -211,26 +214,6 @@ impl<'a> Component for Connection<'a> {
             frame.render_widget(Clear, popup_area);
             frame.render_widget(popup_block, popup_area);
 
-            let block_v = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Fill(1),
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Min(1),
-                    Constraint::Fill(1),
-                ])
-                .split(popup_block_area);
-
-            let device_widget = DeviceWidget {
-                device: active_device,
-                is_selected: false,
-                centered: true,
-                dimmed: false,
-            };
-
-            device_widget.render(block_v[1], frame.buffer_mut());
-
             let conn_info: Vec<Line> = match &state.connection_state {
                 ConnectionState::NotConnected => {
                     vec![Line::from(Span::from("not connected").dark_gray())]
@@ -248,6 +231,25 @@ impl<'a> Component for Connection<'a> {
                 }
             };
 
+            let block_v = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Fill(1),
+                    Constraint::Length(1),
+                    Constraint::Length(1),
+                    Constraint::Length(conn_info.len() as u16),
+                    Constraint::Fill(1),
+                ])
+                .split(popup_block_area);
+
+            let device_widget = DeviceWidget {
+                device: active_device,
+                is_selected: false,
+                centered: true,
+            };
+
+            device_widget.render(block_v[1], frame.buffer_mut());
+
             frame.render_widget(
                 Paragraph::new(conn_info)
                     .alignment(HorizontalAlignment::Center)
@@ -264,7 +266,6 @@ struct DeviceWidget<'a> {
     device: &'a Device,
     is_selected: bool,
     centered: bool,
-    dimmed: bool,
 }
 
 impl<'a> Widget for DeviceWidget<'a> {
@@ -272,33 +273,23 @@ impl<'a> Widget for DeviceWidget<'a> {
     where
         Self: Sized,
     {
-        let dim_style = if self.dimmed {
-            Style::new().dark_gray().bg(Color::Reset)
-        } else {
-            Style::new()
-        };
-
         let spans = match self.device {
-            Device::Ble { name, .. } => vec![
-                Span::from(" BLE ").black().on_blue().patch_style(dim_style),
-                Span::from(" "),
-                Span::from(name).patch_style(dim_style),
-            ],
+            Device::Ble { name, .. } => vec![Span::from(" BLE ").black().on_blue(), Span::from(" "), Span::from(name)],
             Device::Tcp(hostaddr) => vec![
-                Span::from(" TCP ").black().on_green().patch_style(dim_style),
+                Span::from(" TCP ").black().on_green(),
                 Span::from(" "),
-                Span::from(hostaddr.to_string()).patch_style(dim_style),
+                Span::from(hostaddr.to_string()),
             ],
             Device::Serial(address) => vec![
-                Span::from(" COM ").black().on_magenta().patch_style(dim_style),
+                Span::from(" COM ").black().on_magenta(),
                 Span::from(" "),
-                Span::from(address).patch_style(dim_style),
+                Span::from(address),
             ],
         };
 
         let mut line = Line::from(spans);
 
-        if self.is_selected && !self.dimmed {
+        if self.is_selected {
             line = line.reversed();
         }
 

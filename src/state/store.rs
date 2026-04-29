@@ -376,14 +376,18 @@ impl Store {
 
                 is_changed = true;
             }
-            StateAction::MessageAck(channel_key, message_id) => {
+            StateAction::MessageErrorSet {
+                channel_key,
+                message_id,
+                error,
+            } => {
                 if let Some(message) = self
                     .state
                     .messages
                     .get_mut(&channel_key)
                     .and_then(|messages| messages.iter_mut().find(|msg| msg.id == message_id))
                 {
-                    message.acked = true;
+                    message.error = error;
                 }
 
                 is_changed = true;

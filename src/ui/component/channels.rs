@@ -177,11 +177,7 @@ impl<'a> Widget for ConversationWidget<'a> {
                 ]
             }
             (ChannelRole::Direct, true, Some(node)) => {
-                vec![
-                    Span::from(format!("{:^6}", node.short_name)).black().on_green(),
-                    Span::from(" "),
-                    Span::from(node.long_name.clone()),
-                ]
+                vec![node.to_span(), Span::from(" "), Span::from(node.long_name.clone())]
             }
             (ChannelRole::Direct, true, None) => {
                 vec![Span::from(format!("Direct from {}", self.channel.key))]

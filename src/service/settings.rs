@@ -2,11 +2,14 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use meshtastic::Message;
+use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
 use meshtastic::protobufs::config::lo_ra_config::{ModemPreset, RegionCode};
 use meshtastic::protobufs::config::position_config::{GpsMode, PositionFlags};
-use meshtastic::protobufs::config::{self, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig};
+use meshtastic::protobufs::config::{
+    self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig,
+};
 use meshtastic::protobufs::{
     AdminMessage, Config, ModuleConfig, PortNum, User, admin_message, from_radio, mesh_packet,
 };
@@ -216,6 +219,13 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Display config not loaded"))?,
             )?,
+            FormId::DeviceBluetooth => to_formdata(
+                state
+                    .device_config
+                    .bluetooth
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Bluetooth config not loaded"))?,
+            )?,
             _ => return Err(anyhow::anyhow!("Loader not implemented for FormId: {}", id)),
         };
 
@@ -261,6 +271,12 @@ impl SettingsService {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     my_node_id: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Display(from_formdata::<DisplayConfig>(&form_data)?),
+                })?;
+            }
+            FormId::DeviceBluetooth => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: config::PayloadVariant::Bluetooth(from_formdata::<BluetoothConfig>(&form_data)?),
                 })?;
             }
             _ => unimplemented!(),
@@ -1177,6 +1193,49 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         .unwrap_or("?".to_owned())
                 },
                 |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::DeviceBluetooth,
+        Vec::from([
+            FormItem::new(
+                name_of!(enabled in BluetoothConfig),
+                "Bluetooth Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(mode in BluetoothConfig),
+                "Pairing Mode",
+                None,
+                FormItemKind::Enum(
+                    PairingMode::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    PairingMode::try_from(v.as_i32().expect("invalid FormValue"))
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                name_of!(fixed_pin in BluetoothConfig),
+                "Fixed PIN",
+                Some("6-digit PIN code."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (100_000..=999_999)
+                        .contains(&v.as_u32().expect("invalid value"))
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Invalid PIN"))
+                },
             ),
         ]),
     );

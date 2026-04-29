@@ -154,21 +154,22 @@ impl ChatService {
                         Ok(Routing {
                             variant: Some(routing::Variant::ErrorReason(e)),
                         }) => {
-                            if e == routing::Error::None as i32 {
-                                let state = &self.state_rx.borrow();
+                            let state = &self.state_rx.borrow();
 
-                                if let Some(my) = state.my_node_key
-                                    && packet.to == my
-                                {
-                                    let channel_key = if packet.to == packet.from {
-                                        packet.channel
-                                    } else {
-                                        packet.from
-                                    };
+                            if let Some(my) = state.my_node_key
+                                && packet.to == my
+                            {
+                                let channel_key = if packet.to == packet.from {
+                                    packet.channel
+                                } else {
+                                    packet.from
+                                };
 
-                                    self.state_action_tx
-                                        .send(StateAction::MessageAck(channel_key, data.request_id))?;
-                                }
+                                self.state_action_tx.send(StateAction::MessageErrorSet {
+                                    channel_key,
+                                    message_id: data.request_id,
+                                    error: Some(routing::Error::try_from(e).expect("invalid routing error")),
+                                })?;
                             }
                         }
                         Err(e) => {

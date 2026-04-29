@@ -7,6 +7,7 @@ use std::{
 
 use crossterm::event::KeyModifiers;
 use itertools::Itertools;
+use meshtastic::protobufs::routing;
 use ratatui::text::ToSpan;
 use tracing_unwrap::OptionExt;
 use tui_widget_list::ScrollDirection;
@@ -518,10 +519,10 @@ impl<'a> Widget for MessageWidget<'a> {
                 }
             }
         } else {
-            if self.message.acked {
-                Span::from("acked").green().render(v0_h[1], buf);
-            } else {
-                Span::from("sent").dark_gray().render(v0_h[1], buf);
+            match self.message.error {
+                Some(routing::Error::None) => Span::from("acked").green().render(v0_h[1], buf),
+                Some(error) => Span::from(error.as_str_name()).red().render(v0_h[1], buf),
+                None => Span::from("sent").dark_gray().render(v0_h[1], buf),
             }
         }
 

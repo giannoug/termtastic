@@ -591,7 +591,7 @@ impl<'a> Widget for FormItemWidget<'a> {
             };
 
             if value == true {
-                "[✔]".to_owned()
+                "[■]".to_owned()
             } else {
                 "[ ]".to_owned()
             }

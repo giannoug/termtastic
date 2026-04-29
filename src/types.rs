@@ -4,7 +4,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{DeviceUiConfig, MeshPacket, User, config, module_config};
+use meshtastic::protobufs::{DeviceUiConfig, MeshPacket, User, config, module_config, routing};
 use ordermap::OrderMap;
 use ratatui::{
     style::{self, Stylize as _},
@@ -15,7 +15,7 @@ use strum::{Display, EnumCount, EnumIter, FromRepr};
 use tokio::sync::watch::Ref;
 use tracing::Level;
 
-use crate::state::State;
+use crate::{state::State, ui::helpers::pad_center};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Default)]
 pub struct AppConfig {
@@ -326,7 +326,7 @@ impl Node {
     }
 
     pub fn to_span(&self) -> text::Span<'_> {
-        text::Span::from(format!("{:^6}", self.short_name))
+        text::Span::from(pad_center(&self.short_name, 6))
             .black()
             .patch_style(if self.my {
                 style::Style::new().white().on_blue()
@@ -482,7 +482,7 @@ pub struct Message {
     pub hops: Option<u32>,
     pub snr: f32,
     pub rssi: i32,
-    pub acked: bool,
+    pub error: Option<routing::Error>,
 }
 
 impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for Message {
@@ -508,7 +508,7 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
             hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             snr: packet.rx_snr,
             rssi: packet.rx_rssi,
-            acked: false,
+            error: None,
         })
     }
 }

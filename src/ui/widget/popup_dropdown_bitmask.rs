@@ -103,7 +103,7 @@ impl<'a> StatefulWidget for PopupDropdownBitmaskWidget<'a> {
             let is_checked = state.selected & variant.value > 0;
 
             let item = Line::from(vec![
-                Span::from(if is_checked { "[✔]" } else { "[ ]" }),
+                Span::from(if is_checked { "[■]" } else { "[ ]" }),
                 Span::from(" "),
                 Span::from(&variant.title),
             ])

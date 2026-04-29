@@ -76,3 +76,16 @@ pub fn default_scrollbar() -> Scrollbar<'static> {
         })
         .style(Style::new().dark_gray())
 }
+
+pub fn pad_center(s: &str, width: usize) -> String {
+    let w = unicode_width::UnicodeWidthStr::width(s);
+    if w >= width {
+        return s.to_string();
+    }
+
+    let padding = width - w;
+    let left = padding / 2;
+    let right = padding - left;
+
+    format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
+}
