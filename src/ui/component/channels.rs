@@ -99,7 +99,7 @@ impl<'a> Component for Channels {
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::black_on_dark_gray(" no channels ").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray(" no channels ").render(v[0], frame.buffer_mut());
         }
 
         HotkeysWidget::new(&self.hotkeys).render(v[1], frame.buffer_mut());

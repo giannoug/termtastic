@@ -7,9 +7,9 @@
 </p>
 
 <p align="center">
+  <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
   <a href="https://github.com/acelot/termtastic/actions"><img src="https://github.com/acelot/termtastic/actions/workflows/build.yml/badge.svg?event=push" height="20" alt="Build"/></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/acelot/termtastic.svg?style=flat&v=1" height="20" alt="GPL-3.0-only"/></a>
-  <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
 </p>
 
 <table>
@@ -101,7 +101,7 @@
 
 #### Module
 
-- [ ] MQTT
+- [x] MQTT
 - [ ] Serial
 - [ ] External Notification
 - [ ] Store & Forward
@@ -163,6 +163,7 @@
 | :----------------------- | :------: | :------: | :--------: |
 | BLE devices discovery    |    ✅    |    ✅    |     🔬     |
 | Serial devices discovery |    ✅    |    ✅    |     ✅     |
+| Copy to clipboard        |    ✅    |    ✅    |     ✅     |
 
 ## Download
 

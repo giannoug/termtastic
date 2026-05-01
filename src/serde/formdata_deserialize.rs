@@ -4,9 +4,7 @@ use serde::{Deserializer, de::*};
 
 use crate::types::{FormData, FormValue};
 
-pub fn from_formdata<'a, T: Deserialize<'a>>(
-    data: &'a FormData,
-) -> Result<T, FormDataDeserializerError> {
+pub fn from_formdata<'a, T: Deserialize<'a>>(data: &'a FormData) -> Result<T, FormDataDeserializerError> {
     let deserializer = FormDataDeserializer::new(data);
     T::deserialize(deserializer)
 }
@@ -176,22 +174,14 @@ impl<'a> Deserializer<'a> for FormDataDeserializer<'a> {
         Err(FormDataDeserializerError::UnsupportedType("unit"))
     }
 
-    fn deserialize_unit_struct<V>(
-        self,
-        _name: &'static str,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
         Err(FormDataDeserializerError::UnsupportedType("unit_struct"))
     }
 
-    fn deserialize_newtype_struct<V>(
-        self,
-        _name: &'static str,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
@@ -212,12 +202,7 @@ impl<'a> Deserializer<'a> for FormDataDeserializer<'a> {
         Err(FormDataDeserializerError::UnsupportedType("tuple"))
     }
 
-    fn deserialize_tuple_struct<V>(
-        self,
-        _name: &'static str,
-        _len: usize,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_tuple_struct<V>(self, _name: &'static str, _len: usize, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
@@ -296,11 +281,7 @@ impl<'a> MapAccess<'a> for FormDataAccessImpl<'a> {
     where
         V: DeserializeSeed<'a>,
     {
-        let (_key, value) = self
-            .data
-            .iter()
-            .nth(self.current_index)
-            .expect("value not found");
+        let (_key, value) = self.data.iter().nth(self.current_index).expect("value not found");
 
         self.current_index += 1;
 
@@ -337,6 +318,10 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
                 None => visitor.visit_none(),
             },
             FormValue::Vec(vec) => visitor.visit_seq(FormValueSeqAccess { vec, index: 0 }),
+            FormValue::Nested(data) => {
+                let deserializer = FormDataDeserializer { data };
+                deserializer.deserialize_any(visitor)
+            }
         }
     }
 
@@ -520,22 +505,14 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
         Err(FormDataDeserializerError::UnsupportedType("unit"))
     }
 
-    fn deserialize_unit_struct<V>(
-        self,
-        _name: &'static str,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_unit_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
         Err(FormDataDeserializerError::UnsupportedType("unit_struct"))
     }
 
-    fn deserialize_newtype_struct<V>(
-        self,
-        _name: &'static str,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_newtype_struct<V>(self, _name: &'static str, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
@@ -549,7 +526,7 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
         match self.value {
             FormValue::Vec(v) => visitor.visit_seq(FormValueSeqAccess { vec: v, index: 0 }),
             other => Err(FormDataDeserializerError::InvalidType {
-                expected: "seq".to_owned(),
+                expected: "vec".to_owned(),
                 actual: format!("{:?}", other),
             }),
         }
@@ -562,12 +539,7 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
         Err(FormDataDeserializerError::UnsupportedType("tuple"))
     }
 
-    fn deserialize_tuple_struct<V>(
-        self,
-        _name: &'static str,
-        _len: usize,
-        _visitor: V,
-    ) -> Result<V::Value, Self::Error>
+    fn deserialize_tuple_struct<V>(self, _name: &'static str, _len: usize, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
@@ -583,14 +555,23 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
 
     fn deserialize_struct<V>(
         self,
-        _name: &'static str,
-        _fields: &'static [&'static str],
-        _visitor: V,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
-        Err(FormDataDeserializerError::UnsupportedType("struct"))
+        match self.value {
+            FormValue::Nested(data) => {
+                let deserializer = FormDataDeserializer::new(data);
+                deserializer.deserialize_struct(name, fields, visitor)
+            }
+            other => Err(FormDataDeserializerError::InvalidType {
+                expected: "nested".to_owned(),
+                actual: format!("{:?}", other),
+            }),
+        }
     }
 
     fn deserialize_enum<V>(

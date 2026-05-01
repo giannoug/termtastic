@@ -35,9 +35,7 @@ struct FormDataSerializer {
 
 impl FormDataSerializer {
     fn new() -> Self {
-        Self {
-            data: HashMap::new(),
-        }
+        Self { data: HashMap::new() }
     }
 }
 
@@ -144,11 +142,7 @@ impl<'a> Serializer for &'a mut FormDataSerializer {
         Err(Self::Error::UnsupportedType("unit_variant"))
     }
 
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        _value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
     {
@@ -198,11 +192,7 @@ impl<'a> Serializer for &'a mut FormDataSerializer {
         Err(Self::Error::UnsupportedType("map"))
     }
 
-    fn serialize_struct(
-        self,
-        _name: &'static str,
-        _len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Ok(self)
     }
 
@@ -261,7 +251,7 @@ impl<'a> Serializer for FieldSerializer<'a> {
 
     type SerializeMap = Impossible<Self::Ok, Self::Error>;
 
-    type SerializeStruct = Impossible<Self::Ok, Self::Error>;
+    type SerializeStruct = NestedStructSerializer<'a>;
 
     type SerializeStructVariant = Impossible<Self::Ok, Self::Error>;
 
@@ -374,11 +364,7 @@ impl<'a> Serializer for FieldSerializer<'a> {
         Err(FormDataSerializerError::UnsupportedType("unit_variant"))
     }
 
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        _value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
     {
@@ -432,12 +418,12 @@ impl<'a> Serializer for FieldSerializer<'a> {
         Err(FormDataSerializerError::UnsupportedType("map"))
     }
 
-    fn serialize_struct(
-        self,
-        _name: &'static str,
-        _len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
-        Err(FormDataSerializerError::UnsupportedType("struct"))
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
+        Ok(NestedStructSerializer {
+            parent_data: self.data,
+            nested_data: FormData::new(),
+            key: self.key,
+        })
     }
 
     fn serialize_struct_variant(
@@ -591,11 +577,7 @@ impl<'a> Serializer for UniversalElementSerializer<'a> {
         Err(Self::Error::UnsupportedType("unit_variant"))
     }
 
-    fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        _value: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + Serialize,
     {
@@ -645,11 +627,7 @@ impl<'a> Serializer for UniversalElementSerializer<'a> {
         Err(Self::Error::UnsupportedType("map"))
     }
 
-    fn serialize_struct(
-        self,
-        _name: &'static str,
-        _len: usize,
-    ) -> Result<Self::SerializeStruct, Self::Error> {
+    fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct, Self::Error> {
         Err(Self::Error::UnsupportedType("struct"))
     }
 
@@ -661,5 +639,36 @@ impl<'a> Serializer for UniversalElementSerializer<'a> {
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         Err(Self::Error::UnsupportedType("struct_variant"))
+    }
+}
+
+struct NestedStructSerializer<'a> {
+    parent_data: &'a mut FormData,
+    nested_data: FormData,
+    key: &'static str,
+}
+
+impl<'a> SerializeStruct for NestedStructSerializer<'a> {
+    type Ok = ();
+
+    type Error = FormDataSerializerError;
+
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        let serializer = FieldSerializer {
+            data: &mut self.nested_data,
+            key,
+        };
+
+        value.serialize(serializer)?;
+
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.parent_data.insert(self.key, FormValue::Nested(self.nested_data));
+        Ok(())
     }
 }

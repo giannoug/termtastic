@@ -580,75 +580,104 @@ pub enum FormValue {
     Bool(bool),
     Option(Option<Box<FormValue>>),
     Vec(Vec<FormValue>),
+    Nested(FormData),
 }
 
 impl FormValue {
-    pub fn as_string(&self) -> Option<&String> {
-        if let Self::String(value) = self {
-            Some(value)
-        } else {
-            None
-        }
+    pub fn as_string(&self) -> &String {
+        let Self::String(v) = self else {
+            panic!("expected String");
+        };
+
+        v
     }
 
-    pub fn as_i32(&self) -> Option<i32> {
-        if let Self::Int32(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_i32(&self) -> i32 {
+        let Self::Int32(v) = self else {
+            panic!("expected Int32");
+        };
+
+        *v
     }
 
-    pub fn as_u8(&self) -> Option<u8> {
-        if let Self::UnsignedInt8(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_u8(&self) -> u8 {
+        let Self::UnsignedInt8(v) = self else {
+            panic!("expected UnsignedInt8");
+        };
+
+        *v
     }
 
-    pub fn as_u32(&self) -> Option<u32> {
-        if let Self::UnsignedInt32(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_u32(&self) -> u32 {
+        let Self::UnsignedInt32(v) = self else {
+            panic!("expected UnsignedInt32");
+        };
+
+        *v
     }
 
-    pub fn as_u64(&self) -> Option<u64> {
-        if let Self::UnsignedInt64(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_u64(&self) -> u64 {
+        let Self::UnsignedInt64(v) = self else {
+            panic!("expected UnsignedInt64");
+        };
+
+        *v
     }
 
-    pub fn as_f32(&self) -> Option<f32> {
-        if let Self::Float32(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_f32(&self) -> f32 {
+        let Self::Float32(v) = self else {
+            panic!("expected Float32");
+        };
+
+        *v
     }
 
-    pub fn as_bool(&self) -> Option<bool> {
-        if let Self::Bool(value) = self {
-            Some(*value)
-        } else {
-            None
-        }
+    pub fn as_bool(&self) -> bool {
+        let Self::Bool(v) = self else {
+            panic!("expected Bool");
+        };
+
+        *v
     }
 
-    pub fn as_option(&self) -> Option<Self> {
-        if let Self::Option(value) = self {
-            value.as_ref().map(|v| (**v).clone())
-        } else {
-            None
-        }
+    pub fn as_option(&self) -> Option<&Self> {
+        let Self::Option(v) = self else {
+            panic!("expected Option");
+        };
+
+        v.as_deref()
     }
 
-    pub fn as_vec(&self) -> Option<&Vec<Self>> {
-        if let Self::Vec(value) = self { Some(value) } else { None }
+    pub fn as_option_mut(&mut self) -> Option<&mut Self> {
+        let Self::Option(v) = self else {
+            panic!("expected Option");
+        };
+
+        v.as_deref_mut()
+    }
+
+    pub fn as_vec(&self) -> &Vec<Self> {
+        let Self::Vec(v) = self else {
+            panic!("expected Vec");
+        };
+
+        v
+    }
+
+    pub fn as_nested(&self) -> &FormData {
+        let Self::Nested(v) = self else {
+            panic!("expected Nested");
+        };
+
+        v
+    }
+
+    pub fn as_nested_mut(&mut self) -> &mut FormData {
+        let Self::Nested(v) = self else {
+            panic!("expected Nested");
+        };
+
+        v
     }
 }
 
@@ -670,6 +699,7 @@ impl std::fmt::Display for FormValue {
             }
             Self::Option(v) => write!(f, "{:?}", v),
             Self::Vec(v) => write!(f, "{:?}", v),
+            Self::Nested(v) => write!(f, "{:?}", v),
         }
     }
 }
@@ -718,7 +748,7 @@ impl From<bool> for FormValue {
 
 #[derive(Debug, Clone)]
 pub struct FormItem {
-    pub key: &'static str,
+    pub key: FormItemKey,
     pub title: &'static str,
     pub description: Option<&'static str>,
     pub kind: FormItemKind,
@@ -728,7 +758,7 @@ pub struct FormItem {
 
 impl FormItem {
     pub fn new(
-        key: &'static str,
+        key: FormItemKey,
         title: &'static str,
         description: Option<&'static str>,
         kind: FormItemKind,
@@ -744,6 +774,15 @@ impl FormItem {
             validator,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum FormItemKey {
+    Simple(&'static str),
+    Custom {
+        getter: fn(&FormData) -> &FormValue,
+        setter: fn(&mut FormData, FormValue),
+    },
 }
 
 #[allow(dead_code)]
@@ -818,8 +857,6 @@ pub struct DeviceModuleConfig {
     pub canned_message: Option<module_config::CannedMessageConfig>,
     pub detection_sensor: Option<module_config::DetectionSensorConfig>,
     pub external_notification: Option<module_config::ExternalNotificationConfig>,
-    #[allow(dead_code)]
-    pub map_report: Option<module_config::MapReportSettings>,
     pub mqtt: Option<module_config::MqttConfig>,
     pub neighbor: Option<module_config::NeighborInfoConfig>,
     pub paxcounter: Option<module_config::PaxcounterConfig>,

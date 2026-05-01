@@ -122,7 +122,7 @@ impl<'a> Component for Nodes<'a> {
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::black_on_dark_gray(" no nodes ").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray(" no nodes ").render(v[0], frame.buffer_mut());
         }
 
         let v1_h = Layout::default()

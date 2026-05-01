@@ -1,4 +1,4 @@
-use tracing_unwrap::OptionExt;
+use tracing_unwrap::{OptionExt, ResultExt};
 
 use crate::{
     service::{FORMS, SETTINGS},
@@ -62,7 +62,14 @@ impl<'a> Settings<'a> {
         .collect()
     }
 
-    fn render_form(&mut self, id: &FormId, data: &FormData, original_data: &FormData, area: Rect, buf: &mut Buffer) {
+    fn render_form(
+        &mut self,
+        items: &Vec<FormItem>,
+        data: &FormData,
+        original_data: &FormData,
+        area: Rect,
+        buf: &mut Buffer,
+    ) {
         if self.form_list_state.selected.is_none() {
             self.form_list_state.select(Some(0));
         }
@@ -70,7 +77,7 @@ impl<'a> Settings<'a> {
         let description_paragraph = self
             .form_list_state
             .selected
-            .and_then(|index| *&FORMS[id][index].description)
+            .and_then(|index| items[index].description)
             .and_then(|desc| {
                 Some(
                     Paragraph::new(vec![Line::from("DESCRIPTION").magenta(), Line::from(desc).dark_gray()])
@@ -103,21 +110,30 @@ impl<'a> Settings<'a> {
         Span::from("VALUE").magenta().render(v0_h[1], buf);
 
         let list_builder = ListBuilder::new(|context| {
-            let form_item = &FORMS[id][context.index];
+            let form_item = &items[context.index];
+
+            let (original_value, current_value) = match form_item.key {
+                FormItemKey::Simple(k) => (
+                    original_data
+                        .get(k)
+                        .expect_or_log(format!("original form data not exists: {}", k).as_str()),
+                    data.get(k)
+                        .expect_or_log(format!("form data field not exists: {}", k).as_str()),
+                ),
+                FormItemKey::Custom { getter, .. } => (getter(original_data), getter(data)),
+            };
 
             let item = FormItemWidget {
                 form_item,
-                value: &data
-                    .get(form_item.key)
-                    .expect_or_log(&format!("form field not exists: {}", form_item.key)),
+                value: current_value,
                 is_selected: context.is_selected,
-                is_changed: &data[form_item.key] != &original_data[form_item.key],
+                is_changed: original_value != current_value,
             };
 
             (item, 1)
         });
 
-        let list = ListView::new(list_builder, FORMS[id].len())
+        let list = ListView::new(list_builder, items.len())
             .infinite_scrolling(false)
             .scrollbar(default_scrollbar());
 
@@ -154,7 +170,7 @@ impl<'a> Settings<'a> {
                 self.popup_dropdown_bitmask_state = Some(PopupDropdownBitmaskState::new(
                     form_item.title,
                     variants,
-                    value.as_u32().expect("invalid value"),
+                    value.as_u32(),
                 ));
             }
             FormItemKind::Switch => {
@@ -280,7 +296,7 @@ impl<'a> Component for Settings<'a> {
                     return Ok(true);
                 }
 
-                // Default
+                // default
                 match (code, &state.settings_form_state) {
                     (KeyCode::Up, SettingsFormState::Inactive) => {
                         self.settings_list_state.previous();
@@ -316,7 +332,15 @@ impl<'a> Component for Settings<'a> {
                         let data = state.settings_form_data.as_ref().expect("should be Some");
                         let form_item = &FORMS[id][index];
 
-                        self.handle_form_item_edit(form_item, &data[form_item.key], emit)?;
+                        let value = match form_item.key {
+                            FormItemKey::Simple(k) => data
+                                .get(k)
+                                .expect_or_log(format!("form data field not exists: {}", k).as_str()),
+
+                            FormItemKey::Custom { getter, .. } => getter(data),
+                        };
+
+                        self.handle_form_item_edit(form_item, value, emit)?;
                     }
                     (KeyCode::Esc, SettingsFormState::Loaded { .. }) => {
                         if state.settings_form_is_changed {
@@ -430,7 +454,7 @@ impl<'a> Component for Settings<'a> {
                 let data = state.settings_form_data.as_ref().expect("should be Some");
                 let original_data = state.settings_form_original_data.as_ref().expect("should be Some");
 
-                self.render_form(&id, data, original_data, form_block_area, frame.buffer_mut());
+                self.render_form(&FORMS[id], data, original_data, form_block_area, frame.buffer_mut());
 
                 // active input popup
                 if let Some(state) = self.popup_input_state.as_mut() {
@@ -549,7 +573,7 @@ impl<'a> Widget for SettingsItemWidget<'a> {
 }
 
 struct FormItemWidget<'a> {
-    form_item: &'static FormItem,
+    form_item: &'a FormItem,
     value: &'a FormValue,
     is_selected: bool,
     is_changed: bool,
@@ -586,7 +610,7 @@ impl<'a> Widget for FormItemWidget<'a> {
         let formatted_value = if matches!(self.form_item.kind, FormItemKind::Switch) {
             let value = match self.value {
                 FormValue::Bool(v) => *v,
-                FormValue::Option(Some(b)) => b.as_bool().expect("invalid FormValue"),
+                FormValue::Option(Some(b)) => b.as_bool(),
                 _ => unreachable!(),
             };
 

@@ -24,14 +24,6 @@ impl<'a> PlaceholderWidget<'a> {
         }
     }
 
-    pub fn black_on_dark_gray(text: &'a str) -> Self {
-        Self {
-            text: Paragraph::new(Span::from(text).black().on_dark_gray())
-                .centered()
-                .wrap(Wrap { trim: false }),
-        }
-    }
-
     pub fn red(text: &'a str) -> Self {
         Self {
             text: Paragraph::new(Span::from(text).red())

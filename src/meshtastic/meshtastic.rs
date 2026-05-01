@@ -3,7 +3,7 @@ use std::time::Duration;
 use meshtastic::{
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{Config, FromRadio, PortNum, from_radio},
+    protobufs::{Config, FromRadio, ModuleConfig, PortNum, from_radio},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
 };
 use tokio::{
@@ -87,19 +87,10 @@ impl MeshtasticService {
         Ok(())
     }
 
-    async fn handle_command(
-        &mut self,
-        cmd: CommandToMeshtastic,
-        subsys: &mut SubsystemHandle,
-    ) -> anyhow::Result<()> {
+    async fn handle_command(&mut self, cmd: CommandToMeshtastic, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         match cmd {
             CommandToMeshtastic::ConnectViaTcp(hostaddr) => {
-                match timeout(
-                    Duration::from_secs(CONNECTION_TIMEOUT_SECS),
-                    connect_via_tcp(hostaddr),
-                )
-                .await
-                {
+                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(hostaddr)).await {
                     Ok(Ok((radio_rx, stream_api))) => {
                         self.handle_connection(radio_rx, stream_api, subsys);
                         self.event_tx.send(MeshtasticEvent::Connected)?;
@@ -107,24 +98,17 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("can't connect via TCP: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("connection timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                 };
             }
             CommandToMeshtastic::ConnectViaBle(address) => {
-                match timeout(
-                    Duration::from_secs(CONNECTION_TIMEOUT_SECS),
-                    connect_via_ble(address),
-                )
-                .await
-                {
+                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_ble(address)).await {
                     Ok(Ok((radio_rx, stream_api))) => {
                         self.handle_connection(radio_rx, stream_api, subsys);
 
@@ -133,14 +117,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("can't connect via BLE: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("connection timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                 };
             }
@@ -158,14 +140,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("can't connect via serial: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("connection timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
                     }
                 };
             }
@@ -204,9 +184,7 @@ impl MeshtasticService {
                     .await
                 {
                     Ok(()) => self.event_tx.send(MeshtasticEvent::MessageAccepted)?,
-                    Err(e) => self
-                        .event_tx
-                        .send(MeshtasticEvent::MessageRejected(e.to_string()))?,
+                    Err(e) => self.event_tx.send(MeshtasticEvent::MessageRejected(e.to_string()))?,
                 };
             }
             CommandToMeshtastic::SendDirectTextMessage {
@@ -240,16 +218,11 @@ impl MeshtasticService {
                     .await
                 {
                     Ok(()) => self.event_tx.send(MeshtasticEvent::MessageAccepted)?,
-                    Err(e) => self
-                        .event_tx
-                        .send(MeshtasticEvent::MessageRejected(e.to_string()))?,
+                    Err(e) => self.event_tx.send(MeshtasticEvent::MessageRejected(e.to_string()))?,
                 };
             }
             CommandToMeshtastic::SaveConfig { my_node_id, config } => {
-                let api = self
-                    .stream_api
-                    .as_mut()
-                    .expect_or_log("should be connected");
+                let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
                 match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
                     api.start_config_transaction().await?;
@@ -275,22 +248,53 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("save config error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save config timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                    }
+                }
+            }
+            CommandToMeshtastic::SaveModuleConfig { my_node_id, config } => {
+                let api = self.stream_api.as_mut().expect_or_log("should be connected");
+
+                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
+                    api.start_config_transaction().await?;
+
+                    api.update_module_config(
+                        &mut LocalPacketRouter {
+                            my_node_id,
+                            event_tx: &self.event_tx,
+                        },
+                        ModuleConfig {
+                            payload_variant: Some(config),
+                        },
+                    )
+                    .await?;
+
+                    api.commit_config_transaction().await
+                })
+                .await
+                {
+                    Ok(Ok(_)) => {
+                        self.event_tx.send(MeshtasticEvent::ConfigSaved)?;
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("save config error: {:?}", e);
+
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                    }
+                    Err(e) => {
+                        tracing::error!("save config timeout: {:?}", e);
+
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
                     }
                 }
             }
             CommandToMeshtastic::SaveUser { my_node_id, user } => {
-                let api = self
-                    .stream_api
-                    .as_mut()
-                    .expect_or_log("should be connected");
+                let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
                 match timeout(
                     Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS),
@@ -310,14 +314,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("save user error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::UserSaveError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::UserSaveError(e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save user timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::UserSaveError(e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::UserSaveError(e.to_string()))?;
                     }
                 }
             }
@@ -355,14 +357,9 @@ impl MeshtasticService {
         let event_tx = self.event_tx.clone();
 
         let subsys = subsys.start(
-            SubsystemBuilder::new(
-                "RadioService",
-                async |nested_subsys: &mut SubsystemHandle| {
-                    RadioService::new(event_tx)
-                        .run(radio_rx, nested_subsys)
-                        .await
-                },
-            )
+            SubsystemBuilder::new("RadioService", async |nested_subsys: &mut SubsystemHandle| {
+                RadioService::new(event_tx).run(radio_rx, nested_subsys).await
+            })
             .on_failure(ErrorAction::CatchAndLocalShutdown),
         );
 
@@ -393,13 +390,11 @@ impl<'a> PacketRouter<(), LocalPacketRouterErr> for LocalPacketRouter<'a> {
         Ok(())
     }
 
-    fn handle_mesh_packet(
-        &mut self,
-        packet: meshtastic::protobufs::MeshPacket,
-    ) -> Result<(), LocalPacketRouterErr> {
-        self.event_tx.send(MeshtasticEvent::IncomingPacket(
-            from_radio::PayloadVariant::Packet(packet),
-        ))?;
+    fn handle_mesh_packet(&mut self, packet: meshtastic::protobufs::MeshPacket) -> Result<(), LocalPacketRouterErr> {
+        self.event_tx
+            .send(MeshtasticEvent::IncomingPacket(from_radio::PayloadVariant::Packet(
+                packet,
+            )))?;
 
         Ok(())
     }

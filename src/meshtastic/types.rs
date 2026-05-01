@@ -1,6 +1,6 @@
 use emoji::Emoji;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{User, config, from_radio};
+use meshtastic::protobufs::{User, config, from_radio, module_config};
 
 #[derive(Debug, Clone)]
 pub enum MeshtasticEvent {
@@ -45,6 +45,10 @@ pub enum CommandToMeshtastic {
     SaveConfig {
         my_node_id: u32,
         config: config::PayloadVariant,
+    },
+    SaveModuleConfig {
+        my_node_id: u32,
+        config: module_config::PayloadVariant,
     },
     SaveUser {
         my_node_id: u32,

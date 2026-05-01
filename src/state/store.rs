@@ -19,7 +19,9 @@ use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::{
     state::{State, StateAction},
-    types::{Channel, ConnectionState, Device, DeviceDiscoveringState, NodesSortBy, SettingsFormState, Tab},
+    types::{
+        Channel, ConnectionState, Device, DeviceDiscoveringState, FormItemKey, NodesSortBy, SettingsFormState, Tab,
+    },
 };
 
 const TICK_INTERVAL_MILLIS: u64 = 33;
@@ -440,7 +442,15 @@ impl Store {
             }
             StateAction::SettingsFormValueSet { key, value } => {
                 if let Some(data) = self.state.settings_form_data.as_mut() {
-                    data.insert(key, value);
+                    match key {
+                        FormItemKey::Simple(k) => {
+                            data.insert(k, value);
+                        }
+                        FormItemKey::Custom { setter, .. } => {
+                            setter(data, value);
+                        }
+                    }
+
                     self.state.settings_form_is_changed =
                         self.state.settings_form_data != self.state.settings_form_original_data;
 
