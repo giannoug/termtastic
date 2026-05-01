@@ -1,4 +1,4 @@
-use tracing_unwrap::{OptionExt, ResultExt};
+use tracing_unwrap::OptionExt;
 
 use crate::{
     service::{FORMS, SETTINGS},
@@ -103,11 +103,16 @@ impl<'a> Settings<'a> {
 
         let v0_h = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(3), Constraint::Fill(4), Constraint::Length(2)])
+            .constraints([
+                Constraint::Fill(1),
+                Constraint::Length(1),
+                Constraint::Fill(1),
+                Constraint::Length(2),
+            ])
             .split(v[0]);
 
         Span::from("FIELD").magenta().render(v0_h[0], buf);
-        Span::from("VALUE").magenta().render(v0_h[1], buf);
+        Span::from("VALUE").magenta().render(v0_h[2], buf);
 
         let list_builder = ListBuilder::new(|context| {
             let form_item = &items[context.index];
@@ -373,7 +378,7 @@ impl<'a> Component for Settings<'a> {
 
         let v0_h = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)])
+            .constraints([Constraint::Ratio(2, 6), Constraint::Ratio(4, 6)])
             .split(v[0]);
 
         if self.settings_list_state.selected.is_none() {
@@ -587,9 +592,9 @@ impl<'a> Widget for FormItemWidget<'a> {
         let h = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Fill(3),
+                Constraint::Fill(1),
                 Constraint::Length(1),
-                Constraint::Fill(4),
+                Constraint::Fill(1),
                 Constraint::Length(2),
             ])
             .split(area);

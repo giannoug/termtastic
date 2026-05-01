@@ -81,8 +81,9 @@
 
 #### General
 
-- [x] Loading device configuration (generic feature)s
+- [x] Loading device configuration (generic feature)
 - [x] Saving device configuration (generic feature)
+- [ ] Import configuration from link
 
 #### Radio
 
@@ -102,10 +103,10 @@
 #### Module
 
 - [x] MQTT
-- [ ] Serial
-- [ ] External Notification
-- [ ] Store & Forward
-- [ ] Range Test
+- [x] Serial
+- [x] External Notification
+- [x] Store & Forward
+- [x] Range Test
 - [ ] Telemetry
 - [ ] Canned Message
 - [ ] Neighbor Info

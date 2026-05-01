@@ -552,7 +552,7 @@ impl<'a> Widget for MessageWidget<'a> {
                         if nodes.len() > 1 {
                             vec![
                                 emoji.to_span(),
-                                Span::from(format!("\"{}", nodes.len())).dark_gray(),
+                                Span::from(format!(":{}", nodes.len())).dark_gray(),
                                 " ".to_span(),
                             ]
                         } else {
