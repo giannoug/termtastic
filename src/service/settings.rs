@@ -2,10 +2,11 @@ use std::sync::LazyLock;
 
 use meshtastic::Message;
 use meshtastic::protobufs::config::{
-    self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig,
+    self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
 };
 use meshtastic::protobufs::module_config::{
-    ExternalNotificationConfig, MqttConfig, RangeTestConfig, SerialConfig, StoreForwardConfig,
+    AmbientLightingConfig, CannedMessageConfig, DetectionSensorConfig, ExternalNotificationConfig, MqttConfig,
+    NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig, TrafficManagementConfig,
 };
 use meshtastic::protobufs::{
     AdminMessage, Config, ModuleConfig, PortNum, User, admin_message, from_radio, mesh_packet, module_config,
@@ -179,6 +180,13 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Lora config not loaded"))?,
             )?,
+            FormId::RadioSecurity => to_formdata(
+                state
+                    .device_config
+                    .security
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Security config not loaded"))?,
+            )?,
             FormId::DeviceDevice => to_formdata(
                 state
                     .device_config
@@ -255,6 +263,50 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Range Test config not loaded"))?,
             )?,
+            FormId::ModuleTelemetry => to_formdata(
+                state
+                    .device_module_config
+                    .telemetry
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Telemetry config not loaded"))?,
+            )?,
+            FormId::ModuleCannedMessage => to_formdata(
+                state
+                    .device_module_config
+                    .canned_message
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Canned Message config not loaded"))?,
+            )?,
+            FormId::ModuleNeighborInfo => to_formdata(
+                state
+                    .device_module_config
+                    .neighbor
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Neighbor Info config not loaded"))?,
+            )?,
+            FormId::ModuleAmbientLighting => to_formdata(
+                state
+                    .device_module_config
+                    .ambient_lighting
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Ambient Lighting config not loaded"))?,
+            )?,
+            FormId::ModuleDetectionSensor => to_formdata(
+                state
+                    .device_module_config
+                    .detection_sensor
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Detection Sensor config not loaded"))?,
+            )?,
+            FormId::ModuleTrafficManagement => to_formdata(
+                state
+                    .device_module_config
+                    .traffic_management
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!(
+                        "Traffic Management config not loaded or it's not supported by the device firmware"
+                    ))?,
+            )?,
             _ => return Err(anyhow::anyhow!("Loader not implemented for FormId: {}", id)),
         };
 
@@ -270,6 +322,12 @@ impl SettingsService {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     my_node_id: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Lora(from_formdata::<LoRaConfig>(&form_data)?),
+                })?;
+            }
+            FormId::RadioSecurity => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: config::PayloadVariant::Security(from_formdata::<SecurityConfig>(&form_data)?),
                 })?;
             }
             FormId::DeviceDevice => {
@@ -342,6 +400,52 @@ impl SettingsService {
                     config: module_config::PayloadVariant::RangeTest(from_formdata::<RangeTestConfig>(&form_data)?),
                 })?;
             }
+            FormId::ModuleTelemetry => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::Telemetry(from_formdata::<TelemetryConfig>(&form_data)?),
+                })?;
+            }
+            FormId::ModuleCannedMessage => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::CannedMessage(from_formdata::<CannedMessageConfig>(
+                        &form_data,
+                    )?),
+                })?;
+            }
+            FormId::ModuleNeighborInfo => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::NeighborInfo(from_formdata::<NeighborInfoConfig>(
+                        &form_data,
+                    )?),
+                })?;
+            }
+            FormId::ModuleAmbientLighting => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::AmbientLighting(from_formdata::<AmbientLightingConfig>(
+                        &form_data,
+                    )?),
+                })?;
+            }
+            FormId::ModuleDetectionSensor => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::DetectionSensor(from_formdata::<DetectionSensorConfig>(
+                        &form_data,
+                    )?),
+                })?;
+            }
+            FormId::ModuleTrafficManagement => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    config: module_config::PayloadVariant::TrafficManagement(from_formdata::<TrafficManagementConfig>(
+                        &form_data,
+                    )?),
+                })?;
+            }
             _ => unimplemented!(),
         };
 
@@ -351,6 +455,9 @@ impl SettingsService {
 
 fn build_settings() -> Vec<SettingsItem> {
     Vec::from([
+        // App
+        SettingsItem::group("App"),
+        SettingsItem::form("UI", FormId::AppUi),
         // Radio
         SettingsItem::group("Radio"),
         SettingsItem::form("LoRa", FormId::RadioLora),
@@ -374,8 +481,8 @@ fn build_settings() -> Vec<SettingsItem> {
         SettingsItem::form("Telemetry", FormId::ModuleTelemetry),
         SettingsItem::form("Canned Message", FormId::ModuleCannedMessage),
         SettingsItem::form("Neighbor Info", FormId::ModuleNeighborInfo),
-        // App
-        SettingsItem::group("App"),
-        SettingsItem::form("UI", FormId::AppUi),
+        SettingsItem::form("Ambient Lighting", FormId::ModuleAmbientLighting),
+        SettingsItem::form("Detection Sensor", FormId::ModuleDetectionSensor),
+        SettingsItem::form("Traffic Management", FormId::ModuleTrafficManagement),
     ])
 }

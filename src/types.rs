@@ -532,6 +532,9 @@ pub enum FormId {
     ModuleTelemetry,
     ModuleCannedMessage,
     ModuleNeighborInfo,
+    ModuleAmbientLighting,
+    ModuleDetectionSensor,
+    ModuleTrafficManagement,
     AppUi,
 }
 
@@ -746,6 +749,12 @@ impl From<bool> for FormValue {
     }
 }
 
+impl From<Vec<u8>> for FormValue {
+    fn from(value: Vec<u8>) -> Self {
+        Self::Vec(value.iter().map(|b| FormValue::UnsignedInt8(*b)).collect())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct FormItem {
     pub key: FormItemKey,
@@ -794,16 +803,11 @@ pub enum FormItemKind {
     InputOfUnsignedInt32,
     InputOfUnsignedInt64,
     InputOfFloat32,
+    InputOfBase64,
     Enum(Vec<FormEnumVariant>),
     BitMask(Vec<FormBitMaskVariant>),
     Switch,
-    Button { event: AppEvent, confirm: bool },
-}
-
-impl FormItemKind {
-    pub fn is_enum(&self) -> bool {
-        return matches!(self, Self::Enum(_));
-    }
+    Button(fn(&FormValue) -> FormValue),
 }
 
 #[derive(Debug, Clone)]

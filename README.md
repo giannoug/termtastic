@@ -85,11 +85,15 @@
 - [x] Saving device configuration (generic feature)
 - [ ] Import configuration from link
 
+#### App
+
+- [ ] UI
+
 #### Radio
 
 - [x] LoRa
 - [ ] Channels
-- [ ] Security
+- [x] Security
 
 #### Device
 
@@ -107,13 +111,11 @@
 - [x] External Notification
 - [x] Store & Forward
 - [x] Range Test
-- [ ] Telemetry
-- [ ] Canned Message
-- [ ] Neighbor Info
-
-#### App
-
-- [ ] UI
+- [x] Telemetry
+- [x] Canned Message
+- [x] Neighbor Info
+- [x] Ambient Lighting
+- [x] Detection Sensor
 
 ### Connection tab
 

@@ -24,6 +24,7 @@ strip = true
 ansi-to-tui = { version = "8.0.1" }
 anyhow = { version = "1.0.102" }
 arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+base64 = { version = "0.22.1" }
 bluest = { version = "0.6.9" }
 chrono = { version = "0.4.44" }
 clap = { version = "4.6.1", features = ["derive"] }
@@ -32,10 +33,10 @@ confy = { version = "2.0.0", default-features = false, features = [
 ] }
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 emoji = { version = "0.2.1" }
+fastrand = { version = "2.4.1" }
 futures = { version = "0.3.32" }
 hostaddr = { version = "0.2.4", features = ["serde"] }
 itertools = { version = "0.14.0" }
-#meshtastic = { version = "0.1", features = ["bluetooth-le"] }
 meshtastic = { git = "https://github.com/acelot/rust-meshtastic", branch = "main", features = [
     "bluetooth-le",
 ] }

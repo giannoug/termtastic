@@ -241,7 +241,7 @@ impl<'a> Serializer for FieldSerializer<'a> {
 
     type Error = FormDataSerializerError;
 
-    type SerializeSeq = UniversalVecSerializer<'a>;
+    type SerializeSeq = FieldVecSerializer<'a>;
 
     type SerializeTuple = Impossible<Self::Ok, Self::Error>;
 
@@ -385,7 +385,7 @@ impl<'a> Serializer for FieldSerializer<'a> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Ok(UniversalVecSerializer {
+        Ok(FieldVecSerializer {
             data: self.data,
             key: self.key,
             vec: Vec::new(),
@@ -437,13 +437,13 @@ impl<'a> Serializer for FieldSerializer<'a> {
     }
 }
 
-struct UniversalVecSerializer<'a> {
+struct FieldVecSerializer<'a> {
     data: &'a mut FormData,
     key: &'static str,
     vec: Vec<FormValue>,
 }
 
-impl<'a> SerializeSeq for UniversalVecSerializer<'a> {
+impl<'a> SerializeSeq for FieldVecSerializer<'a> {
     type Ok = ();
 
     type Error = FormDataSerializerError;
@@ -452,7 +452,7 @@ impl<'a> SerializeSeq for UniversalVecSerializer<'a> {
     where
         T: ?Sized + Serialize,
     {
-        let element_serializer = UniversalElementSerializer { vec: &mut self.vec };
+        let element_serializer = VecElementSerializer { vec: &mut self.vec };
         value.serialize(element_serializer)?;
         Ok(())
     }
@@ -463,16 +463,41 @@ impl<'a> SerializeSeq for UniversalVecSerializer<'a> {
     }
 }
 
-struct UniversalElementSerializer<'a> {
-    vec: &'a mut Vec<FormValue>,
+struct VecVecSerializer<'a> {
+    target: &'a mut Vec<FormValue>,
+    vec: Vec<FormValue>,
 }
 
-impl<'a> Serializer for UniversalElementSerializer<'a> {
+impl<'a> SerializeSeq for VecVecSerializer<'a> {
     type Ok = ();
 
     type Error = FormDataSerializerError;
 
-    type SerializeSeq = Impossible<Self::Ok, Self::Error>;
+    fn serialize_element<T>(&mut self, value: &T) -> Result<(), Self::Error>
+    where
+        T: ?Sized + Serialize,
+    {
+        let element_serializer = VecElementSerializer { vec: &mut self.vec };
+        value.serialize(element_serializer)?;
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.target.push(FormValue::Vec(self.vec));
+        Ok(())
+    }
+}
+
+struct VecElementSerializer<'a> {
+    vec: &'a mut Vec<FormValue>,
+}
+
+impl<'a> Serializer for VecElementSerializer<'a> {
+    type Ok = ();
+
+    type Error = FormDataSerializerError;
+
+    type SerializeSeq = VecVecSerializer<'a>;
 
     type SerializeTuple = Impossible<Self::Ok, Self::Error>;
 
@@ -598,7 +623,10 @@ impl<'a> Serializer for UniversalElementSerializer<'a> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        Err(Self::Error::UnsupportedType("seq"))
+        Ok(VecVecSerializer {
+            target: self.vec,
+            vec: Vec::new(),
+        })
     }
 
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {

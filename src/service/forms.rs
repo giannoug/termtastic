@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use hostaddr::HostAddr;
 use meshtastic::protobufs::User;
 use meshtastic::protobufs::config::bluetooth_config::PairingMode;
@@ -9,11 +11,16 @@ use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayM
 use meshtastic::protobufs::config::lo_ra_config::{ModemPreset, RegionCode};
 use meshtastic::protobufs::config::position_config::{GpsMode, PositionFlags};
 use meshtastic::protobufs::config::{
-    BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig,
+    BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
 };
-use meshtastic::protobufs::module_config::serial_config::{SerialBaud, SerialMode};
+use meshtastic::protobufs::module_config::canned_message_config::InputEventChar;
+use meshtastic::protobufs::module_config::detection_sensor_config::TriggerType;
+use meshtastic::protobufs::module_config::serial_config::SerialBaud;
+use meshtastic::protobufs::module_config::serial_config::SerialMode;
 use meshtastic::protobufs::module_config::{
-    ExternalNotificationConfig, MapReportSettings, MqttConfig, RangeTestConfig, SerialConfig, StoreForwardConfig,
+    AmbientLightingConfig, CannedMessageConfig, DetectionSensorConfig, ExternalNotificationConfig, MapReportSettings,
+    MqttConfig, NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig,
+    TrafficManagementConfig,
 };
 use strum::IntoEnumIterator;
 
@@ -26,6 +33,8 @@ pub static FORMS: LazyLock<HashMap<FormId, Vec<FormItem>>> = LazyLock::new(|| bu
 
 static DEFAULT_MAP_REPORT_SETTINGS: LazyLock<FormData> =
     LazyLock::new(|| to_formdata(&MapReportSettings::default()).unwrap());
+
+static EMPTY_FORM_VALUE_VEC: FormValue = FormValue::Vec(vec![]);
 
 fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     let mut forms = HashMap::new();
@@ -246,6 +255,167 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         .then_some(())
                         .ok_or(anyhow::anyhow!("Must be between -100 and 100"))
                 },
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::RadioSecurity,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(public_key in SecurityConfig)),
+                "Public Key",
+                Some(
+                    "The public key of the user's device. Sent out to other nodes on the mesh to allow them \
+                    to compute a shared secret key.",
+                ),
+                FormItemKind::InputOfBase64,
+                |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(private_key in SecurityConfig)),
+                "Private Key",
+                Some("The private key of the device. Used to create a shared key with a remote device."),
+                FormItemKind::InputOfBase64,
+                |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(private_key in SecurityConfig))
+                            .expect("should exists")
+                    },
+                    setter: |data, value| {
+                        data.insert(name_of!(private_key in SecurityConfig), value);
+                    },
+                },
+                "",
+                None,
+                FormItemKind::Button(|_| {
+                    let key: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(32).collect();
+                    FormValue::from(key)
+                }),
+                |_| "<REGENERATE PRIVATE KEY>".to_owned(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .get(0)
+                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                    },
+                    setter: |data, value| {
+                        let mut keys = data
+                            .get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .clone();
+
+                        if keys.len() < 3 {
+                            keys.resize(3, FormValue::Vec(vec![]));
+                        }
+
+                        keys[0] = value;
+                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                    },
+                },
+                "Admin Key #1",
+                Some("The public key authorized to send admin messages to this node."),
+                FormItemKind::InputOfBase64,
+                |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .get(1)
+                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                    },
+                    setter: |data, value| {
+                        let mut keys = data
+                            .get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .clone();
+
+                        if keys.len() < 3 {
+                            keys.resize(3, FormValue::Vec(vec![]));
+                        }
+
+                        keys[1] = value;
+                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                    },
+                },
+                "Admin Key #2",
+                Some("The public key authorized to send admin messages to this node."),
+                FormItemKind::InputOfBase64,
+                |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .get(2)
+                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                    },
+                    setter: |data, value| {
+                        let mut keys = data
+                            .get(name_of!(admin_key in SecurityConfig))
+                            .expect("should exists")
+                            .as_vec()
+                            .clone();
+
+                        if keys.len() < 3 {
+                            keys.resize(3, FormValue::Vec(vec![]));
+                        }
+
+                        keys[2] = value;
+                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                    },
+                },
+                "Admin Key #3",
+                Some("The public key authorized to send admin messages to this node."),
+                FormItemKind::InputOfBase64,
+                |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(serial_enabled in SecurityConfig)),
+                "Serial Console",
+                Some("Serial Console over the Stream API."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(debug_log_api_enabled in SecurityConfig)),
+                "Debug Log API Enabled",
+                Some(
+                    "By default we turn off logging as soon as an API client connects (to keep shared serial \
+                    link quiet). Output live debug logging over serial or bluetooth is set to true.",
+                ),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(admin_channel_enabled in SecurityConfig)),
+                "Legacy Admin Channel",
+                Some("Allow incoming device control over the insecure legacy admin channel."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
             ),
         ]),
     );
@@ -1601,6 +1771,722 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 FormItemKey::Simple(name_of!(save in RangeTestConfig)),
                 "Save .CSV in storage",
                 Some("ESP32 only"),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleTelemetry,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(device_telemetry_enabled in TelemetryConfig)),
+                "Send Device Telemetry",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(device_update_interval in TelemetryConfig)),
+                "Device Metrics Update Interval",
+                None,
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("30 minutes", 1800 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        1800 => "30 minutes".to_owned(),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(environment_measurement_enabled in TelemetryConfig)),
+                "Environment Metrics Module Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(environment_update_interval in TelemetryConfig)),
+                "Environment Metrics Update Interval",
+                None,
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("30 minutes", 1800 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        1800 => "30 minutes".to_owned(),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(environment_screen_enabled in TelemetryConfig)),
+                "Environment Metrics On-Screen Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(environment_display_fahrenheit in TelemetryConfig)),
+                "Environment Metrics use Fahrenheit",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(air_quality_enabled in TelemetryConfig)),
+                "Air Quality Metrics Module Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(air_quality_interval in TelemetryConfig)),
+                "Air Quality Metrics Update Interval",
+                None,
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("30 minutes", 1800 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        1800 => "30 minutes".to_owned(),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(power_measurement_enabled in TelemetryConfig)),
+                "Power Metrics Module Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(power_update_interval in TelemetryConfig)),
+                "Power Metrics Update Interval",
+                None,
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("30 minutes", 1800 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        1800 => "30 minutes".to_owned(),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(power_screen_enabled in TelemetryConfig)),
+                "Power Metrics On-Screen Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleCannedMessage,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(rotary1_enabled in CannedMessageConfig)),
+                "Rotary Encoder #1 Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_pin_a in CannedMessageConfig)),
+                "GPIO Pin for Rotary Encoder A Port",
+                None,
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_pin_b in CannedMessageConfig)),
+                "GPIO Pin for Rotary Encoder B Port",
+                None,
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_pin_press in CannedMessageConfig)),
+                "GPIO Pin for Rotary Encoder Press Port",
+                None,
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_event_press in CannedMessageConfig)),
+                "Generate input event on Press",
+                None,
+                FormItemKind::Enum(
+                    InputEventChar::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    InputEventChar::try_from(v.as_i32())
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_event_cw in CannedMessageConfig)),
+                "Generate input event on CW",
+                None,
+                FormItemKind::Enum(
+                    InputEventChar::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    InputEventChar::try_from(v.as_i32())
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(inputbroker_event_ccw in CannedMessageConfig)),
+                "Generate input event on CCW",
+                None,
+                FormItemKind::Enum(
+                    InputEventChar::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    InputEventChar::try_from(v.as_i32())
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(updown1_enabled in CannedMessageConfig)),
+                "Up/Down/Select Input Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(send_bell in CannedMessageConfig)),
+                "Send Bell",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleNeighborInfo,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(enabled in NeighborInfoConfig)),
+                "Neighbor Info Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(update_interval in NeighborInfoConfig)),
+                "Update Interval",
+                None,
+                FormItemKind::InputOfUnsignedInt32,
+                |v| format!("{} seconds", v),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(transmit_over_lora in NeighborInfoConfig)),
+                "Transmit over LoRa",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleAmbientLighting,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(led_state in AmbientLightingConfig)),
+                "LED State",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(current in AmbientLightingConfig)),
+                "Current",
+                Some("Sets the current for the LED output. Default is 10."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(red in AmbientLightingConfig)),
+                "Red",
+                Some("Sets the red LED level. Values are 0-255."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=255)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 255"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(green in AmbientLightingConfig)),
+                "Green",
+                Some("Sets the green LED level. Values are 0-255."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=255)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 255"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(blue in AmbientLightingConfig)),
+                "Blue",
+                Some("Sets the blue LED level. Values are 0-255."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=255)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 255"))
+                },
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleDetectionSensor,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(enabled in DetectionSensorConfig)),
+                "Detection Sensor Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(minimum_broadcast_secs in DetectionSensorConfig)),
+                "Minimum Broadcast Interval",
+                Some(
+                    "Interval in seconds of how often we can send a message to the mesh when a trigger event \
+                    is detected",
+                ),
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("15 seconds", 15 as u32),
+                    FormEnumVariant::new("30 seconds", 30 as u32),
+                    FormEnumVariant::new("1 minute", 60 as u32),
+                    FormEnumVariant::new("2 minutes", 2 * 60 as u32),
+                    FormEnumVariant::new("5 minutes", 5 * 60 as u32),
+                    FormEnumVariant::new("10 minutes", 10 * 60 as u32),
+                    FormEnumVariant::new("15 minutes", 15 * 60 as u32),
+                    FormEnumVariant::new("30 minutes", 30 * 60 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        1..60 => format!("{} seconds", secs),
+                        60 => "1 minute".to_owned(),
+                        61..3600 => format!("{} minutes", secs / 60),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(state_broadcast_secs in DetectionSensorConfig)),
+                "State Broadcast Interval",
+                Some(
+                    "Interval in seconds of how often we should send a message to the mesh \
+                    with the current state regardless of trigger events When set to 0, only \
+                    trigger events will be broadcasted Works as a sort of status heartbeat \
+                    for peace of mind",
+                ),
+                FormItemKind::Enum(vec![
+                    FormEnumVariant::new("Unset", 0 as u32),
+                    FormEnumVariant::new("15 minutes", 15 * 60 as u32),
+                    FormEnumVariant::new("30 minutes", 30 * 60 as u32),
+                    FormEnumVariant::new("1 hour", 1 * 3600 as u32),
+                    FormEnumVariant::new("2 hours", 2 * 3600 as u32),
+                    FormEnumVariant::new("3 hours", 3 * 3600 as u32),
+                    FormEnumVariant::new("4 hours", 4 * 3600 as u32),
+                    FormEnumVariant::new("5 hours", 5 * 3600 as u32),
+                    FormEnumVariant::new("6 hours", 6 * 3600 as u32),
+                    FormEnumVariant::new("12 hours", 12 * 3600 as u32),
+                    FormEnumVariant::new("18 hours", 18 * 3600 as u32),
+                    FormEnumVariant::new("24 hours", 24 * 3600 as u32),
+                    FormEnumVariant::new("36 hours", 36 * 3600 as u32),
+                    FormEnumVariant::new("48 hours", 48 * 3600 as u32),
+                    FormEnumVariant::new("72 hours", 72 * 3600 as u32),
+                ]),
+                |v| {
+                    let secs = v.as_u32();
+
+                    match secs {
+                        0 => "Unset".to_owned(),
+                        61..3600 => format!("{} minutes", secs / 60),
+                        3600 => "1 hour".to_owned(),
+                        _ => format!("{} hours", secs / 3600),
+                    }
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(send_bell in DetectionSensorConfig)),
+                "Send Bell With Alert Message",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(name in DetectionSensorConfig)),
+                "Friendly Name",
+                Some(
+                    "Friendly name used to format message sent to mesh \
+                    Example: A name \"Motion\" would result in a message \"Motion detected\"",
+                ),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| {
+                    (0..=20)
+                        .contains(&v.as_string().len())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Max length is 20"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(monitor_pin in DetectionSensorConfig)),
+                "GPIO Pin to Monitor",
+                None,
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=48)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 48"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(detection_trigger_type in DetectionSensorConfig)),
+                "Detection Trigger Type",
+                None,
+                FormItemKind::Enum(
+                    TriggerType::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    TriggerType::try_from(v.as_i32())
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(use_pullup in DetectionSensorConfig)),
+                "Use INPUT_PULLUP Mode",
+                Some(
+                    "Whether or not use INPUT_PULLUP mode for GPIO pin. Only applicable if the board \
+                    uses pull-up resistors on the pin",
+                ),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::ModuleTrafficManagement,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(enabled in TrafficManagementConfig)),
+                "Traffic Management Enabled",
+                Some("Master enable for traffic management module."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(position_dedup_enabled in TrafficManagementConfig)),
+                "Position Deduplication Enabled",
+                Some("Drop redundant position broadcasts from the same node."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(position_precision_bits in TrafficManagementConfig)),
+                "Position Precision Bits",
+                Some("Number of bits of precision for position deduplication (0-32)."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=32)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 32"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(position_min_interval_secs in TrafficManagementConfig)),
+                "Min Position Interval",
+                Some("Minimum interval in seconds between position updates from the same node."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| format!("{} seconds", v.as_u32()),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be a valid number of seconds"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(nodeinfo_direct_response in TrafficManagementConfig)),
+                "NodeInfo Direct Response",
+                Some("Enable direct responses to NodeInfo requests from local cache."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(nodeinfo_direct_response_max_hops in TrafficManagementConfig)),
+                "NodeInfo Response Max Hops",
+                Some("Minimum hop distance from requestor before responding to NodeInfo requests."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=3)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and 255"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(rate_limit_enabled in TrafficManagementConfig)),
+                "Rate Limit Enabled",
+                Some("Enable per-node rate limiting to throttle chatty nodes."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(rate_limit_window_secs in TrafficManagementConfig)),
+                "Rate Limit Window",
+                Some("Time window in seconds for rate limiting calculations."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| format!("{} seconds", v.as_u32()),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be a valid number of seconds"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(rate_limit_max_packets in TrafficManagementConfig)),
+                "Rate Limit Max Packets",
+                Some("Maximum packets allowed per node within the rate limit window."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be a valid packet count"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(drop_unknown_enabled in TrafficManagementConfig)),
+                "Drop Unknown Packets",
+                Some("Enable dropping of unknown/undecryptable packets per rate limit window."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(unknown_packet_threshold in TrafficManagementConfig)),
+                "Unknown Packet Threshold",
+                Some("Number of unknown packets before dropping from a node."),
+                FormItemKind::InputOfUnsignedInt32,
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be a valid packet count"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(exhaust_hop_telemetry in TrafficManagementConfig)),
+                "Exhaust Hop Telemetry",
+                Some("Set hop_limit to 0 for relayed telemetry broadcasts (own packets unaffected)."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(exhaust_hop_position in TrafficManagementConfig)),
+                "Exhaust Hop Position",
+                Some("Set hop_limit to 0 for relayed position broadcasts (own packets unaffected)."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(router_preserve_hops in TrafficManagementConfig)),
+                "Router Preserve Hops",
+                Some("Preserve hop_limit for router-to-router traffic."),
                 FormItemKind::Switch,
                 |v| v.to_string(),
                 |_| Ok(()),

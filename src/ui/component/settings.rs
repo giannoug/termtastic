@@ -1,3 +1,4 @@
+use base64::{Engine, prelude::BASE64_STANDARD};
 use tracing_unwrap::OptionExt;
 
 use crate::{
@@ -165,6 +166,14 @@ impl<'a> Settings<'a> {
                 self.active_form_item = Some(form_item);
                 self.popup_input_state = Some(PopupInputState::new(Some(form_item.title), None, value.to_string()));
             }
+            FormItemKind::InputOfBase64 => {
+                self.active_form_item = Some(form_item);
+                self.popup_input_state = Some(PopupInputState::new(
+                    Some(form_item.title),
+                    None,
+                    BASE64_STANDARD.encode(value.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                ));
+            }
             FormItemKind::Enum(variants) => {
                 self.active_form_item = Some(form_item);
                 self.popup_dropdown_state =
@@ -191,7 +200,9 @@ impl<'a> Settings<'a> {
                     },
                 ))?;
             }
-            _ => unimplemented!(),
+            FormItemKind::Button(handler) => {
+                emit(AppEvent::SettingsFormItemSubmitted(form_item, handler(value)))?;
+            }
         }
 
         Ok(())
@@ -522,6 +533,10 @@ fn handle_popup_input_submit<'a>(
             let value = FormValue::from(input_value.parse::<f32>()?);
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
+        FormItemKind::InputOfBase64 => {
+            let value = FormValue::from(BASE64_STANDARD.decode(input_value)?);
+            (form_item.validator)(&value).and_then(|_| Ok(value))
+        }
         _ => unimplemented!(),
     }
 }
@@ -612,32 +627,74 @@ impl<'a> Widget for FormItemWidget<'a> {
         .render(h[0], buf);
 
         // value
-        let formatted_value = if matches!(self.form_item.kind, FormItemKind::Switch) {
-            let value = match self.value {
-                FormValue::Bool(v) => *v,
-                FormValue::Option(Some(b)) => b.as_bool(),
-                _ => unreachable!(),
-            };
+        let line = match self.form_item.kind {
+            FormItemKind::InputOfString
+            | FormItemKind::InputOfInt32
+            | FormItemKind::InputOfUnsignedInt8
+            | FormItemKind::InputOfUnsignedInt32
+            | FormItemKind::InputOfUnsignedInt64
+            | FormItemKind::InputOfFloat32
+            | FormItemKind::InputOfBase64
+            | FormItemKind::BitMask(_) => {
+                let formatted = (self.form_item.formatter)(self.value);
+                let is_empty = formatted.is_empty();
 
-            if value == true {
-                "[■]".to_owned()
-            } else {
-                "[ ]".to_owned()
+                Line::from(
+                    Span::from(if !is_empty { formatted } else { "(empty)".to_owned() }).patch_style(
+                        match (self.is_selected, self.is_changed) {
+                            (true, true) => Style::new().white().on_cyan(),
+                            (true, false) => Style::new().black().on_yellow(),
+                            (false, true) => Style::new().cyan(),
+                            _ if is_empty => Style::new().dark_gray(),
+                            _ => Style::new(),
+                        },
+                    ),
+                )
             }
-        } else if self.form_item.kind.is_enum() {
-            format!("{} ↓", (self.form_item.formatter)(self.value))
-        } else {
-            (self.form_item.formatter)(self.value)
+            FormItemKind::Enum(_) => {
+                let formatted = format!("{} ↓", (self.form_item.formatter)(self.value));
+
+                Line::from(
+                    Span::from(formatted).patch_style(match (self.is_selected, self.is_changed) {
+                        (true, true) => Style::new().white().on_cyan(),
+                        (true, false) => Style::new().black().on_yellow(),
+                        (false, true) => Style::new().cyan(),
+                        _ => Style::new(),
+                    }),
+                )
+            }
+            FormItemKind::Switch => {
+                let value = match self.value {
+                    FormValue::Bool(v) => *v,
+                    FormValue::Option(Some(b)) => b.as_bool(),
+                    _ => unreachable!(),
+                };
+
+                Line::from(
+                    Span::from(if value == true {
+                        "[■]".to_owned()
+                    } else {
+                        "[_]".to_owned()
+                    })
+                    .patch_style(match (self.is_selected, self.is_changed) {
+                        (true, true) => Style::new().white().on_cyan(),
+                        (true, false) => Style::new().black().on_yellow(),
+                        (false, true) => Style::new().cyan(),
+                        _ => Style::new(),
+                    }),
+                )
+            }
+            FormItemKind::Button(_) => {
+                let formatted = (self.form_item.formatter)(self.value);
+
+                Line::from(Span::from(formatted).blue().add_modifier(if self.is_selected {
+                    Modifier::REVERSED
+                } else {
+                    Modifier::empty()
+                }))
+            }
         };
 
-        Line::from(
-            Span::from(formatted_value).patch_style(match (self.is_selected, self.is_changed) {
-                (true, true) => Style::new().white().on_cyan(),
-                (true, false) => Style::new().black().on_yellow(),
-                (false, true) => Style::new().cyan(),
-                _ => Style::new(),
-            }),
-        )
-        .render(h[2], buf);
+        line.render(h[2], buf);
     }
 }
