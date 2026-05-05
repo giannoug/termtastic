@@ -2,7 +2,7 @@ use std::{
     cmp::Ordering,
     collections::{HashMap, VecDeque},
     time::{Duration, Instant},
-    u32, u128,
+    u128, u32,
 };
 
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use itertools::Itertools;
 use meshtastic::protobufs::{config, module_config};
 use tokio::{
     sync::{
-        mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         watch,
     },
     time,
@@ -287,7 +287,7 @@ impl Store {
                 is_changed = true;
             }
             StateAction::ChannelEnsure(key, channel) => {
-                self.state.channels.entry(key).or_insert(channel);
+                self.state.channels.insert(key, channel);
                 self.state.channels.sort_keys();
                 is_changed = true;
             }
@@ -423,9 +423,12 @@ impl Store {
                 self.state.settings_form_state = SettingsFormState::Loaded { id };
                 is_changed = true;
             }
-            StateAction::SettingsFormSavingDone => {
-                self.state.settings_form_original_data = self.state.settings_form_data.clone();
-                self.state.settings_form_is_changed = false;
+            StateAction::SettingsFormSavingStart { id } => {
+                self.state.settings_form_state = SettingsFormState::Saving { id };
+                is_changed = true;
+            }
+            StateAction::SettingsFormSavingFailed { id } => {
+                self.state.settings_form_state = SettingsFormState::Loaded { id };
                 is_changed = true;
             }
             StateAction::SettingsFormClose => {
@@ -444,7 +447,7 @@ impl Store {
                 if let Some(data) = self.state.settings_form_data.as_mut() {
                     match key {
                         FormItemKey::Simple(k) => {
-                            data.insert(k, value);
+                            data.insert(k.to_owned(), value);
                         }
                         FormItemKey::Custom { setter, .. } => {
                             setter(data, value);

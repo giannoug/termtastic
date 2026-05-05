@@ -1,11 +1,14 @@
 use std::time::Duration;
 
+use meshtastic::protobufs::{admin_message, AdminMessage};
 use meshtastic::{
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{Config, FromRadio, ModuleConfig, PortNum, from_radio},
+    protobufs::{from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
+    Message,
 };
+use tokio::time::sleep;
 use tokio::{
     sync::{
         broadcast::{self, error::SendError},
@@ -17,12 +20,14 @@ use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, Su
 use tracing_unwrap::OptionExt;
 
 use crate::meshtastic::{
-    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp,
-    types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
+    connect_via_ble, connect_via_serial, connect_via_tcp, types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
+    RadioService,
 };
 
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
-const SAVE_CONFIG_TIMEOUT_SECS: u64 = 2;
+const SAVE_CONFIG_TIMEOUT_SECS: u64 = 5;
+const SAVE_CONFIG_AFTER_PAUSE_MILLIS: u64 = 100;
+const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 50;
 
 pub struct MeshtasticService {
     command_rx: mpsc::UnboundedReceiver<CommandToMeshtastic>,
@@ -153,21 +158,27 @@ impl MeshtasticService {
                 self.disconnect().await?;
                 self.event_tx.send(MeshtasticEvent::Disconnected)?;
             }
+            CommandToMeshtastic::Reboot { my_node_id, secs } => {
+                self.send_admin_message(my_node_id, admin_message::PayloadVariant::RebootSeconds(secs))
+                    .await?;
+            }
             CommandToMeshtastic::SendBroadcastTextMessage {
                 my_node_id,
                 channel_id,
                 reply_message_id,
                 text,
             } => {
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
+
                 match self
                     .stream_api
                     .as_mut()
                     .expect_or_log("should be connected")
                     .send_mesh_packet(
-                        &mut LocalPacketRouter {
-                            my_node_id,
-                            event_tx: &self.event_tx,
-                        },
+                        &mut packet_router,
                         EncodedMeshPacketData::new(match &text {
                             TextMessage::Text(v) => v.clone().into_bytes(),
                             TextMessage::Emoji(e) => e.glyph.as_bytes().to_vec(),
@@ -193,15 +204,17 @@ impl MeshtasticService {
                 reply_message_id,
                 text,
             } => {
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
+
                 match self
                     .stream_api
                     .as_mut()
                     .expect_or_log("should be connected")
                     .send_mesh_packet(
-                        &mut LocalPacketRouter {
-                            my_node_id,
-                            event_tx: &self.event_tx,
-                        },
+                        &mut packet_router,
                         EncodedMeshPacketData::new(match &text {
                             TextMessage::Text(v) => v.clone().into_bytes(),
                             TextMessage::Emoji(e) => e.glyph.as_bytes().to_vec(),
@@ -221,105 +234,176 @@ impl MeshtasticService {
                     Err(e) => self.event_tx.send(MeshtasticEvent::MessageRejected(e.to_string()))?,
                 };
             }
-            CommandToMeshtastic::SaveConfig { my_node_id, config } => {
+            CommandToMeshtastic::SaveConfig {
+                form_id,
+                my_node_id,
+                config,
+            } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
-                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
+
+                match async {
                     api.start_config_transaction().await?;
 
                     api.update_config(
-                        &mut LocalPacketRouter {
-                            my_node_id,
-                            event_tx: &self.event_tx,
-                        },
+                        &mut packet_router,
                         Config {
                             payload_variant: Some(config),
                         },
                     )
                     .await?;
 
-                    api.commit_config_transaction().await
-                })
+                    api.commit_config_transaction().await?;
+
+                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+
+                    Ok::<(), anyhow::Error>(())
+                }
                 .await
                 {
-                    Ok(Ok(_)) => {
-                        self.event_tx.send(MeshtasticEvent::ConfigSaved)?;
-                    }
-                    Ok(Err(e)) => {
-                        tracing::error!("save config error: {:?}", e);
-
-                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                    Ok(_) => {
+                        self.event_tx.send(MeshtasticEvent::ConfigSaved(form_id))?;
                     }
                     Err(e) => {
-                        tracing::error!("save config timeout: {:?}", e);
+                        tracing::error!("save config error: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                        self.event_tx
+                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
                     }
                 }
             }
-            CommandToMeshtastic::SaveModuleConfig { my_node_id, config } => {
+            CommandToMeshtastic::SaveModuleConfig {
+                form_id,
+                my_node_id,
+                config,
+            } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
+
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
 
                 match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
                     api.start_config_transaction().await?;
 
                     api.update_module_config(
-                        &mut LocalPacketRouter {
-                            my_node_id,
-                            event_tx: &self.event_tx,
-                        },
+                        &mut packet_router,
                         ModuleConfig {
                             payload_variant: Some(config),
                         },
                     )
                     .await?;
 
-                    api.commit_config_transaction().await
+                    api.commit_config_transaction().await?;
+
+                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+
+                    Ok::<(), anyhow::Error>(())
                 })
                 .await
                 {
                     Ok(Ok(_)) => {
-                        self.event_tx.send(MeshtasticEvent::ConfigSaved)?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaved(form_id))?;
                     }
                     Ok(Err(e)) => {
                         tracing::error!("save config error: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                        self.event_tx
+                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save config timeout: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConfigSaveError(e.to_string()))?;
+                        self.event_tx
+                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
                     }
                 }
             }
-            CommandToMeshtastic::SaveUser { my_node_id, user } => {
+            CommandToMeshtastic::SaveChannelsConfig {
+                form_id,
+                my_node_id,
+                channels,
+            } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
-                match timeout(
-                    Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS),
-                    api.update_user(
-                        &mut LocalPacketRouter {
-                            my_node_id,
-                            event_tx: &self.event_tx,
-                        },
-                        user,
-                    ),
-                )
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
+
+                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
+                    api.start_config_transaction().await?;
+
+                    for channel in channels {
+                        api.update_channel_config(&mut packet_router, channel).await?;
+                        sleep(Duration::from_millis(SAVE_SET_CHANNEL_DELAY_MILLIS)).await;
+                    }
+
+                    api.commit_config_transaction().await?;
+
+                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+
+                    Ok::<(), anyhow::Error>(())
+                })
                 .await
                 {
                     Ok(Ok(_)) => {
-                        self.event_tx.send(MeshtasticEvent::UserSaved)?;
+                        self.event_tx.send(MeshtasticEvent::ChannelsSaved(form_id))?;
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("save channels error: {:?}", e);
+
+                        self.event_tx
+                            .send(MeshtasticEvent::ChannelsSaveError(form_id, e.to_string()))?;
+                    }
+                    Err(e) => {
+                        tracing::error!("save channels timeout: {:?}", e);
+
+                        self.event_tx
+                            .send(MeshtasticEvent::ChannelsSaveError(form_id, e.to_string()))?;
+                    }
+                }
+            }
+            CommandToMeshtastic::SaveUser {
+                form_id,
+                my_node_id,
+                user,
+            } => {
+                let api = self.stream_api.as_mut().expect_or_log("should be connected");
+
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_id,
+                    event_tx: &self.event_tx,
+                };
+
+                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
+                    api.update_user(&mut packet_router, user).await?;
+
+                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+
+                    Ok::<(), anyhow::Error>(())
+                })
+                .await
+                {
+                    Ok(Ok(_)) => {
+                        self.event_tx.send(MeshtasticEvent::UserSaved(form_id))?;
                     }
                     Ok(Err(e)) => {
                         tracing::error!("save user error: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::UserSaveError(e.to_string()))?;
+                        self.event_tx
+                            .send(MeshtasticEvent::UserSaveError(form_id, e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save user timeout: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::UserSaveError(e.to_string()))?;
+                        self.event_tx
+                            .send(MeshtasticEvent::UserSaveError(form_id, e.to_string()))?;
                     }
                 }
             }
@@ -365,32 +449,64 @@ impl MeshtasticService {
 
         self.radio_subsys = Some(subsys);
     }
+
+    async fn send_admin_message(
+        &mut self,
+        my_node_id: u32,
+        payload: admin_message::PayloadVariant,
+    ) -> anyhow::Result<()> {
+        let mut packet_router = RetransmitPacketRouter {
+            my_node_id,
+            event_tx: &self.event_tx,
+        };
+
+        let packet = AdminMessage {
+            payload_variant: Some(payload),
+            session_passkey: Vec::new(),
+        };
+
+        self.stream_api
+            .as_mut()
+            .expect_or_log("should be connected")
+            .send_mesh_packet(
+                &mut packet_router,
+                EncodedMeshPacketData::new(packet.encode_to_vec().into()),
+                PortNum::AdminApp,
+                PacketDestination::Local,
+                MeshChannel::new(0)?,
+                true,  // want_ack
+                false, // want_response
+                true,  // echo_response
+                None,  // reply_id
+                None,  // emoji
+            )
+            .await?;
+
+        Ok(())
+    }
 }
 
-struct LocalPacketRouter<'a> {
+struct RetransmitPacketRouter<'a> {
     pub my_node_id: u32,
     pub event_tx: &'a broadcast::Sender<MeshtasticEvent>,
 }
 
 #[derive(thiserror::Error, Debug)]
-enum LocalPacketRouterErr {
+enum RetransmitPacketRouterErr {
     #[error("event send error: {0}")]
     EventSendError(#[from] SendError<MeshtasticEvent>),
 }
 
-impl<'a> PacketRouter<(), LocalPacketRouterErr> for LocalPacketRouter<'a> {
-    fn handle_packet_from_radio(
-        &mut self,
-        packet: meshtastic::protobufs::FromRadio,
-    ) -> Result<(), LocalPacketRouterErr> {
-        self.event_tx.send(MeshtasticEvent::IncomingPacket(
-            packet.payload_variant.expect("should be Some"),
-        ))?;
+impl<'a> PacketRouter<(), RetransmitPacketRouterErr> for RetransmitPacketRouter<'a> {
+    fn handle_packet_from_radio(&mut self, packet: FromRadio) -> Result<(), RetransmitPacketRouterErr> {
+        if let Some(payload) = packet.payload_variant {
+            self.event_tx.send(MeshtasticEvent::IncomingPacket(payload))?;
+        }
 
         Ok(())
     }
 
-    fn handle_mesh_packet(&mut self, packet: meshtastic::protobufs::MeshPacket) -> Result<(), LocalPacketRouterErr> {
+    fn handle_mesh_packet(&mut self, packet: MeshPacket) -> Result<(), RetransmitPacketRouterErr> {
         self.event_tx
             .send(MeshtasticEvent::IncomingPacket(from_radio::PayloadVariant::Packet(
                 packet,
@@ -399,7 +515,7 @@ impl<'a> PacketRouter<(), LocalPacketRouterErr> for LocalPacketRouter<'a> {
         Ok(())
     }
 
-    fn source_node_id(&self) -> meshtastic::types::NodeId {
+    fn source_node_id(&self) -> NodeId {
         NodeId::new(self.my_node_id)
     }
 }

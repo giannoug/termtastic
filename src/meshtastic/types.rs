@@ -1,6 +1,7 @@
+use crate::types::FormId;
 use emoji::Emoji;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{User, config, from_radio, module_config};
+use meshtastic::protobufs::{config, from_radio, module_config, Channel, User};
 
 #[derive(Debug, Clone)]
 pub enum MeshtasticEvent {
@@ -9,13 +10,17 @@ pub enum MeshtasticEvent {
     Disconnected,
     IncomingPacket(from_radio::PayloadVariant),
     MessageAccepted,
-    #[allow(dead_code)]
     MessageRejected(String),
     RadioStopped,
-    ConfigSaveError(String),
-    ConfigSaved,
-    UserSaveError(String),
-    UserSaved,
+    #[allow(dead_code)]
+    ConfigSaveError(FormId, String),
+    ConfigSaved(FormId),
+    #[allow(dead_code)]
+    ChannelsSaveError(FormId, String),
+    ChannelsSaved(FormId),
+    #[allow(dead_code)]
+    UserSaveError(FormId, String),
+    UserSaved(FormId),
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +35,11 @@ pub enum CommandToMeshtastic {
     ConnectViaBle(String),
     ConnectViaSerial(String),
     Disconnect,
+    #[allow(dead_code)]
+    Reboot {
+        my_node_id: u32,
+        secs: i32,
+    },
     SendBroadcastTextMessage {
         my_node_id: u32,
         channel_id: u32,
@@ -43,14 +53,22 @@ pub enum CommandToMeshtastic {
         text: TextMessage,
     },
     SaveConfig {
+        form_id: FormId,
         my_node_id: u32,
         config: config::PayloadVariant,
     },
     SaveModuleConfig {
+        form_id: FormId,
         my_node_id: u32,
         config: module_config::PayloadVariant,
     },
+    SaveChannelsConfig {
+        form_id: FormId,
+        my_node_id: u32,
+        channels: Vec<Channel>,
+    },
     SaveUser {
+        form_id: FormId,
         my_node_id: u32,
         user: User,
     },

@@ -9,7 +9,7 @@ use tracing_unwrap::OptionExt;
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
     state::{State, StateAction},
-    types::{AppEvent, Channel, ChannelRole, Message, Node},
+    types::{AppEvent, Channel, ChannelRole, Message, Node, Toast},
 };
 
 pub struct ChatService {
@@ -132,6 +132,12 @@ impl ChatService {
     fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
         match event {
             MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
+            MeshtasticEvent::MessageRejected(e) => {
+                tracing::error!("message rejected: {}", e);
+
+                self.state_action_tx
+                    .send(StateAction::Toast(Toast::error("message rejected by node")))?;
+            }
             _ => {}
         }
 
@@ -141,12 +147,8 @@ impl ChatService {
     fn handle_meshtastic_packet(&mut self, payload_variant: PayloadVariant) -> anyhow::Result<()> {
         match payload_variant {
             PayloadVariant::Channel(ch) => {
-                let channel = Channel::from(&ch);
-
-                if !channel.role.is_disabled() {
-                    self.state_action_tx
-                        .send(StateAction::ChannelEnsure(ch.index as u32, channel))?;
-                }
+                self.state_action_tx
+                    .send(StateAction::ChannelEnsure(ch.index as u32, Channel::from(&ch)))?;
             }
             PayloadVariant::Packet(packet) => match &packet.payload_variant {
                 Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {

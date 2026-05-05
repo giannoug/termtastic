@@ -25,11 +25,7 @@ pub struct PopupDropdownState<'a> {
 }
 
 impl<'a> PopupDropdownState<'a> {
-    pub fn new(
-        title: &'a str,
-        variants: &'a Vec<FormEnumVariant>,
-        selected_variant: Option<FormValue>,
-    ) -> Self {
+    pub fn new(title: &'a str, variants: &'a Vec<FormEnumVariant>, selected_variant: Option<FormValue>) -> Self {
         Self {
             title,
             variants,
@@ -88,7 +84,7 @@ impl<'a> StatefulWidget for PopupDropdownWidget<'a> {
         let popup_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .padding(Padding::symmetric(1, 0))
-            .title(format!(" {} ", state.title));
+            .title(format!(" {} ", state.title.trim()));
 
         let popup_block_area = popup_block.inner(popup_area);
 

@@ -271,7 +271,7 @@ impl<'a> MapAccess<'a> for FormDataAccessImpl<'a> {
         K: DeserializeSeed<'a>,
     {
         if let Some((key, _value)) = self.data.iter().nth(self.current_index) {
-            seed.deserialize(key.into_deserializer()).map(Some)
+            seed.deserialize(key.clone().into_deserializer()).map(Some)
         } else {
             Ok(None)
         }
@@ -578,12 +578,18 @@ impl<'a> Deserializer<'a> for FormValueDeserializer<'a> {
         self,
         _name: &'static str,
         _variants: &'static [&'static str],
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'a>,
     {
-        Err(FormDataDeserializerError::UnsupportedType("enum"))
+        match self.value {
+            FormValue::String(s) => visitor.visit_enum(EnumDeserializer { value: s.clone() }),
+            other => Err(FormDataDeserializerError::InvalidType {
+                expected: "enum".to_owned(),
+                actual: format!("{:?}", other),
+            }),
+        }
     }
 
     fn deserialize_identifier<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -622,5 +628,54 @@ impl<'a> SeqAccess<'a> for FormValueSeqAccess<'a> {
         } else {
             Ok(None)
         }
+    }
+}
+
+struct EnumDeserializer {
+    value: String,
+}
+
+impl<'a> EnumAccess<'a> for EnumDeserializer {
+    type Error = FormDataDeserializerError;
+
+    type Variant = UnitVariantAccess;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
+    where
+        V: DeserializeSeed<'a>,
+    {
+        let variant = seed.deserialize(self.value.into_deserializer())?;
+        Ok((variant, UnitVariantAccess))
+    }
+}
+
+struct UnitVariantAccess;
+
+impl<'a> VariantAccess<'a> for UnitVariantAccess {
+    type Error = FormDataDeserializerError;
+
+    fn unit_variant(self) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn newtype_variant_seed<T>(self, _seed: T) -> Result<T::Value, Self::Error>
+    where
+        T: DeserializeSeed<'a>,
+    {
+        Err(FormDataDeserializerError::UnsupportedType("variant_seed"))
+    }
+
+    fn tuple_variant<V>(self, _len: usize, _visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'a>,
+    {
+        Err(FormDataDeserializerError::UnsupportedType("tuple_variant"))
+    }
+
+    fn struct_variant<V>(self, _fields: &'static [&'static str], _visitor: V) -> Result<V::Value, Self::Error>
+    where
+        V: Visitor<'a>,
+    {
+        Err(FormDataDeserializerError::UnsupportedType("struct_variant"))
     }
 }

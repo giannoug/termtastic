@@ -14,17 +14,17 @@
 
 <table>
   <tr>
-    <td><img src="./screenshots/chat.png?v=1" alt="Chat"/></td>
-    <td><img src="./screenshots/nodes.png?v=1" alt="Nodes"/></td>
+    <td><img src="./screenshots/chat.png?v=2" alt="Chat"/></td>
+    <td><img src="./screenshots/nodes.png?v=2" alt="Nodes"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/settings.png?v=1" alt="Settings"/></td>
-    <td><img src="./screenshots/connection.png?v=1" alt="Connection"/></td>
+    <td><img src="./screenshots/settings.png?v=2" alt="Settings"/></td>
+    <td><img src="./screenshots/connection.png?v=2" alt="Connection"/></td>
   </tr>
 </table>
 
 | :warning: WARNING                                                                       |
-| :-------------------------------------------------------------------------------------- |
+|:----------------------------------------------------------------------------------------|
 | Project is under active development, things could be changed completely without notice. |
 
 ## Features
@@ -92,7 +92,7 @@
 #### Radio
 
 - [x] LoRa
-- [ ] Channels
+- [x] Channels
 - [x] Security
 
 #### Device
@@ -143,7 +143,7 @@
 ## Stack
 
 | Feature                     | Library                                                         |
-| :-------------------------- | :-------------------------------------------------------------- |
+|:----------------------------|:----------------------------------------------------------------|
 | TUI: Framework              | [Ratatui](https://ratatui.rs)                                   |
 | TUI: Backend                | [crossterm](https://github.com/crossterm-rs/crossterm)          |
 | TUI: Inputs                 | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea) |
@@ -163,20 +163,20 @@
 ✅ - tested, 🔬 - untested, ❌ - not working
 
 | Feature                  | 🐧 Linux | 🍏 macOS | 🪟 Windows |
-| :----------------------- | :------: | :------: | :--------: |
-| BLE devices discovery    |    ✅    |    ✅    |     🔬     |
-| Serial devices discovery |    ✅    |    ✅    |     ✅     |
-| Copy to clipboard        |    ✅    |    ✅    |     ✅     |
+|:-------------------------|:--------:|:--------:|:----------:|
+| BLE devices discovery    |    ✅     |    ✅     |     🔬     |
+| Serial devices discovery |    ✅     |    ✅     |     ✅      |
+| Copy to clipboard        |    ✅     |    ✅     |     ✅      |
 
 ## Download
 
 | Source             | Link                                                      |
-| :----------------- | :-------------------------------------------------------- |
+|:-------------------|:----------------------------------------------------------|
 | Manual download    | [Releases](https://github.com/acelot/termtastic/releases) |
-| Debian PPA         | 🏗️ TBA                                                    |
-| Arch Linux AUR     | 🏗️ TBA                                                    |
-| macOS Brew         | 🏗️ TBA                                                    |
-| Windows Chocolatey | 🏗️ TBA                                                    |
+| Debian PPA         | 🏗️ TBA                                                   |
+| Arch Linux AUR     | 🏗️ TBA                                                   |
+| macOS Brew         | 🏗️ TBA                                                   |
+| Windows Chocolatey | 🏗️ TBA                                                   |
 
 ## FAQ
 

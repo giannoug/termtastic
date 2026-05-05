@@ -95,7 +95,7 @@ impl<'a> StatefulWidget for PopupInputWidget<'a> {
             .padding(Padding::symmetric(1, 0));
 
         if let Some(title) = state.title {
-            textarea_block = textarea_block.title(format!(" {} ", title));
+            textarea_block = textarea_block.title(format!(" {} ", title.trim()));
         }
 
         let textarea_block_area = textarea_block.inner(v[0]);

@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::User;
 use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
@@ -15,18 +14,19 @@ use meshtastic::protobufs::config::{
 };
 use meshtastic::protobufs::module_config::canned_message_config::InputEventChar;
 use meshtastic::protobufs::module_config::detection_sensor_config::TriggerType;
-use meshtastic::protobufs::module_config::serial_config::SerialBaud;
-use meshtastic::protobufs::module_config::serial_config::SerialMode;
+use meshtastic::protobufs::module_config::serial_config::{SerialBaud, SerialMode};
 use meshtastic::protobufs::module_config::{
     AmbientLightingConfig, CannedMessageConfig, DetectionSensorConfig, ExternalNotificationConfig, MapReportSettings,
     MqttConfig, NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig,
     TrafficManagementConfig,
 };
+use meshtastic::protobufs::User;
 use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;
-use crate::types::{FormBitMaskVariant, FormData, FormId, FormItemKey, FormValue};
-use crate::types::{FormEnumVariant, FormItem, FormItemKind};
+use crate::types::{
+    Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind, FormValue,
+};
 use nameof::name_of;
 
 pub static FORMS: LazyLock<HashMap<FormId, Vec<FormItem>>> = LazyLock::new(|| build_forms());
@@ -35,6 +35,177 @@ static DEFAULT_MAP_REPORT_SETTINGS: LazyLock<FormData> =
     LazyLock::new(|| to_formdata(&MapReportSettings::default()).unwrap());
 
 static EMPTY_FORM_VALUE_VEC: FormValue = FormValue::Vec(vec![]);
+
+macro_rules! channel_form {
+    ($($x:expr),* $(,)?) => {
+        {
+            let mut vec: Vec<FormItem> = Vec::new();
+
+            $(
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |data| {
+                                data.get($x)
+                                    .expect("should exists")
+                                    .as_nested()
+                                    .get(name_of!(is_enabled in Channel))
+                                    .expect("should exists")
+                            },
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(is_enabled in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("ENABLE CHANNEL #", $x),
+                        Some("All channel fields will be erased if the channel is disabled."),
+                        FormItemKind::Switch,
+                        |v| v.to_string(),
+                        |_| Ok(()),
+                    )
+                );
+
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |data| {
+                                data.get($x)
+                                    .expect("should exists")
+                                    .as_nested()
+                                    .get(name_of!(name in Channel))
+                                    .expect("should exists")
+                            },
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(name in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("  #", $x, " Name"),
+                        Some("Short channel name. Maximum 10 characters."),
+                        FormItemKind::InputOfString,
+                        |v| v.to_string(),
+                        |v| (0..=10)
+                            .contains(&v.as_string().len())
+                            .then_some(())
+                            .ok_or(anyhow::anyhow!("Max length is 10")),
+                    )
+                );
+
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |data| {
+                                data.get($x)
+                                    .expect("should exists")
+                                    .as_nested()
+                                    .get(name_of!(psk in Channel))
+                                    .expect("should exists")
+                            },
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(psk in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("  #", $x, " PSK"),
+                        Some("Base64 encoded string. Leave empty to disable encryption."),
+                        FormItemKind::InputOfBase64,
+                        |v| BASE64_STANDARD.encode(v.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                        |v| (0..=32)
+                            .contains(&v.as_vec().len())
+                            .then_some(())
+                            .ok_or(anyhow::anyhow!("Max length is 32")),
+                    )
+                );
+
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |_| &FormValue::Bool(false),
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(psk in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("  #", $x, " Generate PSK"),
+                        Some("Will generate random 16-byte PSK."),
+                        FormItemKind::Button(|_| {
+                            let key: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(16).collect();
+                            FormValue::from(key)
+                        }),
+                        |_| "<GENERATE>".to_owned(),
+                        |_| Ok(()),
+                    ),
+                );
+
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |data| {
+                                data.get($x)
+                                    .expect("should exists")
+                                    .as_nested()
+                                    .get(name_of!(uplink_enabled in Channel))
+                                    .expect("should exists")
+                            },
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(uplink_enabled in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("  #", $x, " Uplink Enabled"),
+                        Some(
+                            "If enabled, messages from the mesh will be sent to the public \
+                            internet through any node's configured gateway."
+                        ),
+                        FormItemKind::Switch,
+                        |v| v.to_string(),
+                        |_| Ok(()),
+                    )
+                );
+
+                vec.push(
+                    FormItem::new(
+                        FormItemKey::Custom {
+                            getter: |data| {
+                                data.get($x)
+                                    .expect("should exists")
+                                    .as_nested()
+                                    .get(name_of!(downlink_enabled in Channel))
+                                    .expect("should exists")
+                            },
+                            setter: |data, value| {
+                                data.get_mut($x)
+                                    .expect("should exists")
+                                    .as_nested_mut()
+                                    .insert(name_of!(downlink_enabled in Channel).to_owned(), value);
+                            },
+                        },
+                        concat!("  #", $x, " Downlink Enabled"),
+                        Some(
+                            "If enabled, messages captured from a public internet gateway \
+                            will be forwarded to the local mesh."
+                        ),
+                        FormItemKind::Switch,
+                        |v| v.to_string(),
+                        |_| Ok(()),
+                    )
+                );
+            )*
+
+            vec
+        }
+    };
+}
 
 fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     let mut forms = HashMap::new();
@@ -260,6 +431,11 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     );
 
     forms.insert(
+        FormId::RadioChannels,
+        channel_form!("0", "1", "2", "3", "4", "5", "6", "7"),
+    );
+
+    forms.insert(
         FormId::RadioSecurity,
         Vec::from([
             FormItem::new(
@@ -288,7 +464,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .expect("should exists")
                     },
                     setter: |data, value| {
-                        data.insert(name_of!(private_key in SecurityConfig), value);
+                        data.insert(name_of!(private_key in SecurityConfig).to_owned(), value);
                     },
                 },
                 "",
@@ -321,7 +497,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         }
 
                         keys[0] = value;
-                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                        data.insert(name_of!(admin_key in SecurityConfig).to_owned(), FormValue::Vec(keys));
                     },
                 },
                 "Admin Key #1",
@@ -351,7 +527,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         }
 
                         keys[1] = value;
-                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                        data.insert(name_of!(admin_key in SecurityConfig).to_owned(), FormValue::Vec(keys));
                     },
                 },
                 "Admin Key #2",
@@ -381,7 +557,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         }
 
                         keys[2] = value;
-                        data.insert(name_of!(admin_key in SecurityConfig), FormValue::Vec(keys));
+                        data.insert(name_of!(admin_key in SecurityConfig).to_owned(), FormValue::Vec(keys));
                     },
                 },
                 "Admin Key #3",
@@ -1258,7 +1434,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .is_none()
                         {
                             data.insert(
-                                name_of!(map_report_settings in MqttConfig),
+                                name_of!(map_report_settings in MqttConfig).to_owned(),
                                 FormValue::Option(Some(Box::new(FormValue::Nested(
                                     DEFAULT_MAP_REPORT_SETTINGS.clone(),
                                 )))),
@@ -1270,7 +1446,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .as_option_mut()
                             .expect("should be Some")
                             .as_nested_mut()
-                            .insert(name_of!(should_report_location in MapReportSettings), value);
+                            .insert(name_of!(should_report_location in MapReportSettings).to_owned(), value);
                     },
                 },
                 "I Agree To Report My Location *",
@@ -1298,7 +1474,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .is_none()
                         {
                             data.insert(
-                                name_of!(map_report_settings in MqttConfig),
+                                name_of!(map_report_settings in MqttConfig).to_owned(),
                                 FormValue::Option(Some(Box::new(FormValue::Nested(
                                     DEFAULT_MAP_REPORT_SETTINGS.clone(),
                                 )))),
@@ -1310,7 +1486,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .as_option_mut()
                             .expect("should be Some")
                             .as_nested_mut()
-                            .insert(name_of!(position_precision in MapReportSettings), value);
+                            .insert(name_of!(position_precision in MapReportSettings).to_owned(), value);
                     },
                 },
                 "Position Precision *",
@@ -1343,7 +1519,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .is_none()
                         {
                             data.insert(
-                                name_of!(map_report_settings in MqttConfig),
+                                name_of!(map_report_settings in MqttConfig).to_owned(),
                                 FormValue::Option(Some(Box::new(FormValue::Nested(
                                     DEFAULT_MAP_REPORT_SETTINGS.clone(),
                                 )))),
@@ -1355,7 +1531,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .as_option_mut()
                             .expect("should be Some")
                             .as_nested_mut()
-                            .insert(name_of!(publish_interval_secs in MapReportSettings), value);
+                            .insert(name_of!(publish_interval_secs in MapReportSettings).to_owned(), value);
                     },
                 },
                 "Reporting Interval *",

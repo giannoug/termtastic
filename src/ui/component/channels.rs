@@ -1,8 +1,7 @@
 use std::{collections::VecDeque, ops::Index};
 
-use chrono::Local;
-
 use crate::ui::{helpers::default_scrollbar, prelude::*};
+use chrono::Local;
 
 pub struct Channels {
     list_state: ListState,
@@ -40,7 +39,12 @@ impl<'a> Component for Channels {
                 KeyCode::Down => self.list_state.next(),
                 KeyCode::Enter => {
                     if let Some(i) = self.list_state.selected {
-                        let channel = state.channels.index(i);
+                        let channel = state
+                            .channels
+                            .values()
+                            .filter(|ch| !ch.role.is_disabled())
+                            .nth(i)
+                            .unwrap();
 
                         emit(AppEvent::ChannelSelected(channel.key))?;
                     }
@@ -64,7 +68,9 @@ impl<'a> Component for Channels {
             .constraints([Constraint::Min(1), Constraint::Length(1)])
             .split(area);
 
-        if !state.channels.is_empty() {
+        let channels: Vec<&Channel> = state.channels.values().filter(|ch| !ch.role.is_disabled()).collect();
+
+        if !channels.is_empty() {
             if self.list_state.selected.is_none() {
                 self.list_state.select(Some(0));
             }
@@ -72,7 +78,7 @@ impl<'a> Component for Channels {
             let empty_messages_vec: VecDeque<Message> = VecDeque::default();
 
             let list_builder = ListBuilder::new(|context| {
-                let channel = state.channels.index(context.index);
+                let channel = channels.index(context.index);
                 let messages = state.messages.get(&channel.key).unwrap_or(&empty_messages_vec);
 
                 let last_message = messages.iter().last();
@@ -93,7 +99,7 @@ impl<'a> Component for Channels {
                 (item, 4)
             });
 
-            let list = ListView::new(list_builder, state.channels.len())
+            let list = ListView::new(list_builder, channels.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
 
@@ -176,13 +182,15 @@ impl<'a> Widget for ConversationWidget<'a> {
                     Span::from(" Secondary"),
                 ]
             }
-            (ChannelRole::Direct, true, Some(node)) => {
+            (ChannelRole::Direct, _, Some(node)) => {
                 vec![node.to_span(), Span::from(" "), Span::from(node.long_name.clone())]
             }
-            (ChannelRole::Direct, true, None) => {
+            (ChannelRole::Direct, _, None) => {
                 vec![Span::from(format!("Direct from {}", self.channel.key))]
             }
-            _ => unreachable!(),
+            (ChannelRole::Disabled, _, _) => {
+                vec![]
+            }
         };
 
         Line::from(name_span).render(v0_h[0], buf);
@@ -191,7 +199,7 @@ impl<'a> Widget for ConversationWidget<'a> {
             ChannelRole::Primary => Span::from("PRIMARY"),
             ChannelRole::Secondary => Span::from("SECONDARY"),
             ChannelRole::Direct => Span::from("DIRECT"),
-            _ => unreachable!(),
+            ChannelRole::Disabled => Span::from("DISABLED"),
         };
 
         Line::from(type_span).magenta().render(v0_h[1], buf);

@@ -24,6 +24,14 @@ impl<'a> PlaceholderWidget<'a> {
         }
     }
 
+    pub fn yellow(text: &'a str) -> Self {
+        Self {
+            text: Paragraph::new(Span::from(text).yellow())
+                .centered()
+                .wrap(Wrap { trim: false }),
+        }
+    }
+
     pub fn red(text: &'a str) -> Self {
         Self {
             text: Paragraph::new(Span::from(text).red())

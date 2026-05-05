@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{DeviceUiConfig, MeshPacket, User, config, module_config, routing};
+use meshtastic::protobufs::{
+    channel, config, module_config, routing, ChannelSettings, DeviceUiConfig, MeshPacket, ModuleSettings, User,
+};
 use ordermap::OrderMap;
 use ratatui::{
     style::{self, Stylize as _},
@@ -399,7 +401,8 @@ impl TryFrom<(&MeshPacket, &User)> for Node {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[repr(u32)]
 pub enum ChannelRole {
     Disabled = 0,
     Primary = 1,
@@ -427,13 +430,19 @@ impl From<meshtastic::protobufs::channel::Role> for ChannelRole {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub key: u32,
     #[allow(dead_code)]
     pub id: u32,
     pub role: ChannelRole,
     pub name: String,
+    pub psk: Vec<u8>,
+    pub uplink_enabled: bool,
+    pub downlink_enabled: bool,
+    pub position_precision: u32,
+    pub is_muted: bool,
+    pub is_enabled: bool,
 }
 
 impl Channel {
@@ -443,6 +452,12 @@ impl Channel {
             id: 0,
             role: ChannelRole::Disabled,
             name: String::default(),
+            psk: Vec::default(),
+            uplink_enabled: false,
+            downlink_enabled: false,
+            position_precision: 0,
+            is_muted: false,
+            is_enabled: false,
         }
     }
 
@@ -452,6 +467,12 @@ impl Channel {
             id: 0,
             role: ChannelRole::Direct,
             name: String::default(),
+            psk: Vec::default(),
+            uplink_enabled: false,
+            downlink_enabled: false,
+            position_precision: 0,
+            is_muted: false,
+            is_enabled: false,
         }
     }
 }
@@ -464,8 +485,51 @@ impl From<&meshtastic::protobufs::Channel> for Channel {
                 id: settings.id,
                 role: value.role().into(),
                 name: settings.name.to_string(),
+                psk: settings.psk.clone(),
+                uplink_enabled: settings.uplink_enabled,
+                downlink_enabled: settings.downlink_enabled,
+                position_precision: settings
+                    .module_settings
+                    .and_then(|ms| Some(ms.position_precision))
+                    .unwrap_or(0),
+                is_muted: settings
+                    .module_settings
+                    .and_then(|ms| Some(ms.is_muted))
+                    .unwrap_or(false),
+                is_enabled: value.role() != channel::Role::Disabled,
             },
             None => Channel::disabled(value.index as u32),
+        }
+    }
+}
+
+impl Into<meshtastic::protobufs::Channel> for &Channel {
+    fn into(self) -> meshtastic::protobufs::Channel {
+        let settings = self
+            .is_enabled
+            .then_some(Some(ChannelSettings {
+                name: self.name.clone(),
+                psk: self.psk.clone(),
+                #[allow(deprecated)]
+                channel_num: self.key,
+                id: self.key,
+                uplink_enabled: self.uplink_enabled,
+                downlink_enabled: self.downlink_enabled,
+                module_settings: Some(ModuleSettings {
+                    position_precision: self.position_precision,
+                    is_muted: self.is_muted,
+                }),
+            }))
+            .unwrap_or(None);
+
+        meshtastic::protobufs::Channel {
+            index: self.key as i32,
+            settings,
+            role: match (self.key, self.is_enabled) {
+                (0, true) => channel::Role::Primary as i32,
+                (1..=u32::MAX, true) => channel::Role::Secondary as i32,
+                (_, false) => channel::Role::Disabled as i32,
+            },
         }
     }
 }
@@ -552,6 +616,9 @@ pub enum SettingsFormState {
     Loaded {
         id: FormId,
     },
+    Saving {
+        id: FormId,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -570,7 +637,7 @@ impl SettingsItem {
     }
 }
 
-pub type FormData = HashMap<&'static str, FormValue>;
+pub type FormData = HashMap<String, FormValue>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FormValue {

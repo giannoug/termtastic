@@ -87,7 +87,7 @@ impl<'a> StatefulWidget for PopupDropdownBitmaskWidget<'a> {
         let popup_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .padding(Padding::symmetric(1, 0))
-            .title(format!(" {} ", state.title));
+            .title(format!(" {} ", state.title.trim()));
 
         let popup_block_area = popup_block.inner(popup_area);
 

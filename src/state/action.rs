@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{User, config, module_config, routing};
+use meshtastic::protobufs::{config, module_config, routing, User};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, Node, NodesSortBy, Tab,
@@ -71,7 +71,12 @@ pub enum StateAction {
         id: FormId,
         data: FormData,
     },
-    SettingsFormSavingDone,
+    SettingsFormSavingStart {
+        id: FormId,
+    },
+    SettingsFormSavingFailed {
+        id: FormId,
+    },
     SettingsFormClose,
     SettingsFormReset,
     SettingsFormValueSet {

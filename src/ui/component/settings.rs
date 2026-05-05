@@ -1,4 +1,4 @@
-use base64::{Engine, prelude::BASE64_STANDARD};
+use base64::{prelude::BASE64_STANDARD, Engine};
 use tracing_unwrap::OptionExt;
 
 use crate::{
@@ -57,6 +57,7 @@ impl<'a> Settings<'a> {
                 state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
                 Some(Hotkey::new("esc", "return")),
             ],
+            SettingsFormState::Saving { .. } => vec![],
         }
         .into_iter()
         .flatten()
@@ -366,10 +367,10 @@ impl<'a> Component for Settings<'a> {
                             self.form_list_state = ListState::default();
                         }
                     }
-                    (KeyCode::Char('r'), SettingsFormState::Loaded { .. }) => {
+                    (KeyCode::Char('r'), SettingsFormState::Loaded { .. }) if state.settings_form_is_changed => {
                         emit(AppEvent::SettingsFormResetRequested)?;
                     }
-                    (KeyCode::Char('s'), SettingsFormState::Loaded { id }) => {
+                    (KeyCode::Char('s'), SettingsFormState::Loaded { id }) if state.settings_form_is_changed => {
                         emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
                     }
                     _ => {}
@@ -493,6 +494,9 @@ impl<'a> Component for Settings<'a> {
                         .render(form_block_area, frame.buffer_mut());
                 }
             }
+            SettingsFormState::Saving { .. } => {
+                PlaceholderWidget::yellow("saving...").render(form_block_area, frame.buffer_mut());
+            }
         }
 
         form_block.render(v0_h[1], frame.buffer_mut());
@@ -502,10 +506,7 @@ impl<'a> Component for Settings<'a> {
     }
 }
 
-fn handle_popup_input_submit<'a>(
-    form_item: &'static FormItem,
-    input_state: &mut PopupInputState<'a>,
-) -> anyhow::Result<FormValue> {
+fn handle_popup_input_submit(form_item: &FormItem, input_state: &mut PopupInputState) -> anyhow::Result<FormValue> {
     let input_value = input_state.get_value();
 
     match form_item.kind {
@@ -534,6 +535,10 @@ fn handle_popup_input_submit<'a>(
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
         FormItemKind::InputOfBase64 => {
+            if input_value.is_empty() {
+                return Ok(FormValue::from(vec![]));
+            }
+
             let value = FormValue::from(BASE64_STANDARD.decode(input_value)?);
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
