@@ -71,6 +71,12 @@ impl<'a> Component for Channels {
         let channels: Vec<&Channel> = state.channels.values().filter(|ch| !ch.role.is_disabled()).collect();
 
         if !channels.is_empty() {
+            if let Some(selected) = self.list_state.selected
+                && selected > channels.len() - 1
+            {
+                self.list_state.select(None);
+            }
+
             if self.list_state.selected.is_none() {
                 self.list_state.select(Some(0));
             }

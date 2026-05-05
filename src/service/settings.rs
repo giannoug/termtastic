@@ -118,6 +118,8 @@ impl SettingsService {
                 self.start_config_loading(&form_id)?;
             }
             MeshtasticEvent::ChannelsSaved(form_id) => {
+                self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
+
                 self.state_action_tx
                     .send(StateAction::Toast(Toast::success("channels saved")))?;
 
