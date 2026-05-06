@@ -90,7 +90,7 @@ impl<'a> StatefulWidget for PopupInputWidget<'a> {
         };
 
         let mut textarea_block = Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(BorderType::Thick)
             .border_style(Style::new().fg(color))
             .padding(Padding::symmetric(1, 0));
 

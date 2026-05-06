@@ -1,7 +1,7 @@
 use chrono::{SubsecRound, TimeDelta, Utc};
 
 use crate::ui::{
-    helpers::{ColorExt, default_scrollbar},
+    helpers::{default_scrollbar, ColorExt},
     prelude::*,
 };
 
@@ -122,7 +122,7 @@ impl<'a> Component for Nodes<'a> {
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::dark_gray(" no nodes ").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray("no nodes").render(v[0], frame.buffer_mut());
         }
 
         let v1_h = Layout::default()
@@ -142,7 +142,7 @@ impl<'a> Component for Nodes<'a> {
 
         let sort_block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .border_style(Style::new().dark_gray())
+            .border_style(Style::new().magenta())
             .padding(Padding::symmetric(1, 0));
 
         let sort_block_area = sort_block.inner(v1_h[1]);

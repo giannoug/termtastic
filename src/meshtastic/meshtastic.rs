@@ -27,7 +27,7 @@ use crate::meshtastic::{
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
 const SAVE_CONFIG_TIMEOUT_SECS: u64 = 5;
 const SAVE_CONFIG_AFTER_PAUSE_MILLIS: u64 = 100;
-const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 50;
+const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 80;
 
 pub struct MeshtasticService {
     command_rx: mpsc::UnboundedReceiver<CommandToMeshtastic>,

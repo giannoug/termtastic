@@ -1,12 +1,12 @@
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, Event, EventStream, KeyCode, KeyModifiers},
+    event::{Event, EventStream, KeyCode, KeyModifiers},
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use futures::{StreamExt, future::FutureExt};
-use ratatui::{Terminal, prelude::CrosstermBackend};
+use futures::{future::FutureExt, StreamExt};
+use ratatui::{prelude::CrosstermBackend, Terminal};
 use std::{
-    io::{self, Stdout, stdout},
+    io::{self, stdout, Stdout},
     panic::{set_hook, take_hook},
 };
 use tokio::sync::{broadcast, mpsc, watch};
@@ -81,11 +81,10 @@ impl<'a> Ui<'a> {
                     subsys.request_shutdown();
                 }
 
-                self.layout
-                    .handle_event(&self.state_rx.borrow(), &event, &|ev| {
-                        self.event_tx.send(ev)?;
-                        Ok(())
-                    })?;
+                self.layout.handle_event(&self.state_rx.borrow(), &event, &|ev| {
+                    self.event_tx.send(ev)?;
+                    Ok(())
+                })?;
 
                 self.redraw(terminal)?;
             }
@@ -122,7 +121,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 
     enable_raw_mode()?;
 
-    execute!(stdout(), EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout(), EnterAlternateScreen)?;
 
     Terminal::new(CrosstermBackend::new(stdout()))
 }
@@ -130,7 +129,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
 
-    execute!(stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(stdout(), LeaveAlternateScreen)?;
 
     Ok(())
 }

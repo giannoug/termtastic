@@ -49,9 +49,9 @@ impl<'a> Widget for PlaceholderWidget<'a> {
         let v = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Fill(1),
+                Constraint::Fill(100),
                 Constraint::Length(self.text.line_count(area.width) as u16),
-                Constraint::Fill(1),
+                Constraint::Fill(101),
             ])
             .split(area);
 

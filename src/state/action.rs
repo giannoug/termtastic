@@ -4,8 +4,8 @@ use hostaddr::HostAddr;
 use meshtastic::protobufs::{config, module_config, routing, User};
 
 use crate::types::{
-    AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, Node, NodesSortBy, Tab,
-    Toast,
+    AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,
+    NodesSortBy, Tab, Toast,
 };
 
 #[derive(Debug)]
@@ -34,8 +34,7 @@ pub enum StateAction {
     MessageReactionAdd {
         channel_key: u32,
         message_id: u32,
-        emoji: String,
-        node_key: u32,
+        reaction: MessageReaction,
     },
     MessageErrorSet {
         channel_key: u32,

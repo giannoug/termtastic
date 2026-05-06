@@ -205,7 +205,7 @@ impl<'a> Component for Connection<'a> {
             };
 
             let popup_block = Block::bordered()
-                .border_type(BorderType::Rounded)
+                .border_type(BorderType::Thick)
                 .padding(Padding::uniform(1))
                 .title(" selected connection ");
 

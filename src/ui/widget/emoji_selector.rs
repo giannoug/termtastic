@@ -12,10 +12,7 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
-use crate::{
-    types::Hotkey,
-    ui::{helpers::default_scrollbar, widget::HotkeysWidget},
-};
+use crate::ui::helpers::default_scrollbar;
 
 pub struct EmojiSelectorState<'a> {
     input_widget: TextArea<'a>,
@@ -37,9 +34,7 @@ impl<'a> EmojiSelectorState<'a> {
     }
 
     pub fn get_value(&self) -> Option<&'static Emoji> {
-        self.list_state
-            .selected
-            .and_then(|i| self.emojis.get(i).cloned())
+        self.list_state.selected.and_then(|i| self.emojis.get(i).cloned())
     }
 
     pub fn reset(&mut self) {
@@ -97,7 +92,7 @@ impl<'a> StatefulWidget for EmojiSelectorWidget<'a> {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let block = Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(BorderType::Thick)
             .padding(Padding::symmetric(1, 0));
 
         let block_area = block.inner(area);
@@ -105,15 +100,19 @@ impl<'a> StatefulWidget for EmojiSelectorWidget<'a> {
 
         let v = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(1),
-                Constraint::Fill(1),
-                Constraint::Length(1),
-            ])
+            .constraints([Constraint::Length(3), Constraint::Fill(1)])
             .split(block_area);
 
         // input
-        state.input_widget.render(v[0], buf);
+        let input_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::new().dark_gray())
+            .padding(Padding::symmetric(1, 0));
+
+        let input_block_area = input_block.inner(v[0]);
+        input_block.render(v[0], buf);
+
+        state.input_widget.render(input_block_area, buf);
 
         // list
         let list_builder = ListBuilder::new(|context| {
@@ -129,17 +128,9 @@ impl<'a> StatefulWidget for EmojiSelectorWidget<'a> {
 
         let list = ListView::new(list_builder, state.emojis.len())
             .scrollbar(default_scrollbar())
-            .infinite_scrolling(false)
-            .block(Block::new().padding(Padding::symmetric(0, 1)));
+            .infinite_scrolling(false);
 
         list.render(v[1], buf, &mut state.list_state);
-
-        // hotkeys
-        HotkeysWidget::new(&vec![
-            Hotkey::new("enter", "insert"),
-            Hotkey::new("esc", "close"),
-        ])
-        .render(v[2], buf);
     }
 }
 

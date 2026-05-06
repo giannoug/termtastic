@@ -77,7 +77,7 @@ impl<'a> Component for Channels {
                 self.list_state.select(None);
             }
 
-            if self.list_state.selected.is_none() {
+            if self.list_state.selected.is_none() && !channels.is_empty() {
                 self.list_state.select(Some(0));
             }
 
@@ -111,7 +111,7 @@ impl<'a> Component for Channels {
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::dark_gray(" no channels ").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray("no channels").render(v[0], frame.buffer_mut());
         }
 
         HotkeysWidget::new(&self.hotkeys).render(v[1], frame.buffer_mut());

@@ -85,7 +85,7 @@ impl<'a> StatefulWidget for PopupDropdownBitmaskWidget<'a> {
         };
 
         let popup_block = Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(BorderType::Thick)
             .padding(Padding::symmetric(1, 0))
             .title(format!(" {} ", state.title.trim()));
 

@@ -1,11 +1,12 @@
 use meshtastic::{
+    protobufs::{from_radio::PayloadVariant, mesh_packet, routing, PortNum, Routing},
     Message as _,
-    protobufs::{PortNum, Routing, from_radio::PayloadVariant, mesh_packet, routing},
 };
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 use tracing_unwrap::OptionExt;
 
+use crate::types::MessageReaction;
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
     state::{State, StateAction},
@@ -199,16 +200,22 @@ impl ChatService {
                             _ => return Ok(()),
                         };
 
-                        if data.emoji > 0
-                            && let Ok(emoji) = String::from_utf8(data.payload.clone())
-                            && !emoji.is_empty()
-                        {
-                            self.state_action_tx.send(StateAction::MessageReactionAdd {
-                                channel_key,
-                                message_id: data.reply_id,
-                                emoji,
-                                node_key: packet.from,
-                            })?;
+                        if data.emoji > 0 {
+                            match MessageReaction::try_from((&packet, data)) {
+                                Ok(reaction) => self.state_action_tx.send(StateAction::MessageReactionAdd {
+                                    channel_key,
+                                    message_id: data.reply_id,
+                                    reaction,
+                                })?,
+                                Err(e) => tracing::warn!(
+                                    packet_id = packet.id,
+                                    node_from = packet.from,
+                                    node_to = packet.to,
+                                    channel = packet.channel,
+                                    "can't convert packet into message: {}",
+                                    e
+                                ),
+                            };
 
                             return Ok(());
                         }

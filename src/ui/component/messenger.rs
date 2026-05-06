@@ -8,12 +8,13 @@ use std::{
 use crossterm::event::KeyModifiers;
 use itertools::Itertools;
 use meshtastic::protobufs::routing;
+use ordermap::OrderMap;
 use ratatui::text::ToSpan;
 use tracing_unwrap::OptionExt;
 use tui_widget_list::ScrollDirection;
 
 use crate::ui::{
-    helpers::{ColorExt, default_scrollbar},
+    helpers::{default_scrollbar, ColorExt},
     prelude::*,
 };
 
@@ -30,6 +31,8 @@ pub struct Messenger<'a> {
     replying_to: HashMap<u32, (Node, u32)>,
     emoji_selector_state: EmojiSelectorState<'a>,
     is_emoji_selector_visible: bool,
+    reactions_viewer_state: ReactionsViewerState,
+    is_reactions_viewer_visible: bool,
 }
 
 impl<'a> Messenger<'a> {
@@ -41,21 +44,23 @@ impl<'a> Messenger<'a> {
             replying_to: HashMap::default(),
             emoji_selector_state: EmojiSelectorState::new(),
             is_emoji_selector_visible: false,
+            reactions_viewer_state: ReactionsViewerState::new(),
+            is_reactions_viewer_visible: false,
         }
     }
 
     fn get_hotkeys(&self, active_channel_key: u32) -> Vec<Hotkey> {
-        let is_message_selected = self
-            .list_states
-            .get(&active_channel_key)
-            .and_then(|s| Some(s.selected.is_some()))
-            .unwrap_or(false);
+        if self.is_reactions_viewer_visible {
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
+        }
 
-        let has_valid_input_value = self
-            .input_widgets
-            .get(&active_channel_key)
-            .and_then(|input| Some(VALID_INPUT_LENGTH.contains(&input.lines()[0].len())))
-            .unwrap_or(false);
+        if self.is_emoji_selector_visible {
+            return vec![
+                Hotkey::new("↑↓", "scroll"),
+                Hotkey::new("enter", "insert"),
+                Hotkey::new("esc", "close"),
+            ];
+        }
 
         let is_input_contains_single_emoji = self
             .input_widgets
@@ -63,20 +68,39 @@ impl<'a> Messenger<'a> {
             .and_then(|input| emoji::lookup_by_glyph::lookup(&input.lines()[0]))
             .is_some();
 
-        let is_replying_to = self.replying_to.contains_key(&active_channel_key);
+        let has_valid_input_value = self
+            .input_widgets
+            .get(&active_channel_key)
+            .and_then(|input| Some(VALID_INPUT_LENGTH.contains(&input.lines()[0].len())))
+            .unwrap_or(false);
 
-        vec![
+        if self.replying_to.contains_key(&active_channel_key) {
+            return vec![
+                is_input_contains_single_emoji.then_some(Hotkey::new("enter", "send reaction")),
+                (!is_input_contains_single_emoji && has_valid_input_value)
+                    .then_some(Hotkey::new("enter", "send reply")),
+                Some(Hotkey::new("esc", "cancel reply")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+        }
+
+        let is_message_selected = self
+            .list_states
+            .get(&active_channel_key)
+            .and_then(|s| Some(s.selected.is_some()))
+            .unwrap_or(false);
+
+        Vec::from([
             Some(Hotkey::new("↑↓", "scroll")),
-            (is_message_selected && !is_replying_to).then_some(Hotkey::new("F2", "reply")),
-            (is_message_selected && !is_replying_to).then_some(Hotkey::new("F4", "node info")),
+            (is_message_selected).then_some(Hotkey::new("F2", "reply")),
+            (is_message_selected).then_some(Hotkey::new("F4", "node info")),
             Some(Hotkey::new("F5", "emoji")),
-            (is_replying_to && is_input_contains_single_emoji).then_some(Hotkey::new("enter", "send reaction")),
-            (is_replying_to && !is_input_contains_single_emoji && has_valid_input_value)
-                .then_some(Hotkey::new("enter", "send reply")),
-            (!is_replying_to && has_valid_input_value).then_some(Hotkey::new("enter", "send")),
-            (!is_replying_to).then_some(Hotkey::new("esc", "switch channel")),
-            is_replying_to.then_some(Hotkey::new("esc", "cancel reply")),
-        ]
+            is_message_selected.then_some(Hotkey::new("F7", "reactions")),
+            has_valid_input_value.then_some(Hotkey::new("enter", "send")),
+            Some(Hotkey::new("esc", "switch channel")),
+        ])
         .into_iter()
         .flatten()
         .collect()
@@ -105,6 +129,24 @@ impl<'a> Component for Messenger<'a> {
         let is_replying_to = self.replying_to.contains_key(&active_channel_key);
 
         let messages = state.messages.get(&active_channel_key).unwrap_or(&EMPTY_MESSAGES_VEC);
+
+        if self.is_reactions_viewer_visible {
+            match event {
+                Event::Key(KeyEvent { code, .. }) => match code {
+                    KeyCode::Esc => {
+                        self.is_reactions_viewer_visible = false;
+                    }
+                    _ => {
+                        self.reactions_viewer_state.handle_event(event.clone());
+                    }
+                },
+                _ => {
+                    self.reactions_viewer_state.handle_event(event.clone());
+                }
+            };
+
+            return Ok(true);
+        }
 
         if self.is_emoji_selector_visible {
             match event {
@@ -207,6 +249,12 @@ impl<'a> Component for Messenger<'a> {
                 KeyCode::F(5) => {
                     self.is_emoji_selector_visible = true;
                 }
+                KeyCode::F(7) => {
+                    if list_state.selected.and_then(|i| messages.get(i)).is_some() {
+                        self.follow_chat.insert(active_channel_key, false);
+                        self.is_reactions_viewer_visible = true;
+                    }
+                }
                 _ => {
                     input_widget.input(event.clone());
                 }
@@ -298,7 +346,7 @@ impl<'a> Component for Messenger<'a> {
 
             list.render(v[0], frame.buffer_mut(), list_state);
         } else {
-            PlaceholderWidget::dark_gray(" no messages ").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray("no messages").render(v[0], frame.buffer_mut());
         }
 
         // input
@@ -363,6 +411,38 @@ impl<'a> Component for Messenger<'a> {
         )
         .right_aligned()
         .render(input_block_area_h[3], frame.buffer_mut());
+
+        // reactions viewer
+        if self.is_reactions_viewer_visible
+            && let Some(message) = list_state.selected.and_then(|i| messages.get(i))
+        {
+            let popup_area = Rect {
+                x: v[0].x + v[0].width / 2 - 40 / 2,
+                y: v[0].y + v[0].height / 2 - 12 / 2,
+                width: 40,
+                height: 12,
+            };
+
+            Clear.render(popup_area, frame.buffer_mut());
+
+            self.is_reactions_viewer_visible = true;
+
+            let reaction_items: Vec<ReactionsViewerItem> = message
+                .reactions
+                .iter()
+                .map(|reaction| {
+                    let node = state.nodes.get(&reaction.node_key).unwrap_or(&UNKNOWN_NODE);
+
+                    ReactionsViewerItem { reaction, node }
+                })
+                .collect();
+
+            ReactionsViewerWidget::new(reaction_items).render(
+                popup_area,
+                frame.buffer_mut(),
+                &mut self.reactions_viewer_state,
+            );
+        }
 
         // emoji selector
         if self.is_emoji_selector_visible {
@@ -502,7 +582,7 @@ impl<'a> Widget for MessageWidget<'a> {
 
         if !self.node.my {
             match self.message.hops {
-                Some(0) | None => {
+                0 => {
                     Line::from(vec![
                         Span::from(format!("* {}dB", self.message.snr)).fg(self.message.snr.snr_to_color()),
                         Span::from("  ").dark_gray(),
@@ -511,10 +591,10 @@ impl<'a> Widget for MessageWidget<'a> {
                     .dark_gray()
                     .render(v0_h[1], buf);
                 }
-                Some(1) => {
+                1 => {
                     Span::from("1 hop").render(v0_h[1], buf);
                 }
-                Some(hops) => {
+                hops => {
                     Span::from(format!("{} hops", hops)).render(v0_h[1], buf);
                 }
             }
@@ -548,11 +628,17 @@ impl<'a> Widget for MessageWidget<'a> {
                 self.message
                     .reactions
                     .iter()
-                    .map(|(emoji, nodes)| {
-                        if nodes.len() > 1 {
+                    .sorted_by_key(|r| r.datetime)
+                    .fold(OrderMap::new(), |mut acc, r| {
+                        *acc.entry(r.emoji.clone()).or_insert(0) += 1;
+                        acc
+                    })
+                    .iter()
+                    .map(|(emoji, nodes_count)| {
+                        if *nodes_count > 1 {
                             vec![
                                 emoji.to_span(),
-                                Span::from(format!(":{}", nodes.len())).dark_gray(),
+                                Span::from(format!(":{}", nodes_count)).dark_gray(),
                                 " ".to_span(),
                             ]
                         } else {

@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     time::{Duration, Instant},
     u128, u32,
 };
@@ -360,8 +360,7 @@ impl Store {
             StateAction::MessageReactionAdd {
                 channel_key,
                 message_id,
-                emoji,
-                node_key,
+                reaction,
             } => {
                 if let Some(message) = self
                     .state
@@ -369,14 +368,15 @@ impl Store {
                     .get_mut(&channel_key)
                     .and_then(|messages| messages.iter_mut().find(|msg| msg.id == message_id))
                 {
-                    message
+                    if !message
                         .reactions
-                        .entry(emoji)
-                        .or_insert_with(HashMap::new)
-                        .insert(node_key, Utc::now());
+                        .iter()
+                        .any(|r| r.node_key == reaction.node_key && r.emoji == reaction.emoji)
+                    {
+                        message.reactions.push(reaction);
+                        is_changed = true;
+                    }
                 }
-
-                is_changed = true;
             }
             StateAction::MessageErrorSet {
                 channel_key,

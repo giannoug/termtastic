@@ -4,10 +4,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{
-    channel, config, module_config, routing, ChannelSettings, DeviceUiConfig, MeshPacket, ModuleSettings, User,
-};
-use ordermap::OrderMap;
+use meshtastic::protobufs::{channel, config, module_config, routing};
 use ratatui::{
     style::{self, Stylize as _},
     text,
@@ -370,10 +367,12 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
     }
 }
 
-impl TryFrom<(&MeshPacket, &User)> for Node {
+impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)> for Node {
     type Error = anyhow::Error;
 
-    fn try_from((packet, user): (&MeshPacket, &User)) -> Result<Self, Self::Error> {
+    fn try_from(
+        (packet, user): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User),
+    ) -> Result<Self, Self::Error> {
         let last_heard = DateTime::from_timestamp(packet.rx_time as i64, 0);
         let role = user.role().as_str_name();
         let hw_model = user.hw_model().as_str_name();
@@ -507,7 +506,7 @@ impl Into<meshtastic::protobufs::Channel> for &Channel {
     fn into(self) -> meshtastic::protobufs::Channel {
         let settings = self
             .is_enabled
-            .then_some(Some(ChannelSettings {
+            .then_some(Some(meshtastic::protobufs::ChannelSettings {
                 name: self.name.clone(),
                 psk: self.psk.clone(),
                 #[allow(deprecated)]
@@ -515,7 +514,7 @@ impl Into<meshtastic::protobufs::Channel> for &Channel {
                 id: self.key,
                 uplink_enabled: self.uplink_enabled,
                 downlink_enabled: self.downlink_enabled,
-                module_settings: Some(ModuleSettings {
+                module_settings: Some(meshtastic::protobufs::ModuleSettings {
                     position_precision: self.position_precision,
                     is_muted: self.is_muted,
                 }),
@@ -535,15 +534,48 @@ impl Into<meshtastic::protobufs::Channel> for &Channel {
 }
 
 #[derive(Debug, Clone)]
+pub struct MessageReaction {
+    pub node_key: u32,
+    pub emoji: String,
+    pub datetime: DateTime<Utc>,
+    pub hops: u32,
+    pub snr: f32,
+    pub rssi: i32,
+}
+
+impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for MessageReaction {
+    type Error = anyhow::Error;
+
+    fn try_from(
+        (packet, data): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data),
+    ) -> Result<Self, Self::Error> {
+        if data.payload.is_empty() {
+            return Err(anyhow!("payload is empty"));
+        }
+
+        Ok(Self {
+            node_key: packet.from,
+            datetime: Utc
+                .timestamp_opt(packet.rx_time as i64, 0)
+                .single()
+                .unwrap_or(Utc::now()),
+            emoji: String::from_utf8(data.payload.clone())?,
+            hops: packet.hop_start.saturating_sub(packet.hop_limit),
+            snr: packet.rx_snr,
+            rssi: packet.rx_rssi,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Message {
     pub id: u32,
     pub reply_message_id: u32,
     pub from: u32,
     pub datetime: DateTime<Utc>,
     pub text: String,
-    pub reactions: OrderMap<String, HashMap<u32, DateTime<Utc>>>,
-    #[allow(dead_code)]
-    pub hops: Option<u32>,
+    pub reactions: Vec<MessageReaction>,
+    pub hops: u32,
     pub snr: f32,
     pub rssi: i32,
     pub error: Option<routing::Error>,
@@ -568,8 +600,8 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
                 .single()
                 .unwrap_or(Utc::now()),
             text: String::from_utf8(data.payload.clone())?,
-            reactions: OrderMap::default(),
-            hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
+            reactions: Vec::default(),
+            hops: packet.hop_start.saturating_sub(packet.hop_limit),
             snr: packet.rx_snr,
             rssi: packet.rx_rssi,
             error: None,
@@ -911,7 +943,7 @@ impl FormBitMaskVariant {
 pub struct DeviceConfig {
     pub bluetooth: Option<config::BluetoothConfig>,
     pub device: Option<config::DeviceConfig>,
-    pub device_ui: Option<DeviceUiConfig>,
+    pub device_ui: Option<meshtastic::protobufs::DeviceUiConfig>,
     pub display: Option<config::DisplayConfig>,
     pub lora: Option<config::LoRaConfig>,
     pub network: Option<config::NetworkConfig>,

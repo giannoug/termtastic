@@ -9,7 +9,8 @@
 <p align="center">
   <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
   <a href="https://github.com/acelot/termtastic/actions"><img src="https://github.com/acelot/termtastic/actions/workflows/build.yml/badge.svg?event=push" height="20" alt="Build"/></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/acelot/termtastic.svg?style=flat&v=1" height="20" alt="GPL-3.0-only"/></a>
+  <img src="https://img.shields.io/github/languages/code-size/acelot/termtastic?cacheSeconds=86400" height="20" alt="code size"/>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/acelot/termtastic.svg?style=flat&v=2" height="20" alt="GPL-3.0"/></a>
 </p>
 
 <table>
@@ -48,7 +49,7 @@
 - [x] Display the number of hops for retranslated messages
 - [x] Display the time of messages
 - [x] Display the reactions (emojis)
-- [ ] Ability to see reactions details
+- [x] Ability to see detailed info about reactions
 - [x] Ability to send broadcast messages to the channels
 - [x] Ability to send direct messages to the nodes
 - [x] Ability to reply to the messages

@@ -179,7 +179,7 @@ impl Component for Logs {
             let popup_block = Block::new()
                 .title(" expanded view ")
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
+                .border_type(BorderType::Thick)
                 .border_style(Style::new().white())
                 .padding(Padding::symmetric(1, 0));
 
