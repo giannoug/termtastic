@@ -63,10 +63,7 @@ impl<'a> Component for Channels {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
 
         let channels: Vec<&Channel> = state.channels.values().filter(|ch| !ch.role.is_disabled()).collect();
 
@@ -90,7 +87,7 @@ impl<'a> Component for Channels {
                 let last_message = messages.iter().last();
                 let last_message_node = last_message.and_then(|message| state.nodes.get(&message.from));
 
-                let item = ConversationWidget {
+                let item = ChannelWidget {
                     channel,
                     direct_node: if channel.role.is_direct() {
                         state.nodes.get(&channel.key)
@@ -118,7 +115,7 @@ impl<'a> Component for Channels {
     }
 }
 
-struct ConversationWidget<'a> {
+struct ChannelWidget<'a> {
     pub channel: &'a Channel,
     pub direct_node: Option<&'a Node>,
     pub last_message: Option<&'a Message>,
@@ -126,7 +123,7 @@ struct ConversationWidget<'a> {
     pub is_selected: bool,
 }
 
-impl<'a> Widget for ConversationWidget<'a> {
+impl<'a> Widget for ChannelWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
@@ -139,11 +136,7 @@ impl<'a> Widget for ConversationWidget<'a> {
         };
 
         let block = Block::bordered()
-            .border_type(if self.is_selected {
-                BorderType::Thick
-            } else {
-                BorderType::Plain
-            })
+            .border_type(BorderType::Rounded)
             .border_style(Style::new().fg(if self.is_selected {
                 Color::Yellow
             } else {
@@ -154,48 +147,47 @@ impl<'a> Widget for ConversationWidget<'a> {
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Length(1)])
-            .split(block_area);
-
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(3), Constraint::Fill(1), Constraint::Fill(1)])
-            .split(v[0]);
+        let v = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(block_area);
+        let v0_h = Layout::horizontal([Constraint::Fill(3), Constraint::Fill(1), Constraint::Fill(1)]).split(v[0]);
 
         // first line
-        let name_span = match (&self.channel.role, self.channel.name.is_empty(), self.direct_node) {
-            (ChannelRole::Primary, false, _) => vec![
+        let security_span = match self.channel.psk.len() {
+            0 => Span::from("non-encrypted").red(),
+            1 => Span::from("weak").yellow(),
+            _ => Span::from("encrypted").green(),
+        };
+
+        let name_span = match (&self.channel.role, self.direct_node) {
+            (ChannelRole::Primary, _) => vec![
                 Span::from(format!("#{}", self.channel.key)).dark_gray(),
                 Span::from(" "),
-                Span::from(self.channel.name.clone()),
+                Span::from(if !self.channel.name.is_empty() {
+                    &self.channel.name
+                } else {
+                    "Primary"
+                }),
+                Span::from(" | ").dark_gray(),
+                security_span,
             ],
-            (ChannelRole::Primary, true, _) => {
-                vec![
-                    Span::from(format!("#{}", self.channel.key)).dark_gray(),
-                    Span::from(" Primary"),
-                ]
-            }
-            (ChannelRole::Secondary, false, _) => vec![
+            (ChannelRole::Secondary, _) => vec![
                 Span::from(format!("#{}", self.channel.key)).dark_gray(),
                 Span::from(" "),
-                Span::from(self.channel.name.clone()),
+                Span::from(if !self.channel.name.is_empty() {
+                    &self.channel.name
+                } else {
+                    "Secondary"
+                }),
+                Span::from(" | ").dark_gray(),
+                security_span,
             ],
-            (ChannelRole::Secondary, true, _) => {
-                vec![
-                    Span::from(format!("#{}", self.channel.key)).dark_gray(),
-                    Span::from(" Secondary"),
-                ]
+            (ChannelRole::Direct, Some(node)) => {
+                vec![node.short_name_to_span(), Span::from(" "), Span::from(node.long_name())]
             }
-            (ChannelRole::Direct, _, Some(node)) => {
-                vec![node.to_span(), Span::from(" "), Span::from(node.long_name.clone())]
-            }
-            (ChannelRole::Direct, _, None) => {
+            (ChannelRole::Direct, None) => {
                 vec![Span::from(format!("Direct from {}", self.channel.key))]
             }
-            (ChannelRole::Disabled, _, _) => {
-                vec![]
+            (ChannelRole::Disabled, _) => {
+                vec![Span::from("Disabled")]
             }
         };
 
@@ -219,22 +211,20 @@ impl<'a> Widget for ConversationWidget<'a> {
         .render(v0_h[2], buf);
 
         // second line
-        let unknown_node = &Node::unknown();
-
         let second_line_spans = match (&self.channel.role, self.last_message_node, self.last_message) {
             (ChannelRole::Direct, _, Some(message)) => {
                 vec![Span::from(message.text.clone()).dark_gray()]
             }
             (_, None, Some(message)) => {
                 vec![
-                    unknown_node.to_span(),
+                    UNKNOWN_NODE.short_name_to_span(),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]
             }
             (_, Some(node), Some(message)) => {
                 vec![
-                    node.to_span(),
+                    node.short_name_to_span(),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]

@@ -13,7 +13,7 @@ pub enum StateAction {
     AppConfigApply(AppConfig),
     ChannelActiveSet(u32),
     ChannelActiveUnset,
-    ChannelEnsure(u32, Channel),
+    ChannelSet(u32, Channel),
     ConnectionFail(String),
     ConnectionStart,
     ConnectionStop,
@@ -42,7 +42,8 @@ pub enum StateAction {
         error: Option<routing::Error>,
     },
     MyNodeKeySet(u32),
-    NodeAdd(Node),
+    NodeSet(Node),
+    NodeEnsure(Node),
     NodeUpdateLastHeard {
         node_key: u32,
         hops: u32,

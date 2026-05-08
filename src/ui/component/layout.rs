@@ -76,15 +76,13 @@ impl<'a> Component for Layout<'a> {
         let container = Block::default().padding(Padding::symmetric(2, 1));
         let area = container.inner(frame.area());
 
-        let v = ratatui::layout::Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(2),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(1),
-            ])
-            .split(area);
+        let v = ratatui::layout::Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(1),
+        ])
+        .split(area);
 
         self.header_component.render(state, frame, v[0]);
         self.tabs_component.render(state, frame, v[1]);

@@ -1,5 +1,4 @@
-use std::sync::LazyLock;
-
+use chrono::TimeDelta;
 use ratatui::{
     style::{Color, Style, Stylize},
     symbols::scrollbar::Set as ScrollbarSet,
@@ -7,6 +6,7 @@ use ratatui::{
     widgets::{Scrollbar, ScrollbarOrientation},
 };
 use regex::{Regex, RegexBuilder};
+use std::sync::LazyLock;
 
 static LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new(r"[^:/?#\s]+://[^\s]+(?:[\s,.!?;:)\]}>]|$)")
@@ -88,4 +88,33 @@ pub fn pad_center(s: &str, width: usize) -> String {
     let right = padding - left;
 
     format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
+}
+
+pub fn humanize_duration<'a>(d: TimeDelta) -> Vec<Span<'a>> {
+    if d.num_seconds() < 60 {
+        return vec![Span::from("now").green()];
+    }
+
+    if d.num_minutes() < 60 {
+        return vec![
+            Span::from(format!("{}m", d.num_minutes())),
+            Span::from(" ago").dark_gray(),
+        ];
+    }
+
+    if d.num_hours() < 24 {
+        let remaining_minutes = d.num_minutes() % 60;
+
+        return vec![
+            Span::from(format!("{}h {}m", d.num_hours(), remaining_minutes)),
+            Span::from(" ago").dark_gray(),
+        ];
+    }
+
+    let remaining_hours = d.num_hours() % 24;
+
+    vec![
+        Span::from(format!("{}d {}h", d.num_days(), remaining_hours)),
+        Span::from(" ago").dark_gray(),
+    ]
 }

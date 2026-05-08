@@ -21,7 +21,6 @@ use crate::ui::{
 const INPUT_VALUE_MAX_LENGTH: usize = 200;
 const VALID_INPUT_LENGTH: RangeInclusive<usize> = 1..=INPUT_VALUE_MAX_LENGTH;
 
-static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node::unknown());
 static EMPTY_MESSAGES_VEC: LazyLock<VecDeque<Message>> = LazyLock::new(|| VecDeque::default());
 
 pub struct Messenger<'a> {
@@ -132,8 +131,8 @@ impl<'a> Component for Messenger<'a> {
 
         if self.is_reactions_viewer_visible {
             match event {
-                Event::Key(KeyEvent { code, .. }) => match code {
-                    KeyCode::Esc => {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.is_reactions_viewer_visible = false;
                     }
                     _ => {
@@ -150,14 +149,14 @@ impl<'a> Component for Messenger<'a> {
 
         if self.is_emoji_selector_visible {
             match event {
-                Event::Key(KeyEvent { code, .. }) => match code {
-                    KeyCode::Enter => {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Enter if kind == &KeyEventKind::Press => {
                         if let Some(emoji) = self.emoji_selector_state.get_value() {
                             input_widget.insert_str(emoji.glyph);
                             self.is_emoji_selector_visible = false;
                         }
                     }
-                    KeyCode::Esc => {
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.is_emoji_selector_visible = false;
                         self.emoji_selector_state.reset();
                     }
@@ -175,11 +174,11 @@ impl<'a> Component for Messenger<'a> {
 
         if is_replying_to {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                    KeyCode::F(5) => {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::F(5) if kind == &KeyEventKind::Press => {
                         self.is_emoji_selector_visible = true;
                     }
-                    KeyCode::Enter if is_replying_to => {
+                    KeyCode::Enter if kind == &KeyEventKind::Press => {
                         if input_widget.lines()[0].len() <= INPUT_VALUE_MAX_LENGTH
                             && let Some((_, message_id)) = self.replying_to.remove(&active_channel_key)
                         {
@@ -198,14 +197,16 @@ impl<'a> Component for Messenger<'a> {
                             input_widget.clear();
                         }
                     }
-                    KeyCode::Esc if is_replying_to => {
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.replying_to.remove(&active_channel_key);
                     }
                     _ => {
                         input_widget.input(event.clone());
                     }
                 },
-                _ => {}
+                _ => {
+                    input_widget.input(event.clone());
+                }
             };
 
             return Ok(true);
@@ -214,23 +215,23 @@ impl<'a> Component for Messenger<'a> {
         match event {
             Event::Key(KeyEvent {
                 code, modifiers, kind, ..
-            }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Up => {
+            }) => match code {
+                KeyCode::Up if kind == &KeyEventKind::Press => {
                     self.follow_chat.insert(active_channel_key, false);
                     list_state.previous()
                 }
-                KeyCode::Down => {
+                KeyCode::Down if kind == &KeyEventKind::Press => {
                     list_state.next();
 
                     if let Some(index) = list_state.selected {
                         self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
                     }
                 }
-                KeyCode::Esc => emit(AppEvent::SwitchChannelRequested)?,
-                KeyCode::Enter if modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Esc if kind == &KeyEventKind::Press => emit(AppEvent::SwitchChannelRequested)?,
+                KeyCode::Enter if kind == &KeyEventKind::Press && modifiers.contains(KeyModifiers::CONTROL) => {
                     input_widget.insert_newline();
                 }
-                KeyCode::Enter => {
+                KeyCode::Enter if kind == &KeyEventKind::Press => {
                     if input_widget.lines()[0].len() <= INPUT_VALUE_MAX_LENGTH {
                         emit(AppEvent::ChatMessageSubmitted {
                             text: input_widget.lines()[0].clone(),
@@ -240,16 +241,16 @@ impl<'a> Component for Messenger<'a> {
                         input_widget.clear();
                     }
                 }
-                KeyCode::F(2) => {
+                KeyCode::F(2) if kind == &KeyEventKind::Press => {
                     if let Some(message) = list_state.selected.and_then(|i| messages.get(i)) {
                         let node = state.nodes.get(&message.from).unwrap_or(&UNKNOWN_NODE);
                         self.replying_to.insert(active_channel_key, (node.clone(), message.id));
                     }
                 }
-                KeyCode::F(5) => {
+                KeyCode::F(5) if kind == &KeyEventKind::Press => {
                     self.is_emoji_selector_visible = true;
                 }
-                KeyCode::F(7) => {
+                KeyCode::F(7) if kind == &KeyEventKind::Press => {
                     if list_state.selected.and_then(|i| messages.get(i)).is_some() {
                         self.follow_chat.insert(active_channel_key, false);
                         self.is_reactions_viewer_visible = true;
@@ -271,9 +272,13 @@ impl<'a> Component for Messenger<'a> {
                         self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
                     }
                 }
-                _ => {}
+                _ => {
+                    input_widget.input(event.clone());
+                }
             },
-            _ => {}
+            _ => {
+                input_widget.input(event.clone());
+            }
         }
 
         Ok(true)
@@ -301,10 +306,7 @@ impl<'a> Component for Messenger<'a> {
             list_state.select(Some(messages.len() - 1));
         }
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(0), Constraint::Length(3), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Min(0), Constraint::Length(3), Constraint::Length(1)]).split(area);
 
         // list
         if !messages.is_empty() {
@@ -371,12 +373,16 @@ impl<'a> Component for Messenger<'a> {
                 Span::from(" ←").dark_gray(),
             ],
             (ChannelRole::Direct, None) => vec![
-                state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE).to_span(),
+                state
+                    .nodes
+                    .get(&active_channel.key)
+                    .unwrap_or(&UNKNOWN_NODE)
+                    .short_name_to_span(),
                 Span::from(" ←").dark_gray(),
             ],
             (_, Some((node, _))) => vec![
                 Span::from("reply to ").cyan(),
-                node.to_span(),
+                node.short_name_to_span(),
                 Span::from(" ←").dark_gray(),
             ],
             _ => unreachable!(),
@@ -384,15 +390,13 @@ impl<'a> Component for Messenger<'a> {
 
         let channel_line = Line::from(channel_name_spans);
 
-        let input_block_area_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(channel_line.width() as u16),
-                Constraint::Length(1),
-                Constraint::Min(1),
-                Constraint::Length(8),
-            ])
-            .split(input_block_area);
+        let input_block_area_h = Layout::horizontal([
+            Constraint::Length(channel_line.width() as u16),
+            Constraint::Length(1),
+            Constraint::Min(1),
+            Constraint::Length(8),
+        ])
+        .split(input_block_area);
 
         input_block.render(v[1], frame.buffer_mut());
         channel_line.render(input_block_area_h[0], frame.buffer_mut());
@@ -418,9 +422,9 @@ impl<'a> Component for Messenger<'a> {
         {
             let popup_area = Rect {
                 x: v[0].x + v[0].width / 2 - 40 / 2,
-                y: v[0].y + v[0].height / 2 - 12 / 2,
+                y: v[0].y + v[0].height / 2 - 15 / 2,
                 width: 40,
-                height: 12,
+                height: 15,
             };
 
             Clear.render(popup_area, frame.buffer_mut());
@@ -544,38 +548,34 @@ impl<'a> Widget for MessageWidget<'a> {
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(if self.message.reactions.is_empty() {
-                vec![Constraint::Length(1), Constraint::Length(text_height)]
-            } else {
-                vec![
-                    Constraint::Length(1),
-                    Constraint::Length(text_height),
-                    Constraint::Length(1),
-                ]
-            })
-            .split(block_area);
+        let v = Layout::vertical(if self.message.reactions.is_empty() {
+            vec![Constraint::Length(1), Constraint::Length(text_height)]
+        } else {
+            vec![
+                Constraint::Length(1),
+                Constraint::Length(text_height),
+                Constraint::Length(1),
+            ]
+        })
+        .split(block_area);
 
         // first line
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .flex(layout::Flex::SpaceBetween)
-            .constraints([Constraint::Fill(4), Constraint::Fill(2), Constraint::Fill(1)])
+        let v0_h = Layout::horizontal([Constraint::Fill(4), Constraint::Fill(2), Constraint::Fill(1)])
+            .flex(Flex::SpaceBetween)
             .split(v[0]);
 
         if let Some((rep_node, _)) = self.replied_message {
             Line::from(vec![
-                self.node.to_span(),
+                self.node.short_name_to_span(),
                 " → ".to_span().dark_gray(),
-                rep_node.to_span().on_magenta(),
+                rep_node.short_name_to_span().on_magenta(),
             ])
             .render(v0_h[0], buf);
         } else {
             Line::from(vec![
-                self.node.to_span(),
+                self.node.short_name_to_span(),
                 " ".to_span(),
-                self.node.long_name.clone().to_span().bold(),
+                self.node.long_name().to_span().bold(),
             ])
             .render(v0_h[0], buf);
         }

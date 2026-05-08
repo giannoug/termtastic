@@ -1,5 +1,3 @@
-use chrono::{SubsecRound, TimeDelta, Utc};
-
 use crate::ui::{
     helpers::{default_scrollbar, ColorExt},
     prelude::*,
@@ -8,7 +6,8 @@ use crate::ui::{
 pub struct Nodes<'a> {
     list_state: ListState,
     filter_input: TextArea<'a>,
-    hotkeys: Vec<Hotkey>,
+    nodeinfo: Option<u32>,
+    nodeinfo_state: NodeInfoState,
 }
 
 impl<'a> Nodes<'a> {
@@ -21,25 +20,39 @@ impl<'a> Nodes<'a> {
         Self {
             list_state: ListState::default(),
             filter_input,
-            hotkeys: vec![
-                Hotkey {
-                    key: "↑↓".to_string(),
-                    label: "scroll".to_string(),
-                },
-                Hotkey {
-                    key: "enter".to_string(),
-                    label: "node info".to_string(),
-                },
-                Hotkey {
-                    key: "F2".to_string(),
-                    label: "direct".to_string(),
-                },
-                Hotkey {
-                    key: "F6".to_string(),
-                    label: "sort by".to_string(),
-                },
-            ],
+            nodeinfo: None,
+            nodeinfo_state: NodeInfoState::new(),
         }
+    }
+
+    fn get_hotkeys(&self) -> Vec<Hotkey> {
+        if self.nodeinfo.is_some() {
+            return [Hotkey {
+                key: "esc".to_string(),
+                label: "close".to_string(),
+            }]
+            .to_vec();
+        }
+
+        [
+            Hotkey {
+                key: "↑↓".to_string(),
+                label: "scroll".to_string(),
+            },
+            Hotkey {
+                key: "enter [F4]".to_string(),
+                label: "node info".to_string(),
+            },
+            Hotkey {
+                key: "F2".to_string(),
+                label: "direct".to_string(),
+            },
+            Hotkey {
+                key: "F6".to_string(),
+                label: "sort by".to_string(),
+            },
+        ]
+        .to_vec()
     }
 }
 
@@ -50,6 +63,24 @@ impl<'a> Component for Nodes<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if self.nodeinfo.is_some() {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                        self.nodeinfo = None;
+                    }
+                    _ => {
+                        self.nodeinfo_state.handle_event(event.clone());
+                    }
+                },
+                _ => {
+                    self.nodeinfo_state.handle_event(event.clone());
+                }
+            }
+
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                 KeyCode::Up => self.list_state.previous(),
@@ -59,6 +90,11 @@ impl<'a> Component for Nodes<'a> {
                 }
                 KeyCode::End => {
                     self.list_state.select(Some(state.nodes_view.len() - 1));
+                }
+                KeyCode::F(4) | KeyCode::Enter => {
+                    if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
+                        self.nodeinfo = Some(*node_key);
+                    }
                 }
                 KeyCode::F(6) => {
                     emit(AppEvent::NodesSortByCyclePressed)?;
@@ -99,10 +135,7 @@ impl<'a> Component for Nodes<'a> {
             self.list_state.select(Some(0));
         }
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)]).split(area);
 
         if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {
@@ -125,10 +158,7 @@ impl<'a> Component for Nodes<'a> {
             PlaceholderWidget::dark_gray("no nodes").render(v[0], frame.buffer_mut());
         }
 
-        let v1_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(3), Constraint::Fill(2)])
-            .split(v[1]);
+        let v1_h = Layout::horizontal([Constraint::Fill(3), Constraint::Fill(2)]).split(v[1]);
 
         let filter_block = Block::bordered()
             .border_type(BorderType::Rounded)
@@ -152,7 +182,23 @@ impl<'a> Component for Nodes<'a> {
             .centered()
             .render(sort_block_area, frame.buffer_mut());
 
-        HotkeysWidget::new(&self.hotkeys).render(v[2], frame.buffer_mut());
+        // NodeInfo popup
+        if let Some(node_key) = self.nodeinfo {
+            let node = &state.nodes.get(&node_key);
+
+            let popup_area = Rect {
+                x: v[0].x + v[0].width / 2 - 70 / 2,
+                y: v[0].y + v[0].height / 2 - 20 / 2,
+                width: 70,
+                height: 20,
+            };
+
+            Clear.render(popup_area, frame.buffer_mut());
+
+            NodeInfoWidget::new(*node).render(popup_area, frame.buffer_mut(), &mut self.nodeinfo_state);
+        }
+
+        HotkeysWidget::new(&self.get_hotkeys()).render(v[2], frame.buffer_mut());
     }
 }
 
@@ -190,28 +236,21 @@ impl<'a> Widget for NodeWidget<'a> {
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Length(1)])
-            .split(block_area);
+        let v = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(block_area);
 
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .flex(layout::Flex::SpaceBetween)
-            .constraints([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
+        let v0_h = Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
+            .flex(Flex::SpaceBetween)
             .split(v[0]);
 
-        let v1_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .flex(layout::Flex::SpaceBetween)
-            .constraints([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
+        let v1_h = Layout::horizontal([Constraint::Fill(2), Constraint::Fill(1), Constraint::Fill(1)])
+            .flex(Flex::SpaceBetween)
             .split(v[1]);
 
         // first line
         Line::from(vec![
-            self.node.to_span(),
+            self.node.short_name_to_span(),
             Span::from(" "),
-            Span::from(self.node.long_name.clone()),
+            Span::from(self.node.long_name()),
         ])
         .render(v0_h[0], buf);
 
@@ -226,50 +265,17 @@ impl<'a> Widget for NodeWidget<'a> {
         })
         .render(v0_h[1], buf);
 
-        let last_heard_spans: Vec<Span> = match self.node.last_heard {
-            Some(_) if self.node.my => vec![Span::from("now").blue()],
-            Some(dt) => humanize_duration(Utc::now().round_subsecs(0) - dt),
-            None => vec![Span::from("?").dark_gray()],
-        };
-
-        Line::from(last_heard_spans).right_aligned().render(v0_h[2], buf);
+        Line::from(self.node.last_heard_to_spans())
+            .right_aligned()
+            .render(v0_h[2], buf);
 
         // second line
-        Line::from(vec![Span::from(self.node.hw_model.clone()).magenta()]).render(v1_h[0], buf);
+        Line::from(vec![Span::from(self.node.hw_model()).magenta()]).render(v1_h[0], buf);
 
-        Line::from(vec![Span::from(self.node.role.clone()).dark_gray()]).render(v1_h[1], buf);
+        Line::from(vec![Span::from(self.node.role()).dark_gray()]).render(v1_h[1], buf);
 
         Line::from(vec![Span::from(self.node.id.clone()).dark_gray()])
             .right_aligned()
             .render(v1_h[2], buf);
     }
-}
-
-fn humanize_duration<'a>(d: TimeDelta) -> Vec<Span<'a>> {
-    if d.num_seconds() < 60 {
-        return vec![Span::from("now").green()];
-    }
-
-    if d.num_minutes() < 60 {
-        return vec![
-            Span::from(format!("{}m", d.num_minutes())),
-            Span::from(" ago").dark_gray(),
-        ];
-    }
-
-    if d.num_hours() < 24 {
-        let remaining_minutes = d.num_minutes() % 60;
-
-        return vec![
-            Span::from(format!("{}h {}m", d.num_hours(), remaining_minutes)),
-            Span::from(" ago").dark_gray(),
-        ];
-    }
-
-    let remaining_hours = d.num_hours() % 24;
-
-    vec![
-        Span::from(format!("{}d {}h", d.num_days(), remaining_hours)),
-        Span::from(" ago").dark_gray(),
-    ]
 }

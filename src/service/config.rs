@@ -47,12 +47,9 @@ impl ConfigService {
     async fn handle_app_event(&mut self, event: AppEvent) -> anyhow::Result<()> {
         match event {
             AppEvent::InitializationRequested => {
-                let state = &self.state_rx.borrow();
+                let app_config: AppConfig = confy::load(crate::APP_NAME, "app")?;
 
-                let app_config: AppConfig = confy::load(&state.app_name, "app")?;
-
-                self.state_action_tx
-                    .send(StateAction::AppConfigApply(app_config))?;
+                self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
 
                 self.state_action_tx
                     .send(StateAction::Toast(Toast::normal("config loaded")))?;
@@ -70,7 +67,7 @@ impl ConfigService {
         let app_config_hash = calculate_hash(&app_config);
 
         if app_config_hash != self.app_config_last_hash {
-            confy::store(&state.app_name, "app", &app_config)?;
+            confy::store(crate::APP_NAME, "app", &app_config)?;
             self.app_config_last_hash = app_config_hash;
         }
 

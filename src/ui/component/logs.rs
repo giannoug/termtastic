@@ -142,10 +142,7 @@ impl Component for Logs {
             self.list_state.select(Some(state.logs.len() - 1));
         }
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
 
         if !state.logs.is_empty() {
             let list_builder = ListBuilder::new(|context| {

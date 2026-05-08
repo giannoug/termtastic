@@ -149,10 +149,7 @@ impl<'a> Component for Connection<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
 
         if !state.aggregated_devices.is_empty() {
             if self.list_state.selected.is_none()
@@ -231,16 +228,14 @@ impl<'a> Component for Connection<'a> {
                 }
             };
 
-            let block_v = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Fill(1),
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Length(conn_info.len() as u16),
-                    Constraint::Fill(1),
-                ])
-                .split(popup_block_area);
+            let block_v = Layout::vertical([
+                Constraint::Fill(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+                Constraint::Length(conn_info.len() as u16),
+                Constraint::Fill(1),
+            ])
+            .split(popup_block_area);
 
             let device_widget = DeviceWidget {
                 device: active_device,

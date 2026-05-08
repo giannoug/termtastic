@@ -1,5 +1,6 @@
 mod emoji_selector;
 mod hotkeys;
+mod nodeinfo;
 mod placeholder;
 mod popup_confirm;
 mod popup_dropdown;
@@ -9,6 +10,7 @@ mod reactions_viewer;
 
 pub use emoji_selector::*;
 pub use hotkeys::*;
+pub use nodeinfo::*;
 pub use placeholder::*;
 pub use popup_confirm::*;
 pub use popup_dropdown::*;

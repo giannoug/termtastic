@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use meshtastic::{
+    protobufs::{admin_message, from_radio, mesh_packet, AdminMessage, MeshPacket, PortNum, User},
     Message as _,
-    protobufs::{AdminMessage, MeshPacket, PortNum, User, admin_message, from_radio, mesh_packet},
 };
 use tokio::{
     sync::{broadcast, mpsc, watch},
@@ -11,6 +11,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::types::Toast;
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::{State, StateAction},
@@ -83,6 +84,15 @@ impl NodesService {
             AppEvent::NodesFilterChanged(filter) => {
                 self.state_action_tx.send(StateAction::NodesFilterSet(filter))?;
             }
+            AppEvent::NodeInfoBroadcastRequested => {
+                let my_node = state.get_my_node().expect("should be Some");
+
+                self.meshtastic_command_tx
+                    .send(CommandToMeshtastic::BroadcastNodeInfo {
+                        channel_id: 0,
+                        user: my_node.try_into()?,
+                    })?;
+            }
             _ => {}
         }
 
@@ -92,6 +102,15 @@ impl NodesService {
     fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
         match event {
             MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
+            MeshtasticEvent::NodeInfoBroadcastSent => self
+                .state_action_tx
+                .send(StateAction::Toast(Toast::success("NodeInfo broadcast sent")))?,
+            MeshtasticEvent::NodeInfoBroadcastFailed(e) => {
+                tracing::error!("NodeInfo broadcast failed: {:?}", e);
+
+                self.state_action_tx
+                    .send(StateAction::Toast(Toast::error("NodeInfo broadcast failed")))?;
+            }
             _ => {}
         }
 
@@ -109,7 +128,7 @@ impl NodesService {
             from_radio::PayloadVariant::NodeInfo(node_info) => {
                 match Node::try_from(&node_info) {
                     Ok(node) => {
-                        self.state_action_tx.send(StateAction::NodeAdd(node))?;
+                        self.state_action_tx.send(StateAction::NodeSet(node))?;
                         self.update_online_nodes()?;
                     }
                     Err(e) => {
@@ -123,12 +142,15 @@ impl NodesService {
                 }
             }
             from_radio::PayloadVariant::Packet(mesh_packet) => {
+                self.state_action_tx
+                    .send(StateAction::NodeEnsure((&mesh_packet).into()))?;
+
                 match &mesh_packet.payload_variant {
                     Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {
                         PortNum::NodeinfoApp => match User::decode(&*data.payload) {
                             Ok(user) => {
                                 match Node::try_from((&mesh_packet, &user)) {
-                                    Ok(node) => self.state_action_tx.send(StateAction::NodeAdd(node))?,
+                                    Ok(node) => self.state_action_tx.send(StateAction::NodeSet(node))?,
                                     Err(e) => {
                                         tracing::debug!(
                                             node_key = mesh_packet.from,

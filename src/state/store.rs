@@ -274,7 +274,7 @@ impl Store {
                         is_changed = true;
                     });
             }
-            StateAction::NodeAdd(mut node) => {
+            StateAction::NodeSet(mut node) => {
                 if let Some(number) = self.state.my_node_key
                     && node.key == number
                 {
@@ -286,7 +286,19 @@ impl Store {
                 self.update_nodes_view();
                 is_changed = true;
             }
-            StateAction::ChannelEnsure(key, channel) => {
+            StateAction::NodeEnsure(mut node) => {
+                if let Some(number) = self.state.my_node_key
+                    && node.key == number
+                {
+                    node.my = true;
+                }
+
+                self.state.nodes.entry(node.key).or_insert(node);
+
+                self.update_nodes_view();
+                is_changed = true;
+            }
+            StateAction::ChannelSet(key, channel) => {
                 self.state.channels.insert(key, channel);
                 self.state.channels.sort_keys();
                 is_changed = true;
@@ -536,10 +548,13 @@ impl Store {
                         .unwrap_or(DateTime::default())
                         .cmp(&n2.last_heard.unwrap_or(DateTime::default()))
                         .reverse(),
-                    NodesSortBy::ShortName => n1.short_name.cmp(&n2.short_name),
-                    NodesSortBy::LongName => n1.long_name.cmp(&n2.long_name),
-                    NodesSortBy::HwModel => n1.hw_model.cmp(&n2.hw_model).then(n1.short_name.cmp(&n2.short_name)),
-                    NodesSortBy::Role => n1.role.cmp(&n2.role).then(
+                    NodesSortBy::ShortName => n1.short_name().cmp(&n2.short_name()),
+                    NodesSortBy::LongName => n1.long_name().cmp(&n2.long_name()),
+                    NodesSortBy::HwModel => n1
+                        .hw_model()
+                        .cmp(&n2.hw_model())
+                        .then(n1.short_name().cmp(&n2.short_name())),
+                    NodesSortBy::Role => n1.role().cmp(&n2.role()).then(
                         n1.hops_away
                             .unwrap_or(u32::MAX)
                             .cmp(&n2.hops_away.unwrap_or(u32::MAX))

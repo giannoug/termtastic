@@ -19,22 +19,25 @@ impl Component for Header {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::default()
-            .direction(Direction::Horizontal)
-            .flex(layout::Flex::SpaceBetween)
-            .constraints([Constraint::Fill(1), Constraint::Fill(1)])
+        let v = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
+            .flex(Flex::SpaceBetween)
             .split(area);
 
-        let app_info = vec![
-            Span::from(state.app_name.clone()).magenta().bold(),
-            Span::from(" "),
-            Span::from(&state.app_version).dark_gray(),
-        ];
-
-        frame.render_widget(Paragraph::new(Line::from(app_info)), v[0]);
+        frame.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::from(crate::APP_NAME).magenta().bold(),
+                Span::from(" "),
+                Span::from(crate::APP_VERSION).dark_gray(),
+            ])),
+            v[0],
+        );
 
         let my_node_info = if let Some(my_node) = state.get_my_node() {
-            vec![Span::from("node ").dark_gray(), my_node.to_span(), Span::from("  ")]
+            vec![
+                Span::from("node ").dark_gray(),
+                my_node.short_name_to_span(),
+                Span::from("  "),
+            ]
         } else {
             vec![]
         };

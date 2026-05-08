@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use crossterm::event::Event;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Padding, StatefulWidget, Widget},
@@ -78,10 +78,7 @@ impl<'a> StatefulWidget for PopupInputWidget<'a> {
             height: 4,
         };
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Length(1)])
-            .split(popup_area);
+        let v = Layout::vertical([Constraint::Length(3), Constraint::Length(1)]).split(popup_area);
 
         let color = if state.error.is_some() {
             Color::Red

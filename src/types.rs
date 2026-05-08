@@ -1,7 +1,5 @@
-use std::{collections::HashMap, fmt::Debug, time::Instant};
-
 use anyhow::anyhow;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
 use meshtastic::protobufs::{channel, config, module_config, routing};
@@ -10,10 +8,14 @@ use ratatui::{
     text,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
+use std::{collections::HashMap, fmt::Debug, time::Instant};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 use tokio::sync::watch::Ref;
 use tracing::Level;
 
+use crate::ui::helpers::{humanize_duration, ColorExt};
+use crate::ui::prelude::{Span, Style};
 use crate::{state::State, ui::helpers::pad_center};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Default)]
@@ -44,6 +46,8 @@ pub enum AppEvent {
     ChannelSelected(u32),
     SwitchChannelRequested,
     DeviceRediscoverRequested,
+    DeviceRebootRequested,
+    DeviceShutdownRequested,
     DeviceSelected(Device),
     DisconnectionRequested,
     InitializationRequested,
@@ -69,6 +73,7 @@ pub enum AppEvent {
     CopyToClipboardRequested(String),
     NodesSortByCyclePressed,
     NodesFilterChanged(String),
+    NodeInfoBroadcastRequested,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
@@ -296,42 +301,132 @@ impl NodesSortBy {
 pub struct Node {
     pub id: String,
     pub key: u32,
-    pub short_name: String,
-    pub long_name: String,
+    pub user: Option<NodeUser>,
     pub hops_away: Option<u32>,
     pub last_heard: Option<DateTime<Utc>>,
     pub snr: f32,
-    pub role: String,
-    pub hw_model: String,
+    pub rssi: Option<i32>,
+    pub public_key: Vec<u8>,
     pub my: bool,
     pub fulltext: String,
 }
 
-impl Node {
-    pub fn unknown() -> Self {
-        Self {
-            id: "?".to_owned(),
-            key: 0,
-            short_name: "?".to_owned(),
-            long_name: "Unknown".to_owned(),
-            hops_away: None,
-            last_heard: None,
-            snr: 0.0,
-            role: "UNKNOWN".to_owned(),
-            hw_model: "UNKNOWN".to_owned(),
-            my: false,
-            fulltext: "UNKNOWN".to_owned(),
-        }
-    }
+#[derive(Debug, Clone)]
+pub struct NodeUser {
+    pub short_name: String,
+    pub long_name: String,
+    pub role: i32,
+    pub hw_model: i32,
+    pub is_unmessagable: Option<bool>,
+}
 
-    pub fn to_span(&self) -> text::Span<'_> {
-        text::Span::from(pad_center(&self.short_name, 6))
+pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
+    id: "?".to_owned(),
+    key: 0,
+    user: Some(NodeUser {
+        short_name: "?".to_owned(),
+        long_name: "Unknown".to_owned(),
+        role: -1,
+        hw_model: -1,
+        is_unmessagable: None,
+    }),
+    hops_away: None,
+    last_heard: None,
+    snr: 0.0,
+    rssi: None,
+    public_key: vec![],
+    my: false,
+    fulltext: "?".to_owned(),
+});
+
+impl Node {
+    pub fn short_name_to_span(&self) -> text::Span<'_> {
+        text::Span::from(pad_center(&self.short_name(), 6))
             .black()
             .patch_style(if self.my {
                 style::Style::new().white().on_blue()
+            } else if self.user.is_none() {
+                style::Style::new().on_yellow()
+            } else if self.id == "?" {
+                style::Style::new().on_red()
             } else {
                 style::Style::new().on_green()
             })
+    }
+
+    pub fn last_heard_to_spans(&self) -> Vec<text::Span<'_>> {
+        match self.last_heard {
+            Some(_) if self.my => vec![text::Span::from("now").blue()],
+            Some(dt) => humanize_duration(Utc::now().round_subsecs(0) - dt),
+            None => vec![text::Span::from("?").dark_gray()],
+        }
+    }
+
+    pub fn hops_to_spans(&self) -> Vec<text::Span<'_>> {
+        match self.hops_away {
+            _ if self.my => vec![Span::from("connected").blue()],
+            Some(0) => vec![
+                Some(Span::from(format!("* {}dB", self.snr)).style(Style::new().fg(self.snr.snr_to_color()))),
+                self.rssi
+                    .and_then(|rssi| Some(Span::from(format!(" RSSI {}", rssi)).dark_gray())),
+            ]
+            .iter()
+            .flatten()
+            .cloned()
+            .collect(),
+            Some(1) => vec![Span::from("1 hop")],
+            Some(hops) => vec![Span::from(format!("{} hops", hops))],
+            None => vec![Span::from("unknown").dark_gray()],
+        }
+    }
+
+    pub fn short_name(&self) -> String {
+        self.user
+            .as_ref()
+            .and_then(|u| Some(u.short_name.clone()))
+            .unwrap_or(self.id[self.id.len().saturating_sub(4)..].to_owned())
+    }
+
+    pub fn long_name(&self) -> String {
+        self.user
+            .as_ref()
+            .and_then(|u| Some(u.long_name.clone()))
+            .unwrap_or(format!("Meshtastic {}", self.short_name()))
+    }
+
+    pub fn hw_model(&self) -> String {
+        self.user
+            .as_ref()
+            .and_then(|u| meshtastic::protobufs::HardwareModel::try_from(u.hw_model).ok())
+            .and_then(|hw| Some(hw.as_str_name().to_owned()))
+            .unwrap_or("UNKNOWN".to_owned())
+    }
+
+    pub fn role(&self) -> String {
+        self.user
+            .as_ref()
+            .and_then(|u| config::device_config::Role::try_from(u.role).ok())
+            .and_then(|r| Some(r.as_str_name().to_owned()))
+            .unwrap_or("UNKNOWN".to_owned())
+    }
+
+    pub fn update_fulltext(&mut self) {
+        self.fulltext = format!(
+            "{} {} {} {} {}",
+            self.user
+                .as_ref()
+                .and_then(|u| Some(&u.short_name))
+                .unwrap_or(&"?".to_owned())
+                .to_lowercase(),
+            self.user
+                .as_ref()
+                .and_then(|u| Some(&u.long_name))
+                .unwrap_or(&"Unknown".to_owned())
+                .to_lowercase(),
+            self.role().to_lowercase(),
+            self.hw_model().to_lowercase(),
+            self.id,
+        );
     }
 }
 
@@ -341,29 +436,46 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
     fn try_from(value: &meshtastic::protobufs::NodeInfo) -> Result<Self, Self::Error> {
         let user = value.user.as_ref().ok_or(anyhow!("no user information"))?;
         let last_heard = DateTime::from_timestamp(value.last_heard as i64, 0);
-        let role = user.role().as_str_name();
-        let hw_model = user.hw_model().as_str_name();
 
-        Ok(Self {
+        let mut node = Self {
             id: user.id.clone(),
             key: value.num,
-            short_name: user.short_name.clone(),
-            long_name: user.long_name.clone(),
+            user: Some(user.into()),
             hops_away: value.hops_away,
             last_heard,
             snr: value.snr,
-            role: role.to_string(),
-            hw_model: hw_model.to_string(),
+            rssi: None,
+            public_key: user.public_key.clone(),
             my: false,
-            fulltext: format!(
-                "{} {} {} {} {}",
-                user.short_name.to_lowercase(),
-                user.long_name.to_lowercase(),
-                role.to_lowercase(),
-                hw_model.to_lowercase(),
-                user.id,
-            ),
-        })
+            fulltext: "".to_owned(),
+        };
+
+        node.update_fulltext();
+
+        Ok(node)
+    }
+}
+
+impl From<&meshtastic::protobufs::MeshPacket> for Node {
+    fn from(packet: &meshtastic::protobufs::MeshPacket) -> Self {
+        let id = format!("!{:x}", packet.from);
+
+        let mut node = Self {
+            id,
+            key: packet.from,
+            user: None,
+            hops_away: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
+            last_heard: DateTime::from_timestamp(packet.rx_time as i64, 0),
+            snr: packet.rx_snr,
+            rssi: Some(packet.rx_rssi),
+            public_key: packet.public_key.clone(),
+            my: false,
+            fulltext: "".to_owned(),
+        };
+
+        node.update_fulltext();
+
+        node
     }
 }
 
@@ -374,29 +486,57 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
         (packet, user): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User),
     ) -> Result<Self, Self::Error> {
         let last_heard = DateTime::from_timestamp(packet.rx_time as i64, 0);
-        let role = user.role().as_str_name();
-        let hw_model = user.hw_model().as_str_name();
 
-        Ok(Self {
+        let mut node = Self {
             id: user.id.clone(),
             key: packet.from,
-            short_name: user.short_name.clone(),
-            long_name: user.long_name.clone(),
+            user: Some(user.into()),
             hops_away: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard,
             snr: packet.rx_snr,
-            role: role.to_string(),
-            hw_model: hw_model.to_string(),
+            rssi: Some(packet.rx_rssi),
+            public_key: user.public_key.clone(),
             my: false,
-            fulltext: format!(
-                "{} {} {} {} {}",
-                user.short_name.to_lowercase(),
-                user.long_name.to_lowercase(),
-                role.to_lowercase(),
-                hw_model.to_lowercase(),
-                user.id,
-            ),
-        })
+            fulltext: "".to_owned(),
+        };
+
+        node.update_fulltext();
+
+        Ok(node)
+    }
+}
+
+impl From<&meshtastic::protobufs::User> for NodeUser {
+    fn from(value: &meshtastic::protobufs::User) -> Self {
+        Self {
+            short_name: value.short_name.clone(),
+            long_name: value.long_name.clone(),
+            role: value.role,
+            hw_model: value.hw_model,
+            is_unmessagable: value.is_unmessagable,
+        }
+    }
+}
+
+impl TryInto<meshtastic::protobufs::User> for &Node {
+    type Error = anyhow::Error;
+
+    fn try_into(self) -> Result<meshtastic::protobufs::User, Self::Error> {
+        match &self.user {
+            Some(user) => Ok(meshtastic::protobufs::User {
+                id: self.id.clone(),
+                long_name: user.long_name.clone(),
+                short_name: user.short_name.clone(),
+                #[allow(deprecated)]
+                macaddr: vec![],
+                hw_model: user.hw_model,
+                is_licensed: false,
+                role: user.role,
+                public_key: self.public_key.clone(),
+                is_unmessagable: user.is_unmessagable,
+            }),
+            None => Err(anyhow!("no user information")),
+        }
     }
 }
 
@@ -543,6 +683,21 @@ pub struct MessageReaction {
     pub rssi: i32,
 }
 
+impl MessageReaction {
+    pub fn hops_to_spans(&self) -> Vec<text::Span<'_>> {
+        match self.hops {
+            0 => {
+                vec![
+                    Span::from(format!("* {}dB", self.snr)).style(Style::new().fg(self.snr.snr_to_color())),
+                    Span::from(format!(" RSSI {}", self.rssi)).dark_gray(),
+                ]
+            }
+            1 => vec![Span::from("1 hop")],
+            hops => vec![Span::from(format!("{} hops", hops))],
+        }
+    }
+}
+
 impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for MessageReaction {
     type Error = anyhow::Error;
 
@@ -620,6 +775,7 @@ pub enum FormId {
     DevicePower,
     DeviceDisplay,
     DeviceBluetooth,
+    DeviceAdministration,
     ModuleMqtt,
     ModuleSerial,
     ModuleExternalNotification,
@@ -907,6 +1063,7 @@ pub enum FormItemKind {
     BitMask(Vec<FormBitMaskVariant>),
     Switch,
     Button(fn(&FormValue) -> FormValue),
+    Action(AppEvent),
 }
 
 #[derive(Debug, Clone)]

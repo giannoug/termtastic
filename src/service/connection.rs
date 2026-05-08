@@ -45,8 +45,7 @@ impl ConnectionService {
     }
 
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
-        let mut connection_check_interval =
-            time::interval(Duration::from_millis(CONNECTION_CHECK_INTERVAL_MILLIS));
+        let mut connection_check_interval = time::interval(Duration::from_millis(CONNECTION_CHECK_INTERVAL_MILLIS));
 
         loop {
             tokio::select! {
@@ -66,20 +65,16 @@ impl ConnectionService {
     async fn handle_app_event(&mut self, event: AppEvent) -> anyhow::Result<()> {
         match event {
             AppEvent::InitializationRequested => {
-                self.app_event_tx
-                    .send(AppEvent::DeviceRediscoverRequested)?;
+                self.app_event_tx.send(AppEvent::DeviceRediscoverRequested)?;
             }
             AppEvent::DeviceSelected(hardware) => {
-                self.state_action_tx
-                    .send(StateAction::DeviceActiveSet(hardware))?;
+                self.state_action_tx.send(StateAction::DeviceActiveSet(hardware))?;
             }
             AppEvent::DisconnectionRequested => {
-                self.meshtastic_command_tx
-                    .send(CommandToMeshtastic::Disconnect)?;
+                self.meshtastic_command_tx.send(CommandToMeshtastic::Disconnect)?;
             }
             AppEvent::DeviceRediscoverRequested => {
-                self.state_action_tx
-                    .send(StateAction::DeviceDiscoveringStart)?;
+                self.state_action_tx.send(StateAction::DeviceDiscoveringStart)?;
 
                 self.state_action_tx
                     .send(StateAction::Toast(Toast::normal("discovering...")))?;
@@ -88,14 +83,12 @@ impl ConnectionService {
                     Ok(devices) => {
                         let devices_count = devices.len();
 
-                        self.state_action_tx
-                            .send(StateAction::DeviceDiscoveringDone(devices))?;
+                        self.state_action_tx.send(StateAction::DeviceDiscoveringDone(devices))?;
 
-                        self.state_action_tx
-                            .send(StateAction::Toast(Toast::normal(format!(
-                                "devices discovered: {}",
-                                devices_count
-                            ))))?;
+                        self.state_action_tx.send(StateAction::Toast(Toast::normal(format!(
+                            "devices discovered: {}",
+                            devices_count
+                        ))))?;
                     }
                     Err(e) => {
                         tracing::error!("device discovering failed: {}", e);
@@ -108,17 +101,31 @@ impl ConnectionService {
                     }
                 };
             }
+            AppEvent::DeviceRebootRequested => {
+                let state = &self.state_rx.borrow();
+
+                self.meshtastic_command_tx.send(CommandToMeshtastic::Reboot {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    secs: 3,
+                })?;
+            }
+            AppEvent::DeviceShutdownRequested => {
+                let state = &self.state_rx.borrow();
+
+                self.meshtastic_command_tx.send(CommandToMeshtastic::Shutdown {
+                    my_node_id: state.my_node_key.expect("should be Some"),
+                    secs: 3,
+                })?;
+            }
             AppEvent::TcpDeviceSubmitted(mut hostaddr) => {
                 if !hostaddr.has_port() {
                     hostaddr = hostaddr.with_port(4403);
                 }
 
-                self.state_action_tx
-                    .send(StateAction::DevicesAddTcp(hostaddr))?;
+                self.state_action_tx.send(StateAction::DevicesAddTcp(hostaddr))?;
             }
             AppEvent::TcpDeviceRemoved(hostaddr) => {
-                self.state_action_tx
-                    .send(StateAction::DevicesRemoveTcp(hostaddr))?;
+                self.state_action_tx.send(StateAction::DevicesRemoveTcp(hostaddr))?;
             }
             _ => {}
         }
@@ -153,6 +160,10 @@ impl ConnectionService {
                         self.state_action_tx
                             .send(StateAction::Toast(Toast::success("connected")))?;
                     }
+                    PayloadVariant::Rebooted(true) => {
+                        self.state_action_tx
+                            .send(StateAction::Toast(Toast::success("device has been rebooted")))?;
+                    }
                     _ => {}
                 }
 
@@ -160,14 +171,8 @@ impl ConnectionService {
 
                 if let PayloadVariant::Packet(p) = packet {
                     let state = &self.state_rx.borrow();
-                    let from = state
-                        .nodes
-                        .get(&p.from)
-                        .and_then(|n| Some(n.short_name.clone()));
-                    let to = state
-                        .nodes
-                        .get(&p.to)
-                        .and_then(|n| Some(n.short_name.clone()));
+                    let from = state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
+                    let to = state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
 
                     tracing::debug!("PACKET from=\"{:?}\" to=\"{:?}\": {:?}", from, to, p);
                 } else {
@@ -190,8 +195,7 @@ impl ConnectionService {
                         .min(RECONNECTION_BACKOFF_MAX_MILLIS),
                 );
 
-                let time_left =
-                    backoff_duration.saturating_sub(Instant::now().duration_since(*since));
+                let time_left = backoff_duration.saturating_sub(Instant::now().duration_since(*since));
 
                 self.state_action_tx
                     .send(StateAction::ReconnectionBackoffSet(time_left))?;
@@ -240,11 +244,7 @@ async fn discover_devices() -> anyhow::Result<Vec<Device>> {
                                 return None;
                             }
                             Err(e) => {
-                                tracing::error!(
-                                    "can't obtain BLE device pair status for {}: {}",
-                                    d.id(),
-                                    e
-                                );
+                                tracing::error!("can't obtain BLE device pair status for {}: {}", d.id(), e);
                                 return None;
                             }
                             _ => {}
@@ -260,11 +260,7 @@ async fn discover_devices() -> anyhow::Result<Vec<Device>> {
                                 address: d.id().to_string(),
                             }),
                             Err(e) => {
-                                tracing::error!(
-                                    "can't obtain BLE device name for {}: {}",
-                                    d.id(),
-                                    e
-                                );
+                                tracing::error!("can't obtain BLE device name for {}: {}", d.id(), e);
                                 None
                             }
                         }

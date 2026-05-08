@@ -1,10 +1,9 @@
 use std::time::Duration;
 
-use meshtastic::protobufs::{admin_message, AdminMessage};
 use meshtastic::{
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
+    protobufs::{admin_message, from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
     Message,
 };
@@ -160,6 +159,10 @@ impl MeshtasticService {
             }
             CommandToMeshtastic::Reboot { my_node_id, secs } => {
                 self.send_admin_message(my_node_id, admin_message::PayloadVariant::RebootSeconds(secs))
+                    .await?;
+            }
+            CommandToMeshtastic::Shutdown { my_node_id, secs } => {
+                self.send_admin_message(my_node_id, admin_message::PayloadVariant::ShutdownSeconds(secs))
                     .await?;
             }
             CommandToMeshtastic::SendBroadcastTextMessage {
@@ -407,6 +410,31 @@ impl MeshtasticService {
                     }
                 }
             }
+            CommandToMeshtastic::BroadcastNodeInfo { channel_id, user } => {
+                match self
+                    .stream_api
+                    .as_mut()
+                    .expect_or_log("should be connected")
+                    .send_mesh_packet(
+                        &mut NullPacketRouter {},
+                        EncodedMeshPacketData::new(user.encode_to_vec().into()),
+                        PortNum::NodeinfoApp,
+                        PacketDestination::Broadcast,
+                        MeshChannel::from(channel_id),
+                        false, // want_ack
+                        false, // want_response
+                        false, // echo_response
+                        None,  // reply_id
+                        None,  // emoji
+                    )
+                    .await
+                {
+                    Ok(()) => self.event_tx.send(MeshtasticEvent::NodeInfoBroadcastSent)?,
+                    Err(e) => self
+                        .event_tx
+                        .send(MeshtasticEvent::NodeInfoBroadcastFailed(e.to_string()))?,
+                };
+            }
         };
 
         Ok(())
@@ -460,7 +488,7 @@ impl MeshtasticService {
             event_tx: &self.event_tx,
         };
 
-        let packet = AdminMessage {
+        let packet = meshtastic::protobufs::AdminMessage {
             payload_variant: Some(payload),
             session_passkey: Vec::new(),
         };
@@ -483,6 +511,25 @@ impl MeshtasticService {
             .await?;
 
         Ok(())
+    }
+}
+
+struct NullPacketRouter {}
+
+#[derive(thiserror::Error, Debug)]
+enum NullPacketRouterErr {}
+
+impl PacketRouter<(), NullPacketRouterErr> for NullPacketRouter {
+    fn handle_packet_from_radio(&mut self, _packet: FromRadio) -> Result<(), NullPacketRouterErr> {
+        Ok(())
+    }
+
+    fn handle_mesh_packet(&mut self, _packet: MeshPacket) -> Result<(), NullPacketRouterErr> {
+        Ok(())
+    }
+
+    fn source_node_id(&self) -> NodeId {
+        NodeId::default()
     }
 }
 

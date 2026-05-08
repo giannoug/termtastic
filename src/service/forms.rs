@@ -25,7 +25,8 @@ use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;
 use crate::types::{
-    Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind, FormValue,
+    AppEvent, Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind,
+    FormValue,
 };
 use nameof::name_of;
 
@@ -642,6 +643,17 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 ),
                 FormItemKind::Switch,
                 |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |_| &FormValue::Option(None),
+                    setter: |_, _| {},
+                },
+                "Broadcast my NodeInfo",
+                None,
+                FormItemKind::Action(AppEvent::NodeInfoBroadcastRequested),
+                |_| "<Send>".to_owned(),
                 |_| Ok(()),
             ),
         ]),
@@ -1323,6 +1335,34 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         .then_some(())
                         .ok_or(anyhow::anyhow!("Invalid PIN"))
                 },
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::DeviceAdministration,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |_| &FormValue::Option(None),
+                    setter: |_, _| {},
+                },
+                "Reboot Device",
+                None,
+                FormItemKind::Action(AppEvent::DeviceRebootRequested),
+                |_| "<REBOOT>".to_owned(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |_| &FormValue::Option(None),
+                    setter: |_, _| {},
+                },
+                "Shutdown Device",
+                None,
+                FormItemKind::Action(AppEvent::DeviceShutdownRequested),
+                |_| "<SHUTDOWN>".to_owned(),
+                |_| Ok(()),
             ),
         ]),
     );

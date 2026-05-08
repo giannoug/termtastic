@@ -21,21 +21,17 @@ impl Component for TerminalSize {
     }
 
     fn render(&mut self, _state: &State, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Length(1),
-                Constraint::Min(0),
-            ])
-            .split(area);
+        let v = Layout::vertical([
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(area);
 
-        let warning = Paragraph::new(
-            Span::from(" TERMINAL SIZE IS TOO SMALL! ").style(Style::new().white().on_red()),
-        )
-        .centered();
+        let warning =
+            Paragraph::new(Span::from(" TERMINAL SIZE IS TOO SMALL! ").style(Style::new().white().on_red())).centered();
 
         frame.render_widget(warning, v[1]);
 

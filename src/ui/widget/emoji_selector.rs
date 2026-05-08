@@ -4,7 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, Mouse
 use emoji::Emoji;
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Padding, StatefulWidget, Widget},
@@ -93,15 +93,13 @@ impl<'a> StatefulWidget for EmojiSelectorWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let block = Block::bordered()
             .border_type(BorderType::Thick)
-            .padding(Padding::symmetric(1, 0));
+            .padding(Padding::symmetric(1, 0))
+            .title(" emoji selector ");
 
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Fill(1)])
-            .split(block_area);
+        let v = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).split(block_area);
 
         // input
         let input_block = Block::bordered()

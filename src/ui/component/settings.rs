@@ -87,31 +87,27 @@ impl<'a> Settings<'a> {
                 )
             });
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                vec![
-                    Some(Constraint::Length(1)),
-                    Some(Constraint::Fill(1)),
-                    description_paragraph.is_some().then_some(Constraint::Length(1)),
-                    description_paragraph
-                        .as_ref()
-                        .and_then(|p| Some(Constraint::Length(p.line_count(area.width) as u16))),
-                ]
-                .iter()
-                .flatten(),
-            )
-            .split(area);
+        let v = Layout::vertical(
+            vec![
+                Some(Constraint::Length(1)),
+                Some(Constraint::Fill(1)),
+                description_paragraph.is_some().then_some(Constraint::Length(1)),
+                description_paragraph
+                    .as_ref()
+                    .and_then(|p| Some(Constraint::Length(p.line_count(area.width) as u16))),
+            ]
+            .iter()
+            .flatten(),
+        )
+        .split(area);
 
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(1),
-                Constraint::Fill(1),
-                Constraint::Length(2),
-            ])
-            .split(v[0]);
+        let v0_h = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(2),
+        ])
+        .split(v[0]);
 
         Span::from("FIELD").magenta().render(v0_h[0], buf);
         Span::from("VALUE").magenta().render(v0_h[2], buf);
@@ -204,6 +200,9 @@ impl<'a> Settings<'a> {
             FormItemKind::Button(handler) => {
                 emit(AppEvent::SettingsFormItemSubmitted(form_item, handler(value)))?;
             }
+            FormItemKind::Action(event) => {
+                emit(event.clone())?;
+            }
         }
 
         Ok(())
@@ -217,30 +216,33 @@ impl<'a> Component for Settings<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
-                // confirm popup
-                if self.is_exit_confirm_visible {
-                    match code {
-                        KeyCode::Enter => {
-                            emit(AppEvent::SettingsFormCancelRequested)?;
-                            self.is_exit_confirm_visible = false;
-                        }
-                        KeyCode::Esc => {
-                            self.is_exit_confirm_visible = false;
-                        }
-                        _ => {}
+        // confirm popup
+        if self.is_exit_confirm_visible {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => {
+                        emit(AppEvent::SettingsFormCancelRequested)?;
+                        self.is_exit_confirm_visible = false;
                     }
+                    KeyCode::Esc => {
+                        self.is_exit_confirm_visible = false;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
 
-                    return Ok(true);
-                }
+            return Ok(true);
+        }
 
-                // input popup
-                if let Some(popup_input_state) = self.popup_input_state.as_mut() {
-                    let form_item = self.active_form_item.expect("should be Some");
+        // input popup
+        if let Some(popup_input_state) = self.popup_input_state.as_mut() {
+            let form_item = self.active_form_item.expect("should be Some");
 
-                    match code {
-                        KeyCode::Enter => match handle_popup_input_submit(form_item, popup_input_state) {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                        match handle_popup_input_submit(form_item, popup_input_state) {
                             Ok(value) => {
                                 emit(AppEvent::SettingsFormItemSubmitted(form_item, value))?;
                                 self.active_form_item = None;
@@ -249,71 +251,88 @@ impl<'a> Component for Settings<'a> {
                             Err(e) => {
                                 popup_input_state.set_error(e.to_string());
                             }
-                        },
-                        KeyCode::Esc => {
-                            self.active_form_item = None;
-                            self.popup_input_state = None;
-                        }
-                        _ => {
-                            popup_input_state.handle_event(event.clone());
                         }
                     }
-
-                    return Ok(true);
-                }
-
-                // dropdown popup
-                if let Some(popup_dropdown_state) = self.popup_dropdown_state.as_mut()
-                    && let Some(value) = popup_dropdown_state.get_value()
-                {
-                    let form_item = self.active_form_item.expect("should be Some");
-
-                    match code {
-                        KeyCode::Enter => {
-                            emit(AppEvent::SettingsFormItemSubmitted(form_item, value.clone()))?;
-
-                            self.active_form_item = None;
-                            self.popup_dropdown_state = None;
-                        }
-                        KeyCode::Esc => {
-                            self.active_form_item = None;
-                            self.popup_dropdown_state = None;
-                        }
-                        _ => {
-                            popup_dropdown_state.handle_event(event.clone());
-                        }
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                        self.active_form_item = None;
+                        self.popup_input_state = None;
                     }
-
-                    return Ok(true);
-                }
-
-                // bitmask dropdown popup
-                if let Some(popup_dropdown_bitmask_state) = self.popup_dropdown_bitmask_state.as_mut() {
-                    let form_item = self.active_form_item.expect("should be Some");
-
-                    match code {
-                        KeyCode::Enter => {
-                            emit(AppEvent::SettingsFormItemSubmitted(
-                                form_item,
-                                FormValue::UnsignedInt32(popup_dropdown_bitmask_state.get_value()),
-                            ))?;
-
-                            self.active_form_item = None;
-                            self.popup_dropdown_bitmask_state = None;
-                        }
-                        KeyCode::Esc => {
-                            self.active_form_item = None;
-                            self.popup_dropdown_bitmask_state = None;
-                        }
-                        _ => {
-                            popup_dropdown_bitmask_state.handle_event(event.clone());
-                        }
+                    _ => {
+                        popup_input_state.handle_event(event.clone());
                     }
-
-                    return Ok(true);
+                },
+                _ => {
+                    popup_input_state.handle_event(event.clone());
                 }
+            }
 
-                // default
+            return Ok(true);
+        }
+
+        // dropdown popup
+        if let Some(popup_dropdown_state) = self.popup_dropdown_state.as_mut()
+            && let Some(value) = popup_dropdown_state.get_value()
+        {
+            let form_item = self.active_form_item.expect("should be Some");
+
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                        emit(AppEvent::SettingsFormItemSubmitted(form_item, value.clone()))?;
+
+                        self.active_form_item = None;
+                        self.popup_dropdown_state = None;
+                    }
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                        self.active_form_item = None;
+                        self.popup_dropdown_state = None;
+                    }
+                    _ => {
+                        popup_dropdown_state.handle_event(event.clone());
+                    }
+                },
+                _ => {
+                    popup_dropdown_state.handle_event(event.clone());
+                }
+            }
+
+            return Ok(true);
+        }
+
+        // bitmask dropdown popup
+        if let Some(popup_dropdown_bitmask_state) = self.popup_dropdown_bitmask_state.as_mut() {
+            let form_item = self.active_form_item.expect("should be Some");
+
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) => match code {
+                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                        emit(AppEvent::SettingsFormItemSubmitted(
+                            form_item,
+                            FormValue::UnsignedInt32(popup_dropdown_bitmask_state.get_value()),
+                        ))?;
+
+                        self.active_form_item = None;
+                        self.popup_dropdown_bitmask_state = None;
+                    }
+                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                        self.active_form_item = None;
+                        self.popup_dropdown_bitmask_state = None;
+                    }
+                    _ => {
+                        popup_dropdown_bitmask_state.handle_event(event.clone());
+                    }
+                },
+                _ => {
+                    popup_dropdown_bitmask_state.handle_event(event.clone());
+                }
+            }
+
+            return Ok(true);
+        }
+
+        // default
+        match event {
+            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
                 match (code, &state.settings_form_state) {
                     (KeyCode::Up, SettingsFormState::Inactive) => {
                         self.settings_list_state.previous();
@@ -383,15 +402,9 @@ impl<'a> Component for Settings<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)])
-            .split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
 
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Ratio(2, 6), Constraint::Ratio(4, 6)])
-            .split(v[0]);
+        let v0_h = Layout::horizontal([Constraint::Ratio(2, 6), Constraint::Ratio(4, 6)]).split(v[0]);
 
         if self.settings_list_state.selected.is_none() {
             self.settings_list_state.select(Some(0));
@@ -609,15 +622,13 @@ impl<'a> Widget for FormItemWidget<'a> {
     where
         Self: Sized,
     {
-        let h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Fill(1),
-                Constraint::Length(1),
-                Constraint::Fill(1),
-                Constraint::Length(2),
-            ])
-            .split(area);
+        let h = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(2),
+        ])
+        .split(area);
 
         // title
         Line::from(
@@ -693,6 +704,15 @@ impl<'a> Widget for FormItemWidget<'a> {
                 let formatted = (self.form_item.formatter)(self.value);
 
                 Line::from(Span::from(formatted).blue().add_modifier(if self.is_selected {
+                    Modifier::REVERSED
+                } else {
+                    Modifier::empty()
+                }))
+            }
+            FormItemKind::Action(_) => {
+                let formatted = (self.form_item.formatter)(self.value);
+
+                Line::from(Span::from(formatted).magenta().add_modifier(if self.is_selected {
                     Modifier::REVERSED
                 } else {
                     Modifier::empty()

@@ -1,6 +1,6 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::Stylize,
     text::Span,
     widgets::{Paragraph, Widget, Wrap},
@@ -46,14 +46,12 @@ impl<'a> Widget for PlaceholderWidget<'a> {
     where
         Self: Sized,
     {
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Fill(100),
-                Constraint::Length(self.text.line_count(area.width) as u16),
-                Constraint::Fill(101),
-            ])
-            .split(area);
+        let v = Layout::vertical([
+            Constraint::Fill(100),
+            Constraint::Length(self.text.line_count(area.width) as u16),
+            Constraint::Fill(101),
+        ])
+        .split(area);
 
         self.text.render(v[1], buf);
     }

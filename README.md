@@ -73,9 +73,12 @@
 
 #### Single node expanded view
 
-- [ ] Display node detailed info
+- [x] Display node detailed info
 - [ ] Traceroute feature
 - [ ] Ignore feature
+- [ ] Add to Favorite feature
+- [ ] Position info
+- [ ] Telemetry info
 - [ ] TBD
 
 ### Settings tab

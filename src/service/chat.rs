@@ -6,11 +6,11 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 use tracing_unwrap::OptionExt;
 
-use crate::types::MessageReaction;
+use crate::types::{MessageReaction, UNKNOWN_NODE};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
     state::{State, StateAction},
-    types::{AppEvent, Channel, ChannelRole, Message, Node, Toast},
+    types::{AppEvent, Channel, ChannelRole, Message, Toast},
 };
 
 pub struct ChatService {
@@ -149,7 +149,7 @@ impl ChatService {
         match payload_variant {
             PayloadVariant::Channel(ch) => {
                 self.state_action_tx
-                    .send(StateAction::ChannelEnsure(ch.index as u32, Channel::from(&ch)))?;
+                    .send(StateAction::ChannelSet(ch.index as u32, Channel::from(&ch)))?;
             }
             PayloadVariant::Packet(packet) => match &packet.payload_variant {
                 Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {
@@ -187,13 +187,13 @@ impl ChatService {
                             (_, 0 | u32::MAX, _) => packet.channel,
                             (from, to, Some(my)) if to == my => {
                                 self.state_action_tx
-                                    .send(StateAction::ChannelEnsure(from, Channel::direct(from)))?;
+                                    .send(StateAction::ChannelSet(from, Channel::direct(from)))?;
 
                                 from
                             }
                             (from, to, Some(my)) if from == my => {
                                 self.state_action_tx
-                                    .send(StateAction::ChannelEnsure(to, Channel::direct(to)))?;
+                                    .send(StateAction::ChannelSet(to, Channel::direct(to)))?;
 
                                 to
                             }
@@ -237,8 +237,7 @@ impl ChatService {
                     PortNum::RangeTestApp => {
                         let state = &self.state_rx.borrow();
                         let text = String::from_utf8(data.payload.clone()).unwrap_or("can't decode payload".to_owned());
-                        let unknown_node = Node::unknown();
-                        let node = state.nodes.get(&packet.from).unwrap_or(&unknown_node);
+                        let node = state.nodes.get(&packet.from).unwrap_or(&UNKNOWN_NODE);
 
                         tracing::info!(
                             packet_id = packet.id,
@@ -246,9 +245,9 @@ impl ChatService {
                             node_to = packet.to,
                             channel = packet.channel,
                             "RANGE TEST from [{}] {} ({}), text: \"{}\", hops: {}, snr: {}, rssi: {}",
-                            node.short_name,
-                            node.long_name,
-                            node.hw_model,
+                            node.short_name(),
+                            node.long_name(),
+                            node.hw_model(),
                             text,
                             packet.hop_start.saturating_sub(packet.hop_limit),
                             packet.rx_snr,

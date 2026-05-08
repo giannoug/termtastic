@@ -159,7 +159,7 @@ impl SettingsService {
                             }
                             Some(admin_message::PayloadVariant::SetChannel(channel)) => {
                                 self.state_action_tx
-                                    .send(StateAction::ChannelEnsure(channel.index as u32, (&channel).into()))?;
+                                    .send(StateAction::ChannelSet(channel.index as u32, (&channel).into()))?;
                             }
                             Some(admin_message::PayloadVariant::RebootSeconds(secs)) => {
                                 self.state_action_tx.send(StateAction::Toast(Toast::warning(format!(
@@ -272,6 +272,7 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Bluetooth config not loaded"))?,
             )?,
+            FormId::DeviceAdministration => FormData::new(),
             FormId::ModuleMqtt => to_formdata(
                 state
                     .device_module_config
@@ -436,6 +437,7 @@ impl SettingsService {
                     config: config::PayloadVariant::Bluetooth(from_formdata::<BluetoothConfig>(&form_data)?),
                 })?;
             }
+            FormId::DeviceAdministration => {}
             FormId::ModuleMqtt => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
@@ -552,6 +554,7 @@ fn build_settings() -> Vec<SettingsItem> {
         SettingsItem::form("Power", FormId::DevicePower),
         SettingsItem::form("Display", FormId::DeviceDisplay),
         SettingsItem::form("Bluetooth", FormId::DeviceBluetooth),
+        SettingsItem::form("Administration", FormId::DeviceAdministration),
         // Module
         SettingsItem::group("Module"),
         SettingsItem::form("MQTT", FormId::ModuleMqtt),

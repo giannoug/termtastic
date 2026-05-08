@@ -1,6 +1,6 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Layout, Rect},
     style::Style,
     widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wrap},
 };
@@ -43,21 +43,18 @@ impl Widget for PopupConfirmWidget {
             .padding(Padding::symmetric(3, 1));
 
         let popup_block_area = popup_block.inner(popup_area);
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(paragraph_height),
-                Constraint::Length(1),
-                Constraint::Length(1),
-            ])
-            .split(popup_block_area);
+        let v = Layout::vertical([
+            Constraint::Length(paragraph_height),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .split(popup_block_area);
 
         Clear.render(popup_area, buf);
         popup_block.render(popup_area, buf);
 
         paragraph.render(v[0], buf);
 
-        HotkeysWidget::new(&vec![Hotkey::new("enter", "yes"), Hotkey::new("esc", "no")])
-            .render(v[2], buf);
+        HotkeysWidget::new(&vec![Hotkey::new("enter", "yes"), Hotkey::new("esc", "no")]).render(v[2], buf);
     }
 }

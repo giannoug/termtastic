@@ -1,7 +1,6 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
 use ratatui::style::{Color, Style, Stylize};
 use ratatui::text::{Line, Span, ToSpan};
-use ratatui::widgets::Borders;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -10,8 +9,8 @@ use ratatui::{
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 use crate::types::{MessageReaction, Node};
-use crate::ui::helpers::{default_scrollbar, ColorExt};
-use crate::ui::prelude::{Constraint, Direction, Layout, PlaceholderWidget};
+use crate::ui::helpers::default_scrollbar;
+use crate::ui::prelude::{Borders, Constraint, Layout, PlaceholderWidget};
 
 pub struct ReactionsViewerState {
     list_state: ListState,
@@ -70,7 +69,8 @@ impl<'a> StatefulWidget for ReactionsViewerWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let block = Block::bordered()
             .border_type(BorderType::Thick)
-            .padding(Padding::right(1));
+            .padding(Padding::new(0, 1, 1, 0))
+            .title(format!(" reactions: {} ", self.reactions.len()));
 
         let block_area = block.inner(area);
         block.render(area, buf);
@@ -92,15 +92,19 @@ impl<'a> StatefulWidget for ReactionsViewerWidget<'a> {
             state.list_state.select(Some(0));
         }
 
+        const ITEM_HEIGHT: usize = 3;
+        let is_scrollable = self.reactions.len() * ITEM_HEIGHT > block_area.height as usize;
+
         let list_builder = ListBuilder::new(|context| {
             let reaction = &self.reactions[context.index];
 
             let item = ReactionWidget {
                 item: reaction,
                 is_selected: context.is_selected,
+                is_scrollable,
             };
 
-            (item, 2)
+            (item, ITEM_HEIGHT as u16)
         });
 
         let list = ListView::new(list_builder, self.reactions.len())
@@ -114,6 +118,7 @@ impl<'a> StatefulWidget for ReactionsViewerWidget<'a> {
 struct ReactionWidget<'a> {
     pub item: &'a ReactionsViewerItem<'a>,
     pub is_selected: bool,
+    pub is_scrollable: bool,
 }
 
 impl<'a> Widget for ReactionWidget<'a> {
@@ -121,61 +126,38 @@ impl<'a> Widget for ReactionWidget<'a> {
     where
         Self: Sized,
     {
+        let area = Rect::new(area.x, area.y, area.width, area.height - 1);
+
         let block = Block::new()
-            .padding(Padding::new(1, 3, 0, 0))
+            .padding(Padding::new(1, if self.is_scrollable { 3 } else { 0 }, 0, 0))
             .borders(Borders::LEFT)
-            .border_type(BorderType::Thick)
+            .border_type(BorderType::QuadrantInside)
             .border_style(Style::new().fg(if self.is_selected { Color::Yellow } else { Color::Black }));
 
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(1), Constraint::Length(1)])
-            .split(block_area);
-
-        let v0_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(2)])
-            .split(v[0]);
-
-        let v1_h = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(5)])
-            .split(v[1]);
+        let v = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(block_area);
+        let v0_h = Layout::horizontal([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(2)]).split(v[0]);
+        let v1_h = Layout::horizontal([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(5)]).split(v[1]);
 
         // first line
         Line::from(vec![
-            self.item.node.to_span(),
+            self.item.node.short_name_to_span(),
             " ".to_span(),
-            self.item.node.long_name.to_span(),
+            self.item.node.long_name().to_span(),
         ])
         .render(v0_h[0], buf);
 
         Span::from(&self.item.reaction.emoji).render(v0_h[2], buf);
 
         // second line
-        match (self.item.node.my, self.item.reaction.hops) {
-            (true, _) => {
-                Span::from("my").blue().render(v1_h[0], buf);
-            }
-            (false, 0) => {
-                Line::from(vec![
-                    Span::from(format!("* {}dB", self.item.reaction.snr)).fg(self.item.reaction.snr.snr_to_color()),
-                    Span::from("  ").dark_gray(),
-                    Span::from(format!("RSSI {}dBm", self.item.reaction.rssi)).dark_gray(),
-                ])
-                .dark_gray()
-                .render(v1_h[0], buf);
-            }
-            (false, 1) => {
-                Span::from("1 hop").render(v1_h[0], buf);
-            }
-            (false, hops) => {
-                Span::from(format!("{} hops", hops)).render(v1_h[0], buf);
-            }
-        }
+        Line::from(if self.item.node.my {
+            vec!["my node".to_span().dark_gray()]
+        } else {
+            self.item.reaction.hops_to_spans()
+        })
+        .render(v1_h[0], buf);
 
         Span::from(
             self.item
