@@ -33,7 +33,7 @@ impl ConfigService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event).await?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
                 _ = self.state_rx.changed() => self.handle_state_change()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -45,15 +45,18 @@ impl ConfigService {
         Ok(())
     }
 
-    async fn handle_app_event(&mut self, event: AppEvent) -> anyhow::Result<()> {
+    async fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            AppEvent::InitializationRequested => {
+            Ok(AppEvent::InitializationRequested) => {
                 let app_config: AppConfig = confy::load(crate::APP_NAME, "app")?;
 
                 self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
 
                 self.state_action_tx
                     .send(StateAction::Toast(Toast::normal("config loaded")))?;
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }

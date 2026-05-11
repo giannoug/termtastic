@@ -58,8 +58,8 @@ impl NodesService {
 
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event)?,
-                Ok(event) = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
+                event = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
                 _ = online_nodes_interval.tick() => self.update_online_nodes()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -71,34 +71,40 @@ impl NodesService {
         Ok(())
     }
 
-    fn handle_app_event(&self, event: AppEvent) -> anyhow::Result<()> {
+    fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         let snapshot = &self.state_rx.borrow();
 
         match event {
-            AppEvent::DirectChatRequested(node_key) => {
-                self.state_action_tx.send(StateAction::DirectChatStart(node_key))?;
-            }
-            AppEvent::NodesSortByCyclePressed => {
-                self.state_action_tx
-                    .send(StateAction::NodesSortBySet(snapshot.state.nodes_sort_by.next()))?;
-            }
-            AppEvent::NodesFilterChanged(filter) => {
-                self.state_action_tx.send(StateAction::NodesFilterSet(filter))?;
-            }
-            AppEvent::NodeInfoBroadcastRequested => {
-                let my_node = snapshot.state.get_my_node().expect("should be Some");
+            Ok(app_event) => match app_event {
+                AppEvent::DirectChatRequested(node_key) => {
+                    self.state_action_tx.send(StateAction::DirectChatStart(node_key))?;
+                }
+                AppEvent::NodesSortByCyclePressed => {
+                    self.state_action_tx
+                        .send(StateAction::NodesSortBySet(snapshot.state.nodes_sort_by.next()))?;
+                }
+                AppEvent::NodesFilterChanged(filter) => {
+                    self.state_action_tx.send(StateAction::NodesFilterSet(filter))?;
+                }
+                AppEvent::NodeInfoBroadcastRequested => {
+                    let my_node = snapshot.state.get_my_node().expect("should be Some");
 
-                self.meshtastic_command_tx
-                    .send(CommandToMeshtastic::BroadcastNodeInfo {
-                        channel_id: 0,
-                        user: my_node.try_into()?,
-                    })?;
-            }
-            AppEvent::NodeDeleteRequested(node_num) => {
-                let my_node_num = snapshot.state.my_node_key.expect("should be Some");
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::BroadcastNodeInfo {
+                            channel_id: 0,
+                            user: my_node.try_into()?,
+                        })?;
+                }
+                AppEvent::NodeDeleteRequested(node_num) => {
+                    let my_node_num = snapshot.state.my_node_key.expect("should be Some");
 
-                self.meshtastic_command_tx
-                    .send(CommandToMeshtastic::DeleteNode { node_num, my_node_num })?;
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::DeleteNode { node_num, my_node_num })?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }
@@ -106,26 +112,35 @@ impl NodesService {
         Ok(())
     }
 
-    fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
+    fn handle_meshtastic_event(
+        &mut self,
+        event: Result<MeshtasticEvent, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
         match event {
-            MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
-            MeshtasticEvent::NodeInfoBroadcastSent => self
-                .state_action_tx
-                .send(StateAction::Toast(Toast::success("NodeInfo broadcast sent")))?,
-            MeshtasticEvent::NodeInfoBroadcastFailed(e) => {
-                tracing::error!("NodeInfo broadcast failed: {:?}", e);
+            Ok(meshtastic_event) => match meshtastic_event {
+                MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
+                MeshtasticEvent::NodeInfoBroadcastSent => self
+                    .state_action_tx
+                    .send(StateAction::Toast(Toast::success("NodeInfo broadcast sent")))?,
+                MeshtasticEvent::NodeInfoBroadcastFailed(e) => {
+                    tracing::error!("NodeInfo broadcast failed: {:?}", e);
 
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::error("NodeInfo broadcast failed")))?;
-            }
-            MeshtasticEvent::NodeRemoveAccepted => self
-                .state_action_tx
-                .send(StateAction::Toast(Toast::success("node removed")))?,
-            MeshtasticEvent::NodeRemoveFailed(e) => {
-                tracing::error!("node remove failed: {:?}", e);
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("NodeInfo broadcast failed")))?;
+                }
+                MeshtasticEvent::NodeRemoveAccepted => self
+                    .state_action_tx
+                    .send(StateAction::Toast(Toast::success("node removed")))?,
+                MeshtasticEvent::NodeRemoveFailed(e) => {
+                    tracing::error!("node remove failed: {:?}", e);
 
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::error("node remove failed")))?;
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("node remove failed")))?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }

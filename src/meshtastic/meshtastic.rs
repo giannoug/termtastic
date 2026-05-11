@@ -43,7 +43,7 @@ impl MeshtasticService {
         broadcast::Receiver<MeshtasticEvent>,
     ) {
         let (command_tx, command_rx) = mpsc::unbounded_channel::<CommandToMeshtastic>();
-        let (event_tx, event_rx) = broadcast::channel::<MeshtasticEvent>(100);
+        let (event_tx, event_rx) = broadcast::channel::<MeshtasticEvent>(1024);
 
         (
             Self {
@@ -61,7 +61,7 @@ impl MeshtasticService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(event) = self.event_rx.recv() => self.handle_meshtastic_event(event).await?,
+                event = self.event_rx.recv() => self.handle_meshtastic_event(event).await?,
                 Some(cmd) = self.command_rx.recv() => self.handle_command(cmd, subsys).await?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -76,14 +76,20 @@ impl MeshtasticService {
         Ok(())
     }
 
-    async fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
+    async fn handle_meshtastic_event(
+        &mut self,
+        event: Result<MeshtasticEvent, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
         match event {
-            MeshtasticEvent::RadioStopped => {
+            Ok(MeshtasticEvent::RadioStopped) => {
                 self.disconnect().await?;
 
                 self.event_tx.send(MeshtasticEvent::ConnectionError(
                     "connection channel was closed unexpectedly".to_owned(),
                 ))?;
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }

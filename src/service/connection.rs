@@ -50,8 +50,8 @@ impl ConnectionService {
 
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event).await?,
-                Ok(event) = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
+                event = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
                 _ = connection_check_interval.tick() => self.check_connection()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -63,70 +63,76 @@ impl ConnectionService {
         Ok(())
     }
 
-    async fn handle_app_event(&mut self, event: AppEvent) -> anyhow::Result<()> {
+    async fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            AppEvent::InitializationRequested => {
-                self.app_event_tx.send(AppEvent::DeviceRediscoverRequested)?;
-            }
-            AppEvent::DeviceSelected(hardware) => {
-                self.state_action_tx.send(StateAction::DeviceActiveSet(hardware))?;
-            }
-            AppEvent::DisconnectionRequested => {
-                self.meshtastic_command_tx.send(CommandToMeshtastic::Disconnect)?;
-            }
-            AppEvent::DeviceRediscoverRequested => {
-                self.state_action_tx.send(StateAction::DeviceDiscoveringStart)?;
-
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("discovering...")))?;
-
-                match discover_devices().await {
-                    Ok(devices) => {
-                        let devices_count = devices.len();
-
-                        self.state_action_tx.send(StateAction::DeviceDiscoveringDone(devices))?;
-
-                        self.state_action_tx.send(StateAction::Toast(Toast::normal(format!(
-                            "devices discovered: {}",
-                            devices_count
-                        ))))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("device discovering failed: {}", e);
-
-                        self.state_action_tx
-                            .send(StateAction::DeviceDiscoveringFail(e.to_string()))?;
-
-                        self.state_action_tx
-                            .send(StateAction::Toast(Toast::error("discovery failed")))?;
-                    }
-                };
-            }
-            AppEvent::DeviceRebootRequested => {
-                let snapshot = &self.state_rx.borrow();
-
-                self.meshtastic_command_tx.send(CommandToMeshtastic::Reboot {
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
-                    secs: 3,
-                })?;
-            }
-            AppEvent::DeviceShutdownRequested => {
-                let snapshot = &self.state_rx.borrow();
-
-                self.meshtastic_command_tx.send(CommandToMeshtastic::Shutdown {
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
-                    secs: 3,
-                })?;
-            }
-            AppEvent::TcpDeviceSubmitted(mut hostaddr) => {
-                if !hostaddr.has_port() {
-                    hostaddr = hostaddr.with_port(4403);
+            Ok(app_event) => match app_event {
+                AppEvent::InitializationRequested => {
+                    self.app_event_tx.send(AppEvent::DeviceRediscoverRequested)?;
                 }
+                AppEvent::DeviceSelected(hardware) => {
+                    self.state_action_tx.send(StateAction::DeviceActiveSet(hardware))?;
+                }
+                AppEvent::DisconnectionRequested => {
+                    self.meshtastic_command_tx.send(CommandToMeshtastic::Disconnect)?;
+                }
+                AppEvent::DeviceRediscoverRequested => {
+                    self.state_action_tx.send(StateAction::DeviceDiscoveringStart)?;
 
-                self.state_action_tx.send(StateAction::DevicesAddTcp(hostaddr))?;
-            }
-            AppEvent::TcpDeviceRemoved(hostaddr) => {
-                self.state_action_tx.send(StateAction::DevicesRemoveTcp(hostaddr))?;
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("discovering...")))?;
+
+                    match discover_devices().await {
+                        Ok(devices) => {
+                            let devices_count = devices.len();
+
+                            self.state_action_tx.send(StateAction::DeviceDiscoveringDone(devices))?;
+
+                            self.state_action_tx.send(StateAction::Toast(Toast::normal(format!(
+                                "devices discovered: {}",
+                                devices_count
+                            ))))?;
+                        }
+                        Err(e) => {
+                            tracing::error!("device discovering failed: {}", e);
+
+                            self.state_action_tx
+                                .send(StateAction::DeviceDiscoveringFail(e.to_string()))?;
+
+                            self.state_action_tx
+                                .send(StateAction::Toast(Toast::error("discovery failed")))?;
+                        }
+                    };
+                }
+                AppEvent::DeviceRebootRequested => {
+                    let snapshot = &self.state_rx.borrow();
+
+                    self.meshtastic_command_tx.send(CommandToMeshtastic::Reboot {
+                        my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                        secs: 3,
+                    })?;
+                }
+                AppEvent::DeviceShutdownRequested => {
+                    let snapshot = &self.state_rx.borrow();
+
+                    self.meshtastic_command_tx.send(CommandToMeshtastic::Shutdown {
+                        my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                        secs: 3,
+                    })?;
+                }
+                AppEvent::TcpDeviceSubmitted(mut hostaddr) => {
+                    if !hostaddr.has_port() {
+                        hostaddr = hostaddr.with_port(4403);
+                    }
+
+                    self.state_action_tx.send(StateAction::DevicesAddTcp(hostaddr))?;
+                }
+                AppEvent::TcpDeviceRemoved(hostaddr) => {
+                    self.state_action_tx.send(StateAction::DevicesRemoveTcp(hostaddr))?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }
@@ -134,51 +140,60 @@ impl ConnectionService {
         Ok(())
     }
 
-    fn handle_meshtastic_event(&self, event: MeshtasticEvent) -> anyhow::Result<()> {
+    fn handle_meshtastic_event(
+        &self,
+        event: Result<MeshtasticEvent, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
         match event {
-            MeshtasticEvent::Connected => {
-                tracing::info!("successfully connected");
+            Ok(meshtastic_event) => match meshtastic_event {
+                MeshtasticEvent::Connected => {
+                    tracing::info!("successfully connected");
 
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("loading data...")))?;
-            }
-            MeshtasticEvent::ConnectionError(e) => {
-                self.state_action_tx.send(StateAction::ConnectionFail(e))?;
-            }
-            MeshtasticEvent::Disconnected => {
-                tracing::info!("disconnected");
-
-                self.state_action_tx.send(StateAction::ConnectionStop)?;
-
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("disconnected")))?;
-            }
-            MeshtasticEvent::IncomingPacket(packet) => {
-                match packet {
-                    PayloadVariant::ConfigCompleteId(_) => {
-                        self.state_action_tx.send(StateAction::ConnectionSuccess)?;
-
-                        self.state_action_tx
-                            .send(StateAction::Toast(Toast::success("connected")))?;
-                    }
-                    PayloadVariant::Rebooted(true) => {
-                        self.state_action_tx
-                            .send(StateAction::Toast(Toast::success("device has been rebooted")))?;
-                    }
-                    _ => {}
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("loading data...")))?;
                 }
-
-                self.state_action_tx.send(StateAction::RxTrigger)?;
-
-                if let PayloadVariant::Packet(p) = packet {
-                    let snapshot = &self.state_rx.borrow();
-                    let from = snapshot.state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
-                    let to = snapshot.state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
-
-                    tracing::debug!("PACKET from=\"{:?}\" to=\"{:?}\": {:?}", from, to, p);
-                } else {
-                    tracing::debug!("PACKET {:?}", packet);
+                MeshtasticEvent::ConnectionError(e) => {
+                    self.state_action_tx.send(StateAction::ConnectionFail(e))?;
                 }
+                MeshtasticEvent::Disconnected => {
+                    tracing::info!("disconnected");
+
+                    self.state_action_tx.send(StateAction::ConnectionStop)?;
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("disconnected")))?;
+                }
+                MeshtasticEvent::IncomingPacket(packet) => {
+                    match packet {
+                        PayloadVariant::ConfigCompleteId(_) => {
+                            self.state_action_tx.send(StateAction::ConnectionSuccess)?;
+
+                            self.state_action_tx
+                                .send(StateAction::Toast(Toast::success("connected")))?;
+                        }
+                        PayloadVariant::Rebooted(true) => {
+                            self.state_action_tx
+                                .send(StateAction::Toast(Toast::success("device has been rebooted")))?;
+                        }
+                        _ => {}
+                    }
+
+                    self.state_action_tx.send(StateAction::RxTrigger)?;
+
+                    if let PayloadVariant::Packet(p) = packet {
+                        let snapshot = &self.state_rx.borrow();
+                        let from = snapshot.state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
+                        let to = snapshot.state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
+
+                        tracing::debug!("PACKET from=\"{:?}\" to=\"{:?}\": {:?}", from, to, p);
+                    } else {
+                        tracing::debug!("PACKET {:?}", packet);
+                    }
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }

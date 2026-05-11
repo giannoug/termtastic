@@ -42,8 +42,8 @@ impl ChatService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event)?,
-                Ok(event) = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
+                event = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     break;
@@ -54,91 +54,108 @@ impl ChatService {
         Ok(())
     }
 
-    fn handle_app_event(&self, event: AppEvent) -> anyhow::Result<()> {
+    fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         let snapshot = &self.state_rx.borrow();
 
         match event {
-            AppEvent::ChannelSelected(number) => {
-                self.state_action_tx.send(StateAction::ChannelActiveSet(number))?;
-            }
-            AppEvent::SwitchChannelRequested => {
-                self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
-            }
-            AppEvent::ChatMessageSubmitted { text, reply_message_id } => match snapshot.state.get_active_channel() {
-                Some(Channel {
-                    key,
-                    role: ChannelRole::Primary | ChannelRole::Secondary,
-                    ..
-                }) => {
-                    self.meshtastic_command_tx
-                        .send(CommandToMeshtastic::SendBroadcastTextMessage {
-                            my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                            channel_id: *key,
-                            reply_message_id,
-                            text: TextMessage::Text(text),
-                        })?;
+            Ok(app_event) => match app_event {
+                AppEvent::ChannelSelected(number) => {
+                    self.state_action_tx.send(StateAction::ChannelActiveSet(number))?;
                 }
-                Some(Channel {
-                    key,
-                    role: ChannelRole::Direct,
-                    ..
-                }) => {
-                    self.meshtastic_command_tx
-                        .send(CommandToMeshtastic::SendDirectTextMessage {
-                            my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                            node_num: *key,
-                            reply_message_id,
-                            text: TextMessage::Text(text),
-                        })?;
+                AppEvent::SwitchChannelRequested => {
+                    self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
                 }
+                AppEvent::ChatMessageSubmitted { text, reply_message_id } => {
+                    match snapshot.state.get_active_channel() {
+                        Some(Channel {
+                            key,
+                            role: ChannelRole::Primary | ChannelRole::Secondary,
+                            ..
+                        }) => {
+                            self.meshtastic_command_tx
+                                .send(CommandToMeshtastic::SendBroadcastTextMessage {
+                                    my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                    channel_id: *key,
+                                    reply_message_id,
+                                    text: TextMessage::Text(text),
+                                })?;
+                        }
+                        Some(Channel {
+                            key,
+                            role: ChannelRole::Direct,
+                            ..
+                        }) => {
+                            self.meshtastic_command_tx
+                                .send(CommandToMeshtastic::SendDirectTextMessage {
+                                    my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                    node_num: *key,
+                                    reply_message_id,
+                                    text: TextMessage::Text(text),
+                                })?;
+                        }
+                        _ => {}
+                    }
+                }
+                AppEvent::ChatReactionSubmitted {
+                    emoji,
+                    reply_message_id,
+                } => match snapshot.state.get_active_channel() {
+                    Some(Channel {
+                        key,
+                        role: ChannelRole::Primary | ChannelRole::Secondary,
+                        ..
+                    }) => {
+                        self.meshtastic_command_tx
+                            .send(CommandToMeshtastic::SendBroadcastTextMessage {
+                                my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                channel_id: *key,
+                                reply_message_id,
+                                text: TextMessage::Emoji(emoji),
+                            })?;
+                    }
+                    Some(Channel {
+                        key,
+                        role: ChannelRole::Direct,
+                        ..
+                    }) => {
+                        self.meshtastic_command_tx
+                            .send(CommandToMeshtastic::SendDirectTextMessage {
+                                my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                node_num: *key,
+                                reply_message_id,
+                                text: TextMessage::Emoji(emoji),
+                            })?;
+                    }
+                    _ => {}
+                },
                 _ => {}
             },
-            AppEvent::ChatReactionSubmitted {
-                emoji,
-                reply_message_id,
-            } => match snapshot.state.get_active_channel() {
-                Some(Channel {
-                    key,
-                    role: ChannelRole::Primary | ChannelRole::Secondary,
-                    ..
-                }) => {
-                    self.meshtastic_command_tx
-                        .send(CommandToMeshtastic::SendBroadcastTextMessage {
-                            my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                            channel_id: *key,
-                            reply_message_id,
-                            text: TextMessage::Emoji(emoji),
-                        })?;
-                }
-                Some(Channel {
-                    key,
-                    role: ChannelRole::Direct,
-                    ..
-                }) => {
-                    self.meshtastic_command_tx
-                        .send(CommandToMeshtastic::SendDirectTextMessage {
-                            my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                            node_num: *key,
-                            reply_message_id,
-                            text: TextMessage::Emoji(emoji),
-                        })?;
-                }
-                _ => {}
-            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
+            }
             _ => {}
         }
 
         Ok(())
     }
 
-    fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
+    fn handle_meshtastic_event(
+        &mut self,
+        event: Result<MeshtasticEvent, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
         match event {
-            MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
-            MeshtasticEvent::MessageRejected(e) => {
-                tracing::error!("message rejected: {}", e);
+            Ok(meshtastic_event) => match meshtastic_event {
+                MeshtasticEvent::IncomingPacket(packet) => self.handle_meshtastic_packet(packet)?,
+                MeshtasticEvent::MessageRejected(e) => {
+                    tracing::error!("message rejected: {}", e);
 
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::error("message rejected by node")))?;
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("message rejected by node")))?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }

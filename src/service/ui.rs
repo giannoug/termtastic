@@ -2,13 +2,10 @@ use arboard::Clipboard;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::state::StateAction;
 use crate::state::StateSnapshot;
 use crate::types::Toast;
 use crate::ui::prelude::AppEvent;
-use crate::{
-    meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
-    state::StateAction,
-};
 
 #[allow(dead_code)]
 pub struct UiService {
@@ -16,8 +13,6 @@ pub struct UiService {
     app_event_rx: broadcast::Receiver<AppEvent>,
     state_rx: watch::Receiver<StateSnapshot>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
-    meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
-    meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
 }
 
 impl UiService {
@@ -26,24 +21,19 @@ impl UiService {
         app_event_rx: broadcast::Receiver<AppEvent>,
         state_rx: watch::Receiver<StateSnapshot>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
-        meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
-        meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
     ) -> Self {
         Self {
             app_event_tx,
             app_event_rx,
             state_rx,
             state_action_tx,
-            meshtastic_command_tx,
-            meshtastic_event_rx,
         }
     }
 
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event)?,
-                Ok(event) = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     break;
@@ -54,34 +44,32 @@ impl UiService {
         Ok(())
     }
 
-    fn handle_app_event(&mut self, event: AppEvent) -> anyhow::Result<()> {
+    fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            AppEvent::InitializationRequested | AppEvent::SplashLogoRequested => {
-                self.state_action_tx.send(StateAction::SplashLogo)?;
-            }
-            AppEvent::NextTabRequested => {
-                self.state_action_tx.send(StateAction::TabSwitchToNext)?;
-            }
-            AppEvent::PreviousTabRequested => {
-                self.state_action_tx.send(StateAction::TabSwitchToPrevious)?;
-            }
-            AppEvent::CopyToClipboardRequested(text) => match copy_to_clipboard(text) {
-                Ok(_) => self.state_action_tx.send(StateAction::Toast(Toast::normal("copied")))?,
-                Err(e) => {
-                    self.state_action_tx
-                        .send(StateAction::Toast(Toast::error("copy failed")))?;
-
-                    tracing::error!("copy failed: {:?}", e);
+            Ok(app_event) => match app_event {
+                AppEvent::InitializationRequested | AppEvent::SplashLogoRequested => {
+                    self.state_action_tx.send(StateAction::SplashLogo)?;
                 }
+                AppEvent::NextTabRequested => {
+                    self.state_action_tx.send(StateAction::TabSwitchToNext)?;
+                }
+                AppEvent::PreviousTabRequested => {
+                    self.state_action_tx.send(StateAction::TabSwitchToPrevious)?;
+                }
+                AppEvent::CopyToClipboardRequested(text) => match copy_to_clipboard(text) {
+                    Ok(_) => self.state_action_tx.send(StateAction::Toast(Toast::normal("copied")))?,
+                    Err(e) => {
+                        self.state_action_tx
+                            .send(StateAction::Toast(Toast::error("copy failed")))?;
+
+                        tracing::error!("copy failed: {:?}", e);
+                    }
+                },
+                _ => {}
             },
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn handle_meshtastic_event(&self, event: MeshtasticEvent) -> anyhow::Result<()> {
-        match event {
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
+            }
             _ => {}
         }
 

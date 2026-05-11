@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use tokio::sync::broadcast;
 use tokio_graceful_shutdown::{SubsystemBuilder, SubsystemHandle, Toplevel};
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_unwrap::ResultExt;
 
 use crate::{
@@ -46,7 +46,7 @@ async fn main() {
     tracing::info!("application started");
 
     let (meshtastic_service, meshtastic_command_tx, meshtastic_event_rx) = MeshtasticService::new();
-    let (event_tx, event_rx) = broadcast::channel::<AppEvent>(100);
+    let (event_tx, event_rx) = broadcast::channel::<AppEvent>(1024);
 
     let config_service = ConfigService::new(event_rx.resubscribe(), state_rx.clone(), state_action_tx.clone());
 
@@ -55,8 +55,6 @@ async fn main() {
         event_rx.resubscribe(),
         state_rx.clone(),
         state_action_tx.clone(),
-        meshtastic_command_tx.clone(),
-        meshtastic_event_rx.resubscribe(),
     );
 
     let nodes_service = NodesService::new(

@@ -55,46 +55,14 @@ impl SettingsService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(event) = self.app_event_rx.recv() => self.handle_app_event(event).await?,
                 Ok(_) = self.state_rx.changed() => self.handle_state_change()?,
-                Ok(event) = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
+                event = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     break;
                 }
             }
-        }
-
-        Ok(())
-    }
-
-    async fn handle_app_event(&self, event: AppEvent) -> anyhow::Result<()> {
-        match event {
-            AppEvent::SettingsFormSelected(id) => {
-                self.start_config_loading(&id)?;
-            }
-            AppEvent::SettingsFormCancelRequested => {
-                self.state_action_tx.send(StateAction::SettingsFormClose)?;
-            }
-            AppEvent::SettingsFormResetRequested => {
-                self.state_action_tx.send(StateAction::SettingsFormReset)?;
-
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("the data was reset")))?;
-            }
-            AppEvent::SettingsFormSaveRequested(form_id) => {
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("saving...")))?;
-
-                self.save_config(&form_id)?;
-            }
-            AppEvent::SettingsFormItemSubmitted(form_item, value) => {
-                self.state_action_tx.send(StateAction::SettingsFormValueSet {
-                    key: form_item.key.clone(),
-                    value,
-                })?;
-            }
-            _ => {}
         }
 
         Ok(())
@@ -117,33 +85,80 @@ impl SettingsService {
         Ok(())
     }
 
-    fn handle_meshtastic_event(&mut self, event: MeshtasticEvent) -> anyhow::Result<()> {
+    async fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            MeshtasticEvent::IncomingPacket(packet) => {
-                self.handle_meshtastic_packet(packet)?;
+            Ok(app_event) => match app_event {
+                AppEvent::SettingsFormSelected(id) => {
+                    self.start_config_loading(&id)?;
+                }
+                AppEvent::SettingsFormCancelRequested => {
+                    self.state_action_tx.send(StateAction::SettingsFormClose)?;
+                }
+                AppEvent::SettingsFormResetRequested => {
+                    self.state_action_tx.send(StateAction::SettingsFormReset)?;
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("the data was reset")))?;
+                }
+                AppEvent::SettingsFormSaveRequested(form_id) => {
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("saving...")))?;
+
+                    self.save_config(&form_id)?;
+                }
+                AppEvent::SettingsFormItemSubmitted(form_item, value) => {
+                    self.state_action_tx.send(StateAction::SettingsFormValueSet {
+                        key: form_item.key.clone(),
+                        value,
+                    })?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
-            MeshtasticEvent::ConfigSaveFailed(form_id, _)
-            | MeshtasticEvent::ChannelsSaveFailed(form_id, _)
-            | MeshtasticEvent::UserSaveFailed(form_id, _) => {
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::error("save failed (see logs)")))?;
+            _ => {}
+        }
 
-                self.state_action_tx
-                    .send(StateAction::SettingsFormSavingFailed { id: form_id })?;
-            }
-            MeshtasticEvent::ConfigSaved(form_id) | MeshtasticEvent::UserSaved(form_id) => {
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::success("setting saved")))?;
+        Ok(())
+    }
 
-                self.start_config_loading(&form_id)?;
-            }
-            MeshtasticEvent::ChannelsSaved(form_id) => {
-                self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
+    fn handle_meshtastic_event(
+        &mut self,
+        event: Result<MeshtasticEvent, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
+        match event {
+            Ok(meshtastic_event) => match meshtastic_event {
+                MeshtasticEvent::IncomingPacket(packet) => {
+                    self.handle_meshtastic_packet(packet)?;
+                }
+                MeshtasticEvent::ConfigSaveFailed(form_id, _)
+                | MeshtasticEvent::ChannelsSaveFailed(form_id, _)
+                | MeshtasticEvent::UserSaveFailed(form_id, _) => {
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("save failed (see logs)")))?;
 
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::success("channels saved")))?;
+                    self.state_action_tx
+                        .send(StateAction::SettingsFormSavingFailed { id: form_id })?;
+                }
+                MeshtasticEvent::ConfigSaved(form_id) | MeshtasticEvent::UserSaved(form_id) => {
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::success("setting saved")))?;
 
-                self.start_config_loading(&form_id)?;
+                    self.start_config_loading(&form_id)?;
+                }
+                MeshtasticEvent::ChannelsSaved(form_id) => {
+                    self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::success("channels saved")))?;
+
+                    self.start_config_loading(&form_id)?;
+                }
+                _ => {}
+            },
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
             }
             _ => {}
         }
