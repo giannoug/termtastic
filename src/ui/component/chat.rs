@@ -22,7 +22,7 @@ impl<'a> Component for Chat<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        if state.active_channel_key.is_some() {
+        if state.get_active_channel().is_some() {
             self.messenger_component.handle_event(state, event, emit)
         } else {
             self.channels_component.handle_event(state, event, emit)
@@ -30,7 +30,7 @@ impl<'a> Component for Chat<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        if state.active_channel_key.is_some() {
+        if state.get_active_channel().is_some() {
             self.messenger_component.render(state, frame, area);
         } else {
             self.channels_component.render(state, frame, area);
