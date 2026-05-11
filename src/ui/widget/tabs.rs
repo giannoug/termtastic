@@ -1,0 +1,42 @@
+use crate::ui::prelude::{Buffer, Rect};
+use itertools::Itertools;
+use ratatui::prelude::Widget;
+use ratatui::style::Stylize;
+use ratatui::text::{Line, Span};
+
+pub struct TabsWidget {
+    tabs: Vec<(usize, String)>,
+    active_key: usize,
+}
+
+impl TabsWidget {
+    pub fn new(tabs: Vec<(usize, String)>, active: usize) -> Self {
+        Self {
+            tabs,
+            active_key: active,
+        }
+    }
+}
+
+#[allow(unstable_name_collisions)]
+impl Widget for TabsWidget {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let spans: Vec<Span> = self
+            .tabs
+            .iter()
+            .map(|(key, title)| {
+                if key == &self.active_key {
+                    Span::from(format!(" {} ", title)).black().on_yellow()
+                } else {
+                    Span::from(title)
+                }
+            })
+            .intersperse(Span::from("  "))
+            .collect();
+
+        Line::from(spans).render(area, buf);
+    }
+}

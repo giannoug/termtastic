@@ -9,7 +9,7 @@ use ratatui::{
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 use crate::types::{MessageReaction, Node};
-use crate::ui::helpers::default_scrollbar;
+use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span};
 use crate::ui::prelude::{Borders, Constraint, Layout, PlaceholderWidget};
 
 pub struct ReactionsViewerState {
@@ -23,28 +23,34 @@ impl ReactionsViewerState {
         }
     }
 
-    pub fn handle_event(&mut self, event: Event) {
+    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
                 KeyCode::Up => {
                     self.list_state.previous();
+                    return Ok(true);
                 }
                 KeyCode::Down => {
                     self.list_state.next();
+                    return Ok(true);
                 }
                 _ => {}
             },
             Event::Mouse(MouseEvent { kind, .. }) => match kind {
                 MouseEventKind::ScrollUp => {
                     self.list_state.previous();
+                    return Ok(true);
                 }
                 MouseEventKind::ScrollDown => {
                     self.list_state.next();
+                    return Ok(true);
                 }
                 _ => {}
             },
             _ => {}
         }
+
+        Ok(false)
     }
 }
 
@@ -143,7 +149,7 @@ impl<'a> Widget for ReactionWidget<'a> {
 
         // first line
         Line::from(vec![
-            self.item.node.short_name_to_span(),
+            short_name_to_span(self.item.node),
             " ".to_span(),
             self.item.node.long_name().to_span(),
         ])
@@ -153,9 +159,9 @@ impl<'a> Widget for ReactionWidget<'a> {
 
         // second line
         Line::from(if self.item.node.my {
-            vec!["my node".to_span().dark_gray()]
+            vec![routing_error_to_span(self.item.reaction.routing_error)]
         } else {
-            self.item.reaction.hops_to_spans()
+            hops_to_spans(self.item.reaction)
         })
         .render(v1_h[0], buf);
 

@@ -42,15 +42,23 @@ impl<'a> PopupDropdownState<'a> {
         None
     }
 
-    pub fn handle_event(&mut self, event: Event) {
+    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => self.list_state.previous(),
-                KeyCode::Down => self.list_state.next(),
+                KeyCode::Up => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
                 _ => {}
             },
             _ => {}
         }
+
+        Ok(false)
     }
 }
 

@@ -2,6 +2,7 @@ use std::{collections::VecDeque, ops::Index};
 
 use crate::ui::{helpers::default_scrollbar, prelude::*};
 use chrono::Local;
+use meshtastic::protobufs::config::lo_ra_config::ModemPreset;
 
 pub struct Channels {
     list_state: ListState,
@@ -12,16 +13,7 @@ impl Channels {
     pub fn new() -> Self {
         Self {
             list_state: ListState::default(),
-            hotkeys: vec![
-                Hotkey {
-                    key: "↑↓".to_string(),
-                    label: "scroll".to_string(),
-                },
-                Hotkey {
-                    key: "enter".to_string(),
-                    label: "open".to_string(),
-                },
-            ],
+            hotkeys: vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("enter", "open")],
         }
     }
 }
@@ -35,8 +27,14 @@ impl<'a> Component for Channels {
     ) -> anyhow::Result<bool> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Up => self.list_state.previous(),
-                KeyCode::Down => self.list_state.next(),
+                KeyCode::Up => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
                 KeyCode::Enter => {
                     if let Some(i) = self.list_state.selected {
                         let channel = state
@@ -48,18 +46,29 @@ impl<'a> Component for Channels {
 
                         emit(AppEvent::ChannelSelected(channel.key))?;
                     }
+
+                    return Ok(true);
+                }
+                KeyCode::Tab | KeyCode::BackTab => {
+                    return Ok(false);
                 }
                 _ => {}
             },
             Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => self.list_state.previous(),
-                MouseEventKind::ScrollDown => self.list_state.next(),
+                MouseEventKind::ScrollUp => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
                 _ => {}
             },
             _ => {}
         }
 
-        Ok(true)
+        Ok(false)
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
@@ -79,6 +88,12 @@ impl<'a> Component for Channels {
             }
 
             let empty_messages_vec: VecDeque<Message> = VecDeque::default();
+            let radio_preset_name = state
+                .device_config
+                .lora
+                .as_ref()
+                .and_then(|lora| ModemPreset::try_from(lora.modem_preset).ok())
+                .and_then(|preset| Some(preset.as_channel_name()));
 
             let list_builder = ListBuilder::new(|context| {
                 let channel = channels.index(context.index);
@@ -89,6 +104,7 @@ impl<'a> Component for Channels {
 
                 let item = ChannelWidget {
                     channel,
+                    radio_preset_name: &radio_preset_name,
                     direct_node: if channel.role.is_direct() {
                         state.nodes.get(&channel.key)
                     } else {
@@ -117,6 +133,7 @@ impl<'a> Component for Channels {
 
 struct ChannelWidget<'a> {
     pub channel: &'a Channel,
+    pub radio_preset_name: &'a Option<String>,
     pub direct_node: Option<&'a Node>,
     pub last_message: Option<&'a Message>,
     pub last_message_node: Option<&'a Node>,
@@ -152,9 +169,9 @@ impl<'a> Widget for ChannelWidget<'a> {
 
         // first line
         let security_span = match self.channel.psk.len() {
-            0 => Span::from("non-encrypted").red(),
-            1 => Span::from("weak").yellow(),
-            _ => Span::from("encrypted").green(),
+            0 => Span::from("[non-encrypted]").red(),
+            1 => Span::from("[weak]").yellow(),
+            _ => Span::from("[encrypted]").green(),
         };
 
         let name_span = match (&self.channel.role, self.direct_node) {
@@ -163,10 +180,12 @@ impl<'a> Widget for ChannelWidget<'a> {
                 Span::from(" "),
                 Span::from(if !self.channel.name.is_empty() {
                     &self.channel.name
+                } else if let Some(preset_name) = self.radio_preset_name.as_ref() {
+                    preset_name
                 } else {
                     "Primary"
                 }),
-                Span::from(" | ").dark_gray(),
+                Span::from(" ").dark_gray(),
                 security_span,
             ],
             (ChannelRole::Secondary, _) => vec![
@@ -177,14 +196,14 @@ impl<'a> Widget for ChannelWidget<'a> {
                 } else {
                     "Secondary"
                 }),
-                Span::from(" | ").dark_gray(),
+                Span::from(" ").dark_gray(),
                 security_span,
             ],
             (ChannelRole::Direct, Some(node)) => {
-                vec![node.short_name_to_span(), Span::from(" "), Span::from(node.long_name())]
+                vec![short_name_to_span(node), Span::from(" "), Span::from(node.long_name())]
             }
             (ChannelRole::Direct, None) => {
-                vec![Span::from(format!("Direct from {}", self.channel.key))]
+                vec![Span::from(format!("!{:x}", self.channel.key))]
             }
             (ChannelRole::Disabled, _) => {
                 vec![Span::from("Disabled")]
@@ -217,14 +236,14 @@ impl<'a> Widget for ChannelWidget<'a> {
             }
             (_, None, Some(message)) => {
                 vec![
-                    UNKNOWN_NODE.short_name_to_span(),
+                    short_name_to_span(&UNKNOWN_NODE),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]
             }
             (_, Some(node), Some(message)) => {
                 vec![
-                    node.short_name_to_span(),
+                    short_name_to_span(node),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]

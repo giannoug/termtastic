@@ -1,15 +1,15 @@
 use crate::ui::{
-    component::{Chat, Connection, Header, Logs, Nodes, Settings, Tabs, TerminalSize},
+    component::{Chat, Connection, Header, Logs, Nodes, Settings, TerminalSize},
     logo::APP_LOGO_TEXT,
     prelude::*,
 };
+use strum::IntoEnumIterator;
 
 const MIN_TERMINAL_SIZE: (u16, u16) = (80, 24);
 
 pub struct Layout<'a> {
     terminal_size_component: TerminalSize,
     header_component: Header,
-    tabs_component: Tabs,
     chat_component: Chat<'a>,
     nodes_component: Nodes<'a>,
     settings_component: Settings<'a>,
@@ -23,7 +23,6 @@ impl<'a> Layout<'a> {
         Self {
             terminal_size_component: TerminalSize::new(MIN_TERMINAL_SIZE),
             header_component: Header::new(),
-            tabs_component: Tabs::new(),
             chat_component: Chat::new(),
             nodes_component: Nodes::new(),
             settings_component: Settings::new(),
@@ -41,30 +40,42 @@ impl<'a> Component for Layout<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        if let Event::Key(KeyEvent {
-            code: KeyCode::F(12),
-            kind: KeyEventKind::Press,
-            ..
-        }) = event
-        {
-            emit(AppEvent::SplashLogoRequested)?;
+        let is_handled = match state.active_tab {
+            Tab::Chat => self.chat_component.handle_event(state, event, emit),
+            Tab::Nodes => self.nodes_component.handle_event(state, event, emit),
+            Tab::Settings => self.settings_component.handle_event(state, event, emit),
+            Tab::Connection => self.connection_component.handle_event(state, event, emit),
+            Tab::Logs => self.logs_component.handle_event(state, event, emit),
+        }?;
+
+        if is_handled {
+            return Ok(true);
         }
 
         if self.header_component.handle_event(state, event, emit)? {
             return Ok(true);
         }
 
-        if self.tabs_component.handle_event(state, event, emit)? {
-            return Ok(true);
+        match event {
+            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                KeyCode::Tab => {
+                    emit(AppEvent::NextTabRequested)?;
+                    return Ok(true);
+                }
+                KeyCode::BackTab => {
+                    emit(AppEvent::PreviousTabRequested)?;
+                    return Ok(true);
+                }
+                KeyCode::F(12) => {
+                    emit(AppEvent::SplashLogoRequested)?;
+                    return Ok(true);
+                }
+                _ => {}
+            },
+            _ => {}
         }
 
-        match state.active_tab {
-            Tab::Chat => self.chat_component.handle_event(state, event, emit),
-            Tab::Nodes => self.nodes_component.handle_event(state, event, emit),
-            Tab::Settings => self.settings_component.handle_event(state, event, emit),
-            Tab::Connection => self.connection_component.handle_event(state, event, emit),
-            Tab::Logs => self.logs_component.handle_event(state, event, emit),
-        }
+        Ok(false)
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
@@ -73,7 +84,13 @@ impl<'a> Component for Layout<'a> {
             return;
         }
 
-        let container = Block::default().padding(Padding::symmetric(2, 1));
+        let container = Block::default().padding(Padding::new(
+            if state.ui_config.is_left_padding_hidden { 0 } else { 2 },
+            if state.ui_config.is_right_padding_hidden { 0 } else { 2 },
+            if state.ui_config.is_top_padding_hidden { 0 } else { 1 },
+            if state.ui_config.is_bottom_padding_hidden { 0 } else { 1 },
+        ));
+
         let area = container.inner(frame.area());
 
         let v = ratatui::layout::Layout::vertical([
@@ -85,7 +102,12 @@ impl<'a> Component for Layout<'a> {
         .split(area);
 
         self.header_component.render(state, frame, v[0]);
-        self.tabs_component.render(state, frame, v[1]);
+
+        TabsWidget::new(
+            Tab::iter().map(|t| (t as usize, t.to_string())).collect(),
+            state.active_tab as usize,
+        )
+        .render(v[1], frame.buffer_mut());
 
         match state.active_tab {
             Tab::Chat => self.chat_component.render(state, frame, v[3]),
@@ -102,8 +124,8 @@ impl<'a> Component for Layout<'a> {
             let logo_popup_area = Rect {
                 x: area.x + area.width / 2 - logo_width / 2,
                 y: area.y + area.height / 2 - logo_height / 2,
-                width: logo_width as u16,
-                height: logo_height as u16,
+                width: logo_width,
+                height: logo_height,
             };
 
             (&self.logo).render(logo_popup_area, frame.buffer_mut());

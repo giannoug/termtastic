@@ -1,6 +1,6 @@
 use hostaddr::HostAddr;
 
-use crate::ui::{helpers::default_scrollbar, prelude::*};
+use crate::ui::prelude::*;
 
 pub struct Connection<'a> {
     list_state: ListState,
@@ -19,54 +19,28 @@ impl<'a> Connection<'a> {
 
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if state.active_device.is_some() {
-            return vec![Hotkey {
-                key: "esc".to_string(),
-                label: "disconnect".to_string(),
-            }];
+            return vec![Hotkey::new("esc", "disconnect")];
         }
 
         if self.is_form_visible {
-            return vec![
-                Hotkey {
-                    key: "enter".to_string(),
-                    label: "submit".to_string(),
-                },
-                Hotkey {
-                    key: "esc".to_string(),
-                    label: "cancel".to_string(),
-                },
-            ];
+            return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
         }
 
-        let mut hotkeys = vec![
-            Hotkey {
-                key: "↑↓".to_string(),
-                label: "scroll".to_string(),
-            },
-            Hotkey {
-                key: "enter".to_string(),
-                label: "connect".to_string(),
-            },
-            Hotkey {
-                key: "t".to_string(),
-                label: "add TCP".to_string(),
-            },
-            Hotkey {
-                key: "r".to_string(),
-                label: "rediscover".to_string(),
-            },
-        ];
-
-        if let Some(index) = self.list_state.selected
-            && let Device::Tcp(_) = &state.aggregated_devices[index]
-        {
-            hotkeys.push(Hotkey {
-                key: "del".to_string(),
-                label: "delete".to_string(),
-            });
-        }
-
-        hotkeys
+        vec![
+            Some(Hotkey::new("↑↓", "scroll")),
+            Some(Hotkey::new("enter", "connect")),
+            Some(Hotkey::new("t", "add TCP")),
+            Some(Hotkey::new("r", "rediscover")),
+            self.list_state
+                .selected
+                .and_then(|i| state.aggregated_devices.get(i))
+                .and_then(|d| Some(matches!(d, Device::Tcp(_))))
+                .unwrap_or(false)
+                .then_some(Hotkey::new("del", "delete")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 }
 
@@ -80,53 +54,74 @@ impl<'a> Component for Connection<'a> {
         if self.is_form_visible {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                    KeyCode::Enter => match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
-                        Ok(addr) => {
-                            emit(AppEvent::TcpDeviceSubmitted(addr))?;
-                            self.is_form_visible = false;
+                    KeyCode::Enter => {
+                        match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
+                            Ok(addr) => {
+                                emit(AppEvent::TcpDeviceSubmitted(addr))?;
+                                self.is_form_visible = false;
+                            }
+                            Err(e) => {
+                                self.popup_input_state.set_error(format!("invalid address: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            self.popup_input_state.set_error(format!("invalid address: {}", e));
-                        }
-                    },
+
+                        return Ok(true);
+                    }
                     KeyCode::Esc => {
                         self.is_form_visible = false;
+                        return Ok(true);
                     }
-                    _ => {
-                        self.popup_input_state.handle_event(event.clone());
-                    }
-                },
-                _ => {}
-            }
-
-            return Ok(true);
-        }
-
-        if state.active_device.is_some() {
-            match event {
-                Event::Key(KeyEvent { code, .. }) => match code {
-                    KeyCode::Esc => emit(AppEvent::DisconnectionRequested)?,
                     _ => {}
                 },
                 _ => {}
             }
 
-            return Ok(true);
+            return self.popup_input_state.handle_event(event.clone());
+        }
+
+        if state.active_device.is_some() {
+            match event {
+                Event::Key(KeyEvent { code, .. }) => match code {
+                    KeyCode::Esc => {
+                        emit(AppEvent::DisconnectionRequested)?;
+                        return Ok(true);
+                    }
+                    KeyCode::Tab | KeyCode::BackTab => {
+                        return Ok(false);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
+            return Ok(false);
         }
 
         match event {
             Event::Key(KeyEvent { code, .. }) => match code {
-                KeyCode::Up => self.list_state.previous(),
-                KeyCode::Down => self.list_state.next(),
-                KeyCode::Char('r') => emit(AppEvent::DeviceRediscoverRequested)?,
+                KeyCode::Up => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
+                KeyCode::Char('r') => {
+                    emit(AppEvent::DeviceRediscoverRequested)?;
+                    return Ok(true);
+                }
                 KeyCode::Char('t') => {
                     self.popup_input_state.reset();
                     self.is_form_visible = true;
+
+                    return Ok(true);
                 }
                 KeyCode::Enter => {
                     if let Some(index) = self.list_state.selected {
                         emit(AppEvent::DeviceSelected(state.aggregated_devices[index].clone()))?
                     }
+                    return Ok(true);
                 }
                 KeyCode::Delete | KeyCode::Backspace => {
                     if let Some(index) = self.list_state.selected
@@ -134,18 +129,28 @@ impl<'a> Component for Connection<'a> {
                     {
                         emit(AppEvent::TcpDeviceRemoved(hostaddr.clone()))?
                     }
+                    return Ok(true);
+                }
+                KeyCode::Tab | KeyCode::BackTab => {
+                    return Ok(false);
                 }
                 _ => {}
             },
             Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => self.list_state.previous(),
-                MouseEventKind::ScrollDown => self.list_state.next(),
+                MouseEventKind::ScrollUp => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                MouseEventKind::ScrollDown => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
                 _ => {}
             },
             _ => {}
         }
 
-        Ok(true)
+        Ok(false)
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
@@ -176,13 +181,14 @@ impl<'a> Component for Connection<'a> {
                 (item, 1)
             });
 
-            let mut list = ListView::new(list_builder, state.aggregated_devices.len())
+            let list = ListView::new(list_builder, state.aggregated_devices.len())
                 .infinite_scrolling(false)
-                .scrollbar(default_scrollbar());
-
-            if state.active_device.is_some() {
-                list = list.dim();
-            }
+                .scrollbar(default_scrollbar())
+                .add_modifier(if state.active_device.is_some() {
+                    Modifier::DIM
+                } else {
+                    Modifier::empty()
+                });
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {

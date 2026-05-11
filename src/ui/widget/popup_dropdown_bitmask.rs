@@ -35,11 +35,17 @@ impl<'a> PopupDropdownBitmaskState<'a> {
         self.selected
     }
 
-    pub fn handle_event(&mut self, event: Event) {
+    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => self.list_state.previous(),
-                KeyCode::Down => self.list_state.next(),
+                KeyCode::Up => {
+                    self.list_state.previous();
+                    return Ok(true);
+                }
+                KeyCode::Down => {
+                    self.list_state.next();
+                    return Ok(true);
+                }
                 KeyCode::Char(' ') if let Some(index) = self.list_state.selected => {
                     let variant = self.variants.iter().nth(index).unwrap();
                     let is_checked = self.selected & variant.value > 0;
@@ -49,11 +55,15 @@ impl<'a> PopupDropdownBitmaskState<'a> {
                     } else {
                         self.selected = self.selected | variant.value;
                     }
+
+                    return Ok(true);
                 }
                 _ => {}
             },
             _ => {}
         }
+
+        Ok(false)
     }
 }
 

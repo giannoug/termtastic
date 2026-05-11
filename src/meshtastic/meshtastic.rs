@@ -157,22 +157,22 @@ impl MeshtasticService {
                 self.disconnect().await?;
                 self.event_tx.send(MeshtasticEvent::Disconnected)?;
             }
-            CommandToMeshtastic::Reboot { my_node_id, secs } => {
-                self.send_admin_message(my_node_id, admin_message::PayloadVariant::RebootSeconds(secs))
+            CommandToMeshtastic::Reboot { secs, my_node_num } => {
+                self.send_admin_message(my_node_num, admin_message::PayloadVariant::RebootSeconds(secs))
                     .await?;
             }
-            CommandToMeshtastic::Shutdown { my_node_id, secs } => {
-                self.send_admin_message(my_node_id, admin_message::PayloadVariant::ShutdownSeconds(secs))
+            CommandToMeshtastic::Shutdown { secs, my_node_num } => {
+                self.send_admin_message(my_node_num, admin_message::PayloadVariant::ShutdownSeconds(secs))
                     .await?;
             }
             CommandToMeshtastic::SendBroadcastTextMessage {
-                my_node_id,
                 channel_id,
                 reply_message_id,
                 text,
+                my_node_num,
             } => {
                 let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
+                    my_node_num,
                     event_tx: &self.event_tx,
                 };
 
@@ -202,13 +202,13 @@ impl MeshtasticService {
                 };
             }
             CommandToMeshtastic::SendDirectTextMessage {
-                my_node_id,
-                node_id,
+                node_num,
                 reply_message_id,
                 text,
+                my_node_num,
             } => {
                 let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
+                    my_node_num,
                     event_tx: &self.event_tx,
                 };
 
@@ -223,7 +223,7 @@ impl MeshtasticService {
                             TextMessage::Emoji(e) => e.glyph.as_bytes().to_vec(),
                         }),
                         PortNum::TextMessageApp,
-                        PacketDestination::Node(NodeId::from(node_id)),
+                        PacketDestination::Node(NodeId::from(node_num)),
                         MeshChannel::from(0),
                         true,                                               // want_ack
                         false,                                              // want_response
@@ -239,13 +239,13 @@ impl MeshtasticService {
             }
             CommandToMeshtastic::SaveConfig {
                 form_id,
-                my_node_id,
                 config,
+                my_node_num,
             } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
                 let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
+                    my_node_num,
                     event_tx: &self.event_tx,
                 };
 
@@ -275,19 +275,19 @@ impl MeshtasticService {
                         tracing::error!("save config error: {:?}", e);
 
                         self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
+                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
                     }
                 }
             }
             CommandToMeshtastic::SaveModuleConfig {
                 form_id,
-                my_node_id,
                 config,
+                my_node_num,
             } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
                 let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
+                    my_node_num,
                     event_tx: &self.event_tx,
                 };
 
@@ -317,70 +317,25 @@ impl MeshtasticService {
                         tracing::error!("save config error: {:?}", e);
 
                         self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
+                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save config timeout: {:?}", e);
 
                         self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveError(form_id, e.to_string()))?;
-                    }
-                }
-            }
-            CommandToMeshtastic::SaveChannelsConfig {
-                form_id,
-                my_node_id,
-                channels,
-            } => {
-                let api = self.stream_api.as_mut().expect_or_log("should be connected");
-
-                let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
-                    event_tx: &self.event_tx,
-                };
-
-                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
-                    api.start_config_transaction().await?;
-
-                    for channel in channels {
-                        api.update_channel_config(&mut packet_router, channel).await?;
-                        sleep(Duration::from_millis(SAVE_SET_CHANNEL_DELAY_MILLIS)).await;
-                    }
-
-                    api.commit_config_transaction().await?;
-
-                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
-
-                    Ok::<(), anyhow::Error>(())
-                })
-                .await
-                {
-                    Ok(Ok(_)) => {
-                        self.event_tx.send(MeshtasticEvent::ChannelsSaved(form_id))?;
-                    }
-                    Ok(Err(e)) => {
-                        tracing::error!("save channels error: {:?}", e);
-
-                        self.event_tx
-                            .send(MeshtasticEvent::ChannelsSaveError(form_id, e.to_string()))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("save channels timeout: {:?}", e);
-
-                        self.event_tx
-                            .send(MeshtasticEvent::ChannelsSaveError(form_id, e.to_string()))?;
+                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
                     }
                 }
             }
             CommandToMeshtastic::SaveUser {
                 form_id,
-                my_node_id,
                 user,
+                my_node_num,
             } => {
                 let api = self.stream_api.as_mut().expect_or_log("should be connected");
 
                 let mut packet_router = RetransmitPacketRouter {
-                    my_node_id,
+                    my_node_num,
                     event_tx: &self.event_tx,
                 };
 
@@ -400,13 +355,13 @@ impl MeshtasticService {
                         tracing::error!("save user error: {:?}", e);
 
                         self.event_tx
-                            .send(MeshtasticEvent::UserSaveError(form_id, e.to_string()))?;
+                            .send(MeshtasticEvent::UserSaveFailed(form_id, e.to_string()))?;
                     }
                     Err(e) => {
                         tracing::error!("save user timeout: {:?}", e);
 
                         self.event_tx
-                            .send(MeshtasticEvent::UserSaveError(form_id, e.to_string()))?;
+                            .send(MeshtasticEvent::UserSaveFailed(form_id, e.to_string()))?;
                     }
                 }
             }
@@ -433,6 +388,60 @@ impl MeshtasticService {
                     Err(e) => self
                         .event_tx
                         .send(MeshtasticEvent::NodeInfoBroadcastFailed(e.to_string()))?,
+                };
+            }
+            CommandToMeshtastic::SaveChannelsConfig {
+                form_id,
+                channels,
+                my_node_num,
+            } => {
+                let api = self.stream_api.as_mut().expect_or_log("should be connected");
+
+                let mut packet_router = RetransmitPacketRouter {
+                    my_node_num,
+                    event_tx: &self.event_tx,
+                };
+
+                match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
+                    api.start_config_transaction().await?;
+
+                    for channel in channels {
+                        api.update_channel_config(&mut packet_router, channel).await?;
+                        sleep(Duration::from_millis(SAVE_SET_CHANNEL_DELAY_MILLIS)).await;
+                    }
+
+                    api.commit_config_transaction().await?;
+
+                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+
+                    Ok::<(), anyhow::Error>(())
+                })
+                .await
+                {
+                    Ok(Ok(_)) => {
+                        self.event_tx.send(MeshtasticEvent::ChannelsSaved(form_id))?;
+                    }
+                    Ok(Err(e)) => {
+                        tracing::error!("save channels error: {:?}", e);
+
+                        self.event_tx
+                            .send(MeshtasticEvent::ChannelsSaveFailed(form_id, e.to_string()))?;
+                    }
+                    Err(e) => {
+                        tracing::error!("save channels timeout: {:?}", e);
+
+                        self.event_tx
+                            .send(MeshtasticEvent::ChannelsSaveFailed(form_id, e.to_string()))?;
+                    }
+                }
+            }
+            CommandToMeshtastic::DeleteNode { node_num, my_node_num } => {
+                match self
+                    .send_admin_message(my_node_num, admin_message::PayloadVariant::RemoveByNodenum(node_num))
+                    .await
+                {
+                    Ok(()) => self.event_tx.send(MeshtasticEvent::NodeRemoveAccepted)?,
+                    Err(e) => self.event_tx.send(MeshtasticEvent::NodeRemoveFailed(e.to_string()))?,
                 };
             }
         };
@@ -480,11 +489,11 @@ impl MeshtasticService {
 
     async fn send_admin_message(
         &mut self,
-        my_node_id: u32,
+        my_node_num: u32,
         payload: admin_message::PayloadVariant,
     ) -> anyhow::Result<()> {
         let mut packet_router = RetransmitPacketRouter {
-            my_node_id,
+            my_node_num: my_node_num,
             event_tx: &self.event_tx,
         };
 
@@ -534,7 +543,7 @@ impl PacketRouter<(), NullPacketRouterErr> for NullPacketRouter {
 }
 
 struct RetransmitPacketRouter<'a> {
-    pub my_node_id: u32,
+    pub my_node_num: u32,
     pub event_tx: &'a broadcast::Sender<MeshtasticEvent>,
 }
 
@@ -563,6 +572,6 @@ impl<'a> PacketRouter<(), RetransmitPacketRouterErr> for RetransmitPacketRouter<
     }
 
     fn source_node_id(&self) -> NodeId {
-        NodeId::new(self.my_node_id)
+        NodeId::new(self.my_node_num)
     }
 }

@@ -43,35 +43,41 @@ impl<'a> EmojiSelectorState<'a> {
         self.list_state.select(Some(0));
     }
 
-    pub fn handle_event(&mut self, event: Event) {
+    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
                 KeyCode::Up => {
                     self.list_state.previous();
+                    return Ok(true);
                 }
                 KeyCode::Down => {
                     self.list_state.next();
+                    return Ok(true);
                 }
-                _ => {
-                    self.input_widget.input(event);
-                    self.emojis = emoji::search::search_name(&self.input_widget.lines()[0]);
-
-                    if !self.emojis.is_empty() {
-                        self.list_state.select(Some(0));
-                    }
-                }
+                _ => {}
             },
             Event::Mouse(MouseEvent { kind, .. }) => match kind {
                 MouseEventKind::ScrollUp => {
                     self.list_state.previous();
+                    return Ok(true);
                 }
                 MouseEventKind::ScrollDown => {
                     self.list_state.next();
+                    return Ok(true);
                 }
                 _ => {}
             },
             _ => {}
         }
+
+        self.input_widget.input(event);
+        self.emojis = emoji::search::search_name(&self.input_widget.lines()[0]);
+
+        if !self.emojis.is_empty() {
+            self.list_state.select(Some(0));
+        }
+
+        Ok(true)
     }
 }
 

@@ -2,18 +2,19 @@ use arboard::Clipboard;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::state::StateSnapshot;
 use crate::types::Toast;
 use crate::ui::prelude::AppEvent;
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
-    state::{State, StateAction},
+    state::StateAction,
 };
 
 #[allow(dead_code)]
 pub struct UiService {
     app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<State>,
+    state_rx: watch::Receiver<StateSnapshot>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -23,7 +24,7 @@ impl UiService {
     pub fn new(
         app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<State>,
+        state_rx: watch::Receiver<StateSnapshot>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -62,13 +63,10 @@ impl UiService {
                 self.state_action_tx.send(StateAction::TabSwitchToNext)?;
             }
             AppEvent::PreviousTabRequested => {
-                self.state_action_tx
-                    .send(StateAction::TabSwitchToPrevious)?;
+                self.state_action_tx.send(StateAction::TabSwitchToPrevious)?;
             }
             AppEvent::CopyToClipboardRequested(text) => match copy_to_clipboard(text) {
-                Ok(_) => self
-                    .state_action_tx
-                    .send(StateAction::Toast(Toast::normal("copied")))?,
+                Ok(_) => self.state_action_tx.send(StateAction::Toast(Toast::normal("copied")))?,
                 Err(e) => {
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::error("copy failed")))?;

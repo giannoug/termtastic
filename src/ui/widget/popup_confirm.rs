@@ -1,3 +1,5 @@
+use crate::{types::Hotkey, ui::widget::HotkeysWidget};
+use ratatui::style::Color;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -5,18 +7,32 @@ use ratatui::{
     widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wrap},
 };
 
-use crate::{types::Hotkey, ui::widget::HotkeysWidget};
-
 pub struct PopupConfirmWidget {
     text: String,
+    yes: String,
+    no: String,
     width: u16,
+    border_color: Color,
 }
 
 impl PopupConfirmWidget {
-    pub fn new<S: Into<String>>(text: S, width: u16) -> Self {
+    pub fn new<S: Into<String>>(text: S, yes: S, no: S, width: u16, border_color: Color) -> Self {
         Self {
             text: text.into(),
+            yes: yes.into(),
+            no: no.into(),
             width,
+            border_color,
+        }
+    }
+
+    pub fn yes_no<S: Into<String>>(text: S, width: u16) -> Self {
+        Self {
+            text: text.into(),
+            yes: "yes".to_owned(),
+            no: "no".to_owned(),
+            width,
+            border_color: Color::Yellow,
         }
     }
 }
@@ -39,7 +55,7 @@ impl Widget for PopupConfirmWidget {
 
         let popup_block = Block::bordered()
             .border_type(BorderType::Thick)
-            .border_style(Style::new().yellow())
+            .border_style(Style::new().fg(self.border_color))
             .padding(Padding::symmetric(3, 1));
 
         let popup_block_area = popup_block.inner(popup_area);
@@ -55,6 +71,6 @@ impl Widget for PopupConfirmWidget {
 
         paragraph.render(v[0], buf);
 
-        HotkeysWidget::new(&vec![Hotkey::new("enter", "yes"), Hotkey::new("esc", "no")]).render(v[2], buf);
+        HotkeysWidget::new(&vec![Hotkey::new("enter", &self.yes), Hotkey::new("esc", &self.no)]).render(v[2], buf);
     }
 }

@@ -35,7 +35,7 @@ impl Component for Header {
         let my_node_info = if let Some(my_node) = state.get_my_node() {
             vec![
                 Span::from("node ").dark_gray(),
-                my_node.short_name_to_span(),
+                short_name_to_span(my_node),
                 Span::from("  "),
             ]
         } else {

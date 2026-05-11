@@ -30,7 +30,7 @@ impl<'a> Widget for HotkeysWidget<'a> {
                 vec![
                     Span::from(hotkey.key.clone()),
                     Span::from("\u{00A0}"),
-                    Span::from(hotkey.label.clone()).dark_gray(),
+                    Span::from(hotkey.label.clone()).fg(hotkey.label_color),
                     Span::from("  "),
                 ]
             })

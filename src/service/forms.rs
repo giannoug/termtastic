@@ -26,7 +26,7 @@ use strum::IntoEnumIterator;
 use crate::serde::to_formdata;
 use crate::types::{
     AppEvent, Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind,
-    FormValue,
+    FormValue, UIConfig,
 };
 use nameof::name_of;
 
@@ -210,6 +210,44 @@ macro_rules! channel_form {
 
 fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     let mut forms = HashMap::new();
+
+    forms.insert(
+        FormId::AppUi,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(is_top_padding_hidden in UIConfig)),
+                "Hide top padding",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(is_bottom_padding_hidden in UIConfig)),
+                "Hide bottom padding",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(is_left_padding_hidden in UIConfig)),
+                "Hide left padding",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(is_right_padding_hidden in UIConfig)),
+                "Hide right padding",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
 
     forms.insert(
         FormId::RadioLora,

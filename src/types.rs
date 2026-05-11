@@ -1,22 +1,16 @@
 use anyhow::anyhow;
-use chrono::{DateTime, SubsecRound, TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
 use meshtastic::protobufs::{channel, config, module_config, routing};
-use ratatui::{
-    style::{self, Stylize as _},
-    text,
-};
+use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use std::{collections::HashMap, fmt::Debug, time::Instant};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
-use tokio::sync::watch::Ref;
 use tracing::Level;
 
-use crate::ui::helpers::{humanize_duration, ColorExt};
-use crate::ui::prelude::{Span, Style};
-use crate::{state::State, ui::helpers::pad_center};
+use crate::state::State;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Default)]
 pub struct AppConfig {
@@ -28,17 +22,32 @@ pub struct AppConfig {
     pub tcp_devices: Vec<HostAddr<String>>,
     #[serde(default)]
     pub nodes_sort_by: NodesSortBy,
+    #[serde(default)]
+    pub ui_config: UIConfig,
 }
 
-impl From<&Ref<'_, State>> for AppConfig {
-    fn from(value: &Ref<'_, State>) -> Self {
+impl From<&State> for AppConfig {
+    fn from(value: &State) -> Self {
         Self {
             active_tab: value.active_tab,
             active_device: value.active_device.clone(),
             tcp_devices: value.tcp_devices.clone(),
             nodes_sort_by: value.nodes_sort_by.clone(),
+            ui_config: value.ui_config.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Hash, Default)]
+pub struct UIConfig {
+    #[serde(default)]
+    pub is_top_padding_hidden: bool,
+    #[serde(default)]
+    pub is_bottom_padding_hidden: bool,
+    #[serde(default)]
+    pub is_left_padding_hidden: bool,
+    #[serde(default)]
+    pub is_right_padding_hidden: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +83,7 @@ pub enum AppEvent {
     NodesSortByCyclePressed,
     NodesFilterChanged(String),
     NodeInfoBroadcastRequested,
+    NodeDeleteRequested(u32),
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
@@ -141,7 +151,7 @@ impl Into<String> for LogRecord {
             "{} {} {}: {}",
             self.datetime.to_rfc3339(),
             self.level.to_string(),
-            self.source.clone(),
+            &self.source,
             self.message
         )
     }
@@ -152,15 +162,15 @@ impl Into<String> for LogRecord {
 )]
 pub enum Tab {
     #[default]
-    #[strum(to_string = "Chat")]
+    #[strum(to_string = "chat")]
     Chat,
-    #[strum(to_string = "Nodes")]
+    #[strum(to_string = "nodes")]
     Nodes,
-    #[strum(to_string = "Settings")]
+    #[strum(to_string = "settings")]
     Settings,
-    #[strum(to_string = "Connection")]
+    #[strum(to_string = "connection")]
     Connection,
-    #[strum(to_string = "Logs")]
+    #[strum(to_string = "logs")]
     Logs,
 }
 
@@ -184,6 +194,7 @@ impl Tab {
 pub struct Hotkey {
     pub key: String,
     pub label: String,
+    pub label_color: Color,
 }
 
 impl Hotkey {
@@ -191,6 +202,7 @@ impl Hotkey {
         Self {
             key: key.into(),
             label: label.into(),
+            label_color: Color::DarkGray,
         }
     }
 }
@@ -256,17 +268,17 @@ impl Toast {
 #[derive(Debug, Clone, Copy, Display, FromRepr, EnumIter, EnumCount, Serialize, Deserialize, Hash, Default)]
 pub enum NodesSortBy {
     #[default]
-    #[strum(to_string = "Hops / SNR")]
+    #[strum(to_string = "hops / snr")]
     Hops,
-    #[strum(to_string = "Short Name")]
+    #[strum(to_string = "short name")]
     ShortName,
-    #[strum(to_string = "Long Name")]
+    #[strum(to_string = "long name")]
     LongName,
-    #[strum(to_string = "Last Heard")]
+    #[strum(to_string = "last heard")]
     LastHeard,
-    #[strum(to_string = "Role / Hops / SNR")]
+    #[strum(to_string = "role / hops / snr")]
     Role,
-    #[strum(to_string = "HW Model / Short Name")]
+    #[strum(to_string = "hardware / short name")]
     HwModel,
 }
 
@@ -297,12 +309,19 @@ impl NodesSortBy {
     }
 }
 
+pub trait HopsSnrRssiAware {
+    fn my(&self) -> bool;
+    fn hops(&self) -> Option<u32>;
+    fn snr(&self) -> f32;
+    fn rssi(&self) -> Option<i32>;
+}
+
 #[derive(Debug, Clone)]
 pub struct Node {
     pub id: String,
     pub key: u32,
     pub user: Option<NodeUser>,
-    pub hops_away: Option<u32>,
+    pub hops: Option<u32>,
     pub last_heard: Option<DateTime<Utc>>,
     pub snr: f32,
     pub rssi: Option<i32>,
@@ -330,7 +349,7 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
         hw_model: -1,
         is_unmessagable: None,
     }),
-    hops_away: None,
+    hops: None,
     last_heard: None,
     snr: 0.0,
     rssi: None,
@@ -340,51 +359,11 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
 });
 
 impl Node {
-    pub fn short_name_to_span(&self) -> text::Span<'_> {
-        text::Span::from(pad_center(&self.short_name(), 6))
-            .black()
-            .patch_style(if self.my {
-                style::Style::new().white().on_blue()
-            } else if self.user.is_none() {
-                style::Style::new().on_yellow()
-            } else if self.id == "?" {
-                style::Style::new().on_red()
-            } else {
-                style::Style::new().on_green()
-            })
-    }
-
-    pub fn last_heard_to_spans(&self) -> Vec<text::Span<'_>> {
-        match self.last_heard {
-            Some(_) if self.my => vec![text::Span::from("now").blue()],
-            Some(dt) => humanize_duration(Utc::now().round_subsecs(0) - dt),
-            None => vec![text::Span::from("?").dark_gray()],
-        }
-    }
-
-    pub fn hops_to_spans(&self) -> Vec<text::Span<'_>> {
-        match self.hops_away {
-            _ if self.my => vec![Span::from("connected").blue()],
-            Some(0) => vec![
-                Some(Span::from(format!("* {}dB", self.snr)).style(Style::new().fg(self.snr.snr_to_color()))),
-                self.rssi
-                    .and_then(|rssi| Some(Span::from(format!(" RSSI {}", rssi)).dark_gray())),
-            ]
-            .iter()
-            .flatten()
-            .cloned()
-            .collect(),
-            Some(1) => vec![Span::from("1 hop")],
-            Some(hops) => vec![Span::from(format!("{} hops", hops))],
-            None => vec![Span::from("unknown").dark_gray()],
-        }
-    }
-
     pub fn short_name(&self) -> String {
         self.user
             .as_ref()
             .and_then(|u| Some(u.short_name.clone()))
-            .unwrap_or(self.id[self.id.len().saturating_sub(4)..].to_owned())
+            .unwrap_or_else(|| self.id[self.id.len().saturating_sub(4)..].to_string())
     }
 
     pub fn long_name(&self) -> String {
@@ -421,12 +400,30 @@ impl Node {
             self.user
                 .as_ref()
                 .and_then(|u| Some(&u.long_name))
-                .unwrap_or(&"Unknown".to_owned())
+                .unwrap_or(&"unknown".to_owned())
                 .to_lowercase(),
             self.role().to_lowercase(),
             self.hw_model().to_lowercase(),
             self.id,
         );
+    }
+}
+
+impl HopsSnrRssiAware for Node {
+    fn my(&self) -> bool {
+        self.my
+    }
+
+    fn hops(&self) -> Option<u32> {
+        self.hops
+    }
+
+    fn snr(&self) -> f32 {
+        self.snr
+    }
+
+    fn rssi(&self) -> Option<i32> {
+        self.rssi
     }
 }
 
@@ -441,7 +438,7 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
             id: user.id.clone(),
             key: value.num,
             user: Some(user.into()),
-            hops_away: value.hops_away,
+            hops: value.hops_away,
             last_heard,
             snr: value.snr,
             rssi: None,
@@ -464,7 +461,7 @@ impl From<&meshtastic::protobufs::MeshPacket> for Node {
             id,
             key: packet.from,
             user: None,
-            hops_away: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
+            hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard: DateTime::from_timestamp(packet.rx_time as i64, 0),
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
@@ -491,7 +488,7 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
             id: user.id.clone(),
             key: packet.from,
             user: Some(user.into()),
-            hops_away: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
+            hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard,
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
@@ -675,26 +672,32 @@ impl Into<meshtastic::protobufs::Channel> for &Channel {
 
 #[derive(Debug, Clone)]
 pub struct MessageReaction {
+    #[allow(unused)]
+    pub id: u32,
     pub node_key: u32,
     pub emoji: String,
     pub datetime: DateTime<Utc>,
     pub hops: u32,
     pub snr: f32,
     pub rssi: i32,
+    pub routing_error: Option<routing::Error>,
 }
 
-impl MessageReaction {
-    pub fn hops_to_spans(&self) -> Vec<text::Span<'_>> {
-        match self.hops {
-            0 => {
-                vec![
-                    Span::from(format!("* {}dB", self.snr)).style(Style::new().fg(self.snr.snr_to_color())),
-                    Span::from(format!(" RSSI {}", self.rssi)).dark_gray(),
-                ]
-            }
-            1 => vec![Span::from("1 hop")],
-            hops => vec![Span::from(format!("{} hops", hops))],
-        }
+impl HopsSnrRssiAware for MessageReaction {
+    fn my(&self) -> bool {
+        false
+    }
+
+    fn hops(&self) -> Option<u32> {
+        Some(self.hops)
+    }
+
+    fn snr(&self) -> f32 {
+        self.snr
+    }
+
+    fn rssi(&self) -> Option<i32> {
+        Some(self.rssi)
     }
 }
 
@@ -709,6 +712,7 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
         }
 
         Ok(Self {
+            id: packet.id,
             node_key: packet.from,
             datetime: Utc
                 .timestamp_opt(packet.rx_time as i64, 0)
@@ -718,6 +722,7 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
             hops: packet.hop_start.saturating_sub(packet.hop_limit),
             snr: packet.rx_snr,
             rssi: packet.rx_rssi,
+            routing_error: None,
         })
     }
 }
@@ -734,6 +739,24 @@ pub struct Message {
     pub snr: f32,
     pub rssi: i32,
     pub error: Option<routing::Error>,
+}
+
+impl HopsSnrRssiAware for Message {
+    fn my(&self) -> bool {
+        false
+    }
+
+    fn hops(&self) -> Option<u32> {
+        Some(self.hops)
+    }
+
+    fn snr(&self) -> f32 {
+        self.snr
+    }
+
+    fn rssi(&self) -> Option<i32> {
+        Some(self.rssi)
+    }
 }
 
 impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for Message {

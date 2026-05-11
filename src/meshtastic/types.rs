@@ -12,17 +12,19 @@ pub enum MeshtasticEvent {
     MessageAccepted,
     MessageRejected(String),
     RadioStopped,
-    #[allow(dead_code)]
-    ConfigSaveError(FormId, String),
     ConfigSaved(FormId),
     #[allow(dead_code)]
-    ChannelsSaveError(FormId, String),
+    ConfigSaveFailed(FormId, String),
     ChannelsSaved(FormId),
     #[allow(dead_code)]
-    UserSaveError(FormId, String),
+    ChannelsSaveFailed(FormId, String),
     UserSaved(FormId),
+    #[allow(dead_code)]
+    UserSaveFailed(FormId, String),
     NodeInfoBroadcastSent,
     NodeInfoBroadcastFailed(String),
+    NodeRemoveAccepted,
+    NodeRemoveFailed(String),
 }
 
 #[derive(Debug, Clone)]
@@ -38,24 +40,24 @@ pub enum CommandToMeshtastic {
     ConnectViaSerial(String),
     Disconnect,
     Reboot {
-        my_node_id: u32,
         secs: i32,
+        my_node_num: u32,
     },
     Shutdown {
-        my_node_id: u32,
         secs: i32,
+        my_node_num: u32,
     },
     SendBroadcastTextMessage {
-        my_node_id: u32,
         channel_id: u32,
         reply_message_id: Option<u32>,
         text: TextMessage,
+        my_node_num: u32,
     },
     SendDirectTextMessage {
-        my_node_id: u32,
-        node_id: u32,
+        node_num: u32,
         reply_message_id: Option<u32>,
         text: TextMessage,
+        my_node_num: u32,
     },
     BroadcastNodeInfo {
         channel_id: u32,
@@ -63,22 +65,26 @@ pub enum CommandToMeshtastic {
     },
     SaveConfig {
         form_id: FormId,
-        my_node_id: u32,
         config: config::PayloadVariant,
+        my_node_num: u32,
     },
     SaveModuleConfig {
         form_id: FormId,
-        my_node_id: u32,
         config: module_config::PayloadVariant,
+        my_node_num: u32,
     },
     SaveChannelsConfig {
         form_id: FormId,
-        my_node_id: u32,
         channels: Vec<meshtastic::protobufs::Channel>,
+        my_node_num: u32,
     },
     SaveUser {
         form_id: FormId,
-        my_node_id: u32,
         user: meshtastic::protobufs::User,
+        my_node_num: u32,
+    },
+    DeleteNode {
+        node_num: u32,
+        my_node_num: u32,
     },
 }

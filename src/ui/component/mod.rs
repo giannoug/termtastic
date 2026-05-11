@@ -8,7 +8,6 @@ mod logs;
 mod messenger;
 mod nodes;
 mod settings;
-mod tabs;
 mod terminal_size;
 
 pub use channels::*;
@@ -21,5 +20,4 @@ pub use logs::*;
 pub use messenger::*;
 pub use nodes::*;
 pub use settings::*;
-pub use tabs::*;
 pub use terminal_size::*;

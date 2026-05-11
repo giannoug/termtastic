@@ -1,9 +1,8 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
 use tracing_unwrap::OptionExt;
 
 use crate::{
     service::{FORMS, SETTINGS},
-    ui::{helpers::default_scrollbar, prelude::*},
+    ui::prelude::*,
 };
 
 pub struct Settings<'a> {
@@ -168,7 +167,12 @@ impl<'a> Settings<'a> {
                 self.popup_input_state = Some(PopupInputState::new(
                     Some(form_item.title),
                     None,
-                    BASE64_STANDARD.encode(value.as_vec().iter().map(|v| v.as_u8()).collect::<Vec<u8>>()),
+                    value
+                        .as_vec()
+                        .iter()
+                        .map(|v| v.as_u8())
+                        .collect::<Vec<u8>>()
+                        .base64_encode(),
                 ));
             }
             FormItemKind::Enum(variants) => {
@@ -252,21 +256,21 @@ impl<'a> Component for Settings<'a> {
                                 popup_input_state.set_error(e.to_string());
                             }
                         }
+
+                        return Ok(true);
                     }
                     KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.active_form_item = None;
                         self.popup_input_state = None;
+
+                        return Ok(true);
                     }
-                    _ => {
-                        popup_input_state.handle_event(event.clone());
-                    }
+                    _ => {}
                 },
-                _ => {
-                    popup_input_state.handle_event(event.clone());
-                }
+                _ => {}
             }
 
-            return Ok(true);
+            return popup_input_state.handle_event(event.clone());
         }
 
         // dropdown popup
@@ -282,21 +286,21 @@ impl<'a> Component for Settings<'a> {
 
                         self.active_form_item = None;
                         self.popup_dropdown_state = None;
+
+                        return Ok(true);
                     }
                     KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.active_form_item = None;
                         self.popup_dropdown_state = None;
+
+                        return Ok(true);
                     }
-                    _ => {
-                        popup_dropdown_state.handle_event(event.clone());
-                    }
+                    _ => {}
                 },
-                _ => {
-                    popup_dropdown_state.handle_event(event.clone());
-                }
+                _ => {}
             }
 
-            return Ok(true);
+            return popup_dropdown_state.handle_event(event.clone());
         }
 
         // bitmask dropdown popup
@@ -313,21 +317,21 @@ impl<'a> Component for Settings<'a> {
 
                         self.active_form_item = None;
                         self.popup_dropdown_bitmask_state = None;
+
+                        return Ok(true);
                     }
                     KeyCode::Esc if kind == &KeyEventKind::Press => {
                         self.active_form_item = None;
                         self.popup_dropdown_bitmask_state = None;
+
+                        return Ok(true);
                     }
-                    _ => {
-                        popup_dropdown_bitmask_state.handle_event(event.clone());
-                    }
+                    _ => {}
                 },
-                _ => {
-                    popup_dropdown_bitmask_state.handle_event(event.clone());
-                }
+                _ => {}
             }
 
-            return Ok(true);
+            return popup_dropdown_bitmask_state.handle_event(event.clone());
         }
 
         // default
@@ -392,6 +396,9 @@ impl<'a> Component for Settings<'a> {
                     (KeyCode::Char('s'), SettingsFormState::Loaded { id }) if state.settings_form_is_changed => {
                         emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
                     }
+                    (KeyCode::Tab | KeyCode::BackTab, _) => {
+                        return Ok(false);
+                    }
                     _ => {}
                 }
             }
@@ -443,7 +450,12 @@ impl<'a> Component for Settings<'a> {
 
         let menu = ListView::new(menu_list_builder, SETTINGS.len())
             .infinite_scrolling(false)
-            .scrollbar(default_scrollbar());
+            .scrollbar(default_scrollbar())
+            .add_modifier(if state.settings_form_state != SettingsFormState::Inactive {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            });
 
         menu.render(menu_block_area, frame.buffer_mut(), &mut self.settings_list_state);
 
@@ -503,7 +515,7 @@ impl<'a> Component for Settings<'a> {
 
                 // confirm popup
                 if self.is_exit_confirm_visible {
-                    PopupConfirmWidget::new("There are unsaved settings, do you want to reset the fields?", 36)
+                    PopupConfirmWidget::yes_no("There are unsaved settings, do you want to reset the fields?", 36)
                         .render(form_block_area, frame.buffer_mut());
                 }
             }
@@ -552,7 +564,7 @@ fn handle_popup_input_submit(form_item: &FormItem, input_state: &mut PopupInputS
                 return Ok(FormValue::from(vec![]));
             }
 
-            let value = FormValue::from(BASE64_STANDARD.decode(input_value)?);
+            let value = FormValue::from(input_value.base64_decode()?);
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
         _ => unimplemented!(),

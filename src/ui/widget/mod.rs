@@ -7,6 +7,7 @@ mod popup_dropdown;
 mod popup_dropdown_bitmask;
 mod popup_input;
 mod reactions_viewer;
+mod tabs;
 
 pub use emoji_selector::*;
 pub use hotkeys::*;
@@ -17,3 +18,4 @@ pub use popup_dropdown::*;
 pub use popup_dropdown_bitmask::*;
 pub use popup_input::*;
 pub use reactions_viewer::*;
+pub use tabs::*;

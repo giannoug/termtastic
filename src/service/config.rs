@@ -3,14 +3,15 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::state::StateSnapshot;
 use crate::{
-    state::{State, StateAction},
+    state::StateAction,
     types::{AppConfig, AppEvent, Toast},
 };
 
 pub struct ConfigService {
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<State>,
+    state_rx: watch::Receiver<StateSnapshot>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     app_config_last_hash: u64,
 }
@@ -18,7 +19,7 @@ pub struct ConfigService {
 impl ConfigService {
     pub fn new(
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<State>,
+        state_rx: watch::Receiver<StateSnapshot>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
     ) -> Self {
         Self {
@@ -61,9 +62,9 @@ impl ConfigService {
     }
 
     fn handle_state_change(&mut self) -> anyhow::Result<()> {
-        let state = &self.state_rx.borrow();
+        let state_snapshot = &self.state_rx.borrow();
 
-        let app_config: AppConfig = state.into();
+        let app_config: AppConfig = (&state_snapshot.state).into();
         let app_config_hash = calculate_hash(&app_config);
 
         if app_config_hash != self.app_config_last_hash {

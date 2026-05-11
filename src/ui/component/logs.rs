@@ -1,15 +1,13 @@
 use chrono::Local;
 use tracing::Level;
 
-use crate::ui::{helpers::default_scrollbar, prelude::*};
+use crate::ui::prelude::*;
 
 pub struct Logs {
     list_state: ListState,
     follow: bool,
     popup_record: Option<LogRecord>,
-    popup_scroll_offset: u16,
-    hotkeys: Vec<Hotkey>,
-    popup_hotkeys: Vec<Hotkey>,
+    popup_scroll_state: ScrollbarState,
 }
 
 impl Logs {
@@ -18,44 +16,26 @@ impl Logs {
             list_state: ListState::default(),
             follow: true,
             popup_record: None,
-            popup_scroll_offset: 0,
-            hotkeys: vec![
-                Hotkey {
-                    key: "↑↓".to_string(),
-                    label: "scroll".to_string(),
-                },
-                Hotkey {
-                    key: "enter".to_string(),
-                    label: "expand".to_string(),
-                },
-                Hotkey {
-                    key: "c".to_string(),
-                    label: "copy".to_string(),
-                },
-                Hotkey {
-                    key: "home".to_string(),
-                    label: "to top".to_string(),
-                },
-                Hotkey {
-                    key: "end".to_string(),
-                    label: "to bottom".to_string(),
-                },
-            ],
-            popup_hotkeys: vec![
-                Hotkey {
-                    key: "↑↓".to_string(),
-                    label: "scroll".to_string(),
-                },
-                Hotkey {
-                    key: "c".to_string(),
-                    label: "copy".to_string(),
-                },
-                Hotkey {
-                    key: "esc".to_string(),
-                    label: "close".to_string(),
-                },
-            ],
+            popup_scroll_state: ScrollbarState::default(),
         }
+    }
+
+    fn get_hotkeys(&self) -> Vec<Hotkey> {
+        if self.popup_record.is_some() {
+            return vec![
+                Hotkey::new("↑↓".to_string(), "scroll".to_string()),
+                Hotkey::new("c".to_string(), "copy".to_string()),
+                Hotkey::new("esc".to_string(), "close".to_string()),
+            ];
+        }
+
+        vec![
+            Hotkey::new("↑↓".to_string(), "scroll".to_string()),
+            Hotkey::new("enter".to_string(), "expand".to_string()),
+            Hotkey::new("c".to_string(), "copy".to_string()),
+            Hotkey::new("home".to_string(), "to top".to_string()),
+            Hotkey::new("end".to_string(), "to bottom".to_string()),
+        ]
     }
 }
 
@@ -69,20 +49,28 @@ impl Component for Logs {
         if self.popup_record.is_some() {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                    KeyCode::Up => self.popup_scroll_offset = self.popup_scroll_offset.saturating_sub(1),
+                    KeyCode::Up => {
+                        self.popup_scroll_state.prev();
+                        return Ok(true);
+                    }
                     KeyCode::Down => {
-                        self.popup_scroll_offset = self.popup_scroll_offset.saturating_add(1);
+                        self.popup_scroll_state.next();
+                        return Ok(true);
                     }
                     KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
                         emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
+                        return Ok(true);
                     }
-                    KeyCode::Esc => self.popup_record = None,
+                    KeyCode::Esc => {
+                        self.popup_record = None;
+                        return Ok(true);
+                    }
                     _ => {}
                 },
                 _ => {}
             }
 
-            return Ok(true);
+            return Ok(false);
         }
 
         match event {
@@ -90,6 +78,8 @@ impl Component for Logs {
                 KeyCode::Up => {
                     self.follow = false;
                     self.list_state.previous();
+
+                    return Ok(true);
                 }
                 KeyCode::Down => {
                     self.list_state.next();
@@ -97,23 +87,35 @@ impl Component for Logs {
                     if let Some(index) = self.list_state.selected {
                         self.follow = index == state.logs.len() - 1;
                     }
+
+                    return Ok(true);
                 }
                 KeyCode::Enter => {
                     if let Some(i) = self.list_state.selected {
                         self.popup_record = Some(state.logs[i].clone());
-                        self.popup_scroll_offset = 0;
+                        self.popup_scroll_state.first();
                     }
+
+                    return Ok(true);
                 }
                 KeyCode::Home => {
                     self.follow = false;
                     self.list_state.select(Some(0));
+
+                    return Ok(true);
                 }
                 KeyCode::End => {
                     self.follow = true;
                     self.list_state.select(Some(state.logs.len() - 1));
+
+                    return Ok(true);
                 }
                 KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
                     emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
+                    return Ok(true);
+                }
+                KeyCode::Tab | KeyCode::BackTab => {
+                    return Ok(false);
                 }
                 _ => {}
             },
@@ -121,6 +123,8 @@ impl Component for Logs {
                 MouseEventKind::ScrollUp => {
                     self.follow = false;
                     self.list_state.previous();
+
+                    return Ok(true);
                 }
                 MouseEventKind::ScrollDown => {
                     self.list_state.next();
@@ -128,13 +132,15 @@ impl Component for Logs {
                     if let Some(index) = self.list_state.selected {
                         self.follow = index == state.logs.len() - 1;
                     }
+
+                    return Ok(true);
                 }
                 _ => {}
             },
             _ => {}
         }
 
-        Ok(true)
+        Ok(false)
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
@@ -142,15 +148,12 @@ impl Component for Logs {
             self.list_state.select(Some(state.logs.len() - 1));
         }
 
-        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
 
         if !state.logs.is_empty() {
             let list_builder = ListBuilder::new(|context| {
                 let item = LogRecordWidget {
-                    record: &state.logs[context.index],
-                    is_selected: context.is_selected,
-                    wrap: false,
-                    scroll_offset: 0,
+                    paragraph: get_record_paragraph(&state.logs[context.index], context.is_selected, false),
                 };
 
                 (item, 1)
@@ -158,14 +161,19 @@ impl Component for Logs {
 
             let list = ListView::new(list_builder, state.logs.len())
                 .scrollbar(default_scrollbar())
-                .infinite_scrolling(false);
+                .infinite_scrolling(false)
+                .add_modifier(if self.popup_record.is_some() {
+                    Modifier::DIM
+                } else {
+                    Modifier::empty()
+                });
 
             list.render(v[0], frame.buffer_mut(), &mut self.list_state);
         } else {
             PlaceholderWidget::dark_gray("no logs yet").render(v[0], frame.buffer_mut());
         }
 
-        if let Some(r) = &self.popup_record {
+        if let Some(record) = &self.popup_record {
             let popup_area = Rect {
                 x: v[0].x,
                 y: v[0].y + v[0].height / 4,
@@ -185,65 +193,72 @@ impl Component for Logs {
             Clear.render(popup_area, frame.buffer_mut());
             popup_block.render(popup_area, frame.buffer_mut());
 
-            LogRecordWidget {
-                record: r,
-                is_selected: false,
-                wrap: true,
-                scroll_offset: self.popup_scroll_offset,
-            }
-            .render(popup_block_area, frame.buffer_mut());
+            let paragraph = get_record_paragraph(record, false, true);
+            let paragraph_lines = paragraph.line_count(popup_block_area.width - 2);
+            self.popup_scroll_state = self
+                .popup_scroll_state
+                .content_length(paragraph_lines.saturating_sub(popup_block_area.height as usize) + 1);
+
+            StatefulWidget::render(
+                LogRecordWidget { paragraph },
+                popup_block_area,
+                frame.buffer_mut(),
+                &mut self.popup_scroll_state,
+            );
         }
 
-        if self.popup_record.is_some() {
-            HotkeysWidget::new(&self.popup_hotkeys).render(v[2], frame.buffer_mut());
-        } else {
-            HotkeysWidget::new(&self.hotkeys).render(v[2], frame.buffer_mut());
-        }
+        HotkeysWidget::new(&self.get_hotkeys()).render(v[2], frame.buffer_mut());
     }
 }
 
 struct LogRecordWidget<'a> {
-    pub record: &'a LogRecord,
-    pub is_selected: bool,
-    pub wrap: bool,
-    pub scroll_offset: u16,
+    pub paragraph: Paragraph<'a>,
 }
 
 impl<'a> Widget for LogRecordWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer)
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let area = Rect::new(area.x, area.y, area.width - 2, area.height);
+        self.paragraph.render(area, buf);
+    }
+}
+
+impl<'a> StatefulWidget for LogRecordWidget<'a> {
+    type State = ScrollbarState;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
     where
         Self: Sized,
     {
-        let area = area.resize(Size {
-            width: area.width - 2,
-            height: area.height,
-        });
+        let paragraph_area = Rect::new(area.x, area.y, area.width - 2, area.height);
 
-        let tz = Local;
+        self.paragraph
+            .scroll((state.get_position() as u16, 0))
+            .render(paragraph_area, buf);
 
-        let mut p = Paragraph::new(Line::from(vec![
-            Span::from(self.record.datetime.with_timezone(&tz).format("%H:%M:%S").to_string()).dark_gray(),
-            Span::from(" ").dark_gray(),
-            Span::from(format!("{:<5}", self.record.level.to_string())).style(match self.record.level {
-                Level::TRACE | Level::DEBUG => Style::default().green(),
-                Level::INFO => Style::default().blue(),
-                Level::WARN => Style::default().yellow(),
-                Level::ERROR => Style::default().red(),
-            }),
-            Span::from(" ").dark_gray(),
-            Span::from(format!("{}: ", self.record.source)).dark_gray(),
-            Span::from(self.record.message.clone()),
-        ]))
-        .scroll((self.scroll_offset, 0));
+        let scrollbar_area = Rect::new(area.x + area.width - 1, area.y, 1, area.height);
 
-        if self.is_selected {
-            p = p.reversed();
-        }
-
-        if self.wrap {
-            p = p.wrap(Wrap { trim: false });
-        }
-
-        p.render(area, buf);
+        default_scrollbar().render(scrollbar_area, buf, state);
     }
+}
+
+fn get_record_paragraph(record: &'_ LogRecord, is_selected: bool, wrap: bool) -> Paragraph<'_> {
+    Paragraph::new(Line::from(vec![
+        Span::from(record.datetime.with_timezone(&Local).format("%H:%M:%S").to_string()).dark_gray(),
+        Span::from(" ").dark_gray(),
+        Span::from(format!("{:<5}", record.level.to_string())).style(match record.level {
+            Level::TRACE | Level::DEBUG => Style::default().green(),
+            Level::INFO => Style::default().blue(),
+            Level::WARN => Style::default().yellow(),
+            Level::ERROR => Style::default().red(),
+        }),
+        Span::from(" ").dark_gray(),
+        Span::from(format!("{}: ", record.source)).dark_gray(),
+        Span::from(record.message.clone()),
+    ]))
+    .add_modifier(if is_selected {
+        Modifier::REVERSED
+    } else {
+        Modifier::empty()
+    })
+    .wrap(Wrap { trim: !wrap })
 }

@@ -45,6 +45,7 @@ pub struct State {
     pub toast_queue: VecDeque<Toast>,
     pub toast_t: Instant,
     pub toast: Option<Toast>,
+    pub ui_config: UIConfig,
 }
 
 impl Default for State {
@@ -84,6 +85,7 @@ impl Default for State {
             toast_queue: Default::default(),
             toast_t: Instant::now(),
             toast: None,
+            ui_config: Default::default(),
         }
     }
 }
