@@ -15,12 +15,20 @@
 
 <table>
   <tr>
-    <td><img src="./screenshots/chat.png?v=2" alt="Chat"/></td>
-    <td><img src="./screenshots/nodes.png?v=2" alt="Nodes"/></td>
+    <td><img src="./screenshots/img_0.png?v=3" alt="Chat"/></td>
+    <td><img src="./screenshots/img_6.png?v=3" alt="Emoji Selector"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/settings.png?v=2" alt="Settings"/></td>
-    <td><img src="./screenshots/connection.png?v=2" alt="Connection"/></td>
+    <td><img src="./screenshots/img_1.png?v=3" alt="Nodes"/></td>
+    <td><img src="./screenshots/img_2.png?v=3" alt="Node Info Popup"/></td>
+  </tr>
+  <tr>
+    <td><img src="./screenshots/img_3.png?v=3" alt="Settings"/></td>
+    <td><img src="./screenshots/img_4.png?v=3" alt="Connection"/></td>
+  </tr>
+  <tr>
+    <td><img src="./screenshots/img_7.png?v=3" alt="Logs"/></td>
+    <td><img src="./screenshots/img_5.png?v=3" alt="Logs Expanded View"/></td>
   </tr>
 </table>
 
@@ -55,25 +63,26 @@
 - [x] Ability to reply to the messages
 - [x] Ability to send the reactions (emojis)
 - [x] Limiting the message length to 200 chars (with counter)
-- [ ] Clickable links
 
 ### Nodes tab
 
 #### Nodes list
 
 - [x] Scrollable nodes list
-- [x] Ability to start direct conversation with selected node
+- [x] Ability to start direct conversation with the selected node
 - [x] Display the short and long names of node
 - [x] Display the SNR/RSSI for direct nodes
 - [x] Display the number of hops for the routed nodes
 - [x] Display the ID of the nodes
 - [x] Display the humanized last heard time of the nodes
-- [x] Sort nodes by different fields: last heard, hops count, distance, etc
+- [x] Sort nodes by different fields: last heard, hop count, distance, etc.
 - [x] Nodes fuzzy search
 
 #### Single node expanded view
 
 - [x] Display node detailed info
+- [x] Copy public key to clipboard
+- [x] Delete node feature
 - [ ] Traceroute feature
 - [ ] Ignore feature
 - [ ] Add to Favorite feature
@@ -87,11 +96,11 @@
 
 - [x] Loading device configuration (generic feature)
 - [x] Saving device configuration (generic feature)
-- [ ] Import configuration from link
+- [ ] Import configuration from the link
 
 #### App
 
-- [ ] UI
+- [x] UI
 
 #### Radio
 
@@ -127,15 +136,15 @@
 - [x] Connection via TCP
 - [x] Connection via BLE
 - [x] Connection via Serial
-- [x] Device configuration loading during connection process and storing it into state
-- [x] Storing TCP connections into config file
+- [x] Device configuration loading during the connection process and storing it into state
+- [x] Storing TCP connections into a config file
 - [x] Discovering of BLE and Serial devices feature
 - [x] Reconnection feature with exponential backoff timeouts
 
 ### Logs tab
 
-- [x] Writing logs into files using daily rolling strategy
-- [x] Mirroring logs into log list with scroll
+- [x] Writing logs into files using a daily rolling strategy
+- [x] Mirroring logs into the log list with scroll
 - [x] Ability to expand the single log record (useful for long logs)
 - [x] Ability to copy log record into clipboard
 
@@ -184,9 +193,9 @@
 
 ## FAQ
 
-### How to launch manually downloaded app on macOS?
+### How to launch a manually downloaded app on macOS?
 
-In order to run unsigned application on macOS you need dequarantine it using the command below:
+To run an unsigned application on macOS, you need to dequarantine it using the command below:
 
 ```sh
 xattr -d com.apple.quarantine ./path/to/termtastic
