@@ -650,8 +650,10 @@ impl Store {
         if !self.state.toast_queue.is_empty() {
             self.state.toast = self.state.toast_queue.pop_front();
             self.state.toast_t = Instant::now();
-            self.state_tx
-                .send(StateSnapshot::new(self.state.clone(), vec![name_of!(toast in State)]))?;
+            self.state_tx.send(StateSnapshot::new(
+                self.state.clone(),
+                vec![name_of!(toast in State), name_of!(toast_t in State)],
+            ))?;
         }
 
         Ok(())

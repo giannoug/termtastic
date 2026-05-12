@@ -6,6 +6,7 @@
   <b>termtastic</b> is a feature-rich handmade <a href="https://meshtastic.org">Meshtastic®</a> console client written in Rust.
 </p>
 
+
 <p align="center">
   <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
   <a href="https://github.com/acelot/termtastic/actions"><img src="https://github.com/acelot/termtastic/actions/workflows/build.yml/badge.svg?event=push" height="20" alt="Build"/></a>
@@ -15,20 +16,20 @@
 
 <table>
   <tr>
-    <td><img src="./screenshots/img_0.png?v=3" alt="Chat"/></td>
-    <td><img src="./screenshots/img_6.png?v=3" alt="Emoji Selector"/></td>
+    <td><img src="https://github.com/user-attachments/assets/00b57c3a-92e0-4437-af2f-43a8c1d71e6e" alt="Chat"/></td>
+    <td><img src="https://github.com/user-attachments/assets/3e11a3e8-5d87-4245-8321-d98392df69f3" alt="Emoji Selector"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/img_1.png?v=3" alt="Nodes"/></td>
-    <td><img src="./screenshots/img_2.png?v=3" alt="Node Info Popup"/></td>
+    <td><img src="https://github.com/user-attachments/assets/0826817f-35b8-4c14-b3d7-fabe04fa69af" alt="Nodes"/></td>
+    <td><img src="https://github.com/user-attachments/assets/bcfc81a8-b982-4977-8b7d-ccad23dc5a34" alt="Node Info Popup"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/img_3.png?v=3" alt="Settings"/></td>
-    <td><img src="./screenshots/img_4.png?v=3" alt="Connection"/></td>
+    <td><img src="https://github.com/user-attachments/assets/c400a0e3-f53a-4716-8b00-559f381577f0" alt="Settings"/></td>
+    <td><img src="https://github.com/user-attachments/assets/8a2619df-4092-45d7-8fe0-737b19190cc2" alt="Connection"/></td>
   </tr>
   <tr>
-    <td><img src="./screenshots/img_7.png?v=3" alt="Logs"/></td>
-    <td><img src="./screenshots/img_5.png?v=3" alt="Logs Expanded View"/></td>
+    <td><img src="https://github.com/user-attachments/assets/54e39ddf-a3e6-4c8d-8631-7e8c8e118ebc" alt="Logs"/></td>
+    <td><img src="https://github.com/user-attachments/assets/f8420d89-8f08-442d-9f42-1083cd6d5f2a" alt="Logs Expanded View"/></td>
   </tr>
 </table>
 
