@@ -1,9 +1,8 @@
 use arboard::Clipboard;
-use tokio::sync::{broadcast, mpsc, watch};
+use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::StateAction;
-use crate::state::StateSnapshot;
 use crate::types::Toast;
 use crate::ui::prelude::AppEvent;
 
@@ -11,7 +10,6 @@ use crate::ui::prelude::AppEvent;
 pub struct UiService {
     app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
 }
 
@@ -19,13 +17,11 @@ impl UiService {
     pub fn new(
         app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
     ) -> Self {
         Self {
             app_event_tx,
             app_event_rx,
-            state_rx,
             state_action_tx,
         }
     }

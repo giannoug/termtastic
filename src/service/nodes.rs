@@ -11,7 +11,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::state::StateSnapshot;
+use crate::state::State;
 use crate::types::Toast;
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
@@ -26,7 +26,7 @@ const ONLINE_NODE_THRESHOLD_SECS: i64 = 7200;
 pub struct NodesService {
     app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -37,7 +37,7 @@ impl NodesService {
     pub fn new(
         app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -72,7 +72,7 @@ impl NodesService {
     }
 
     fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
 
         match event {
             Ok(app_event) => match app_event {
@@ -81,13 +81,13 @@ impl NodesService {
                 }
                 AppEvent::NodesSortByCyclePressed => {
                     self.state_action_tx
-                        .send(StateAction::NodesSortBySet(snapshot.state.nodes_sort_by.next()))?;
+                        .send(StateAction::NodesSortBySet(state.nodes_sort_by.next()))?;
                 }
                 AppEvent::NodesFilterChanged(filter) => {
                     self.state_action_tx.send(StateAction::NodesFilterSet(filter))?;
                 }
                 AppEvent::NodeInfoBroadcastRequested => {
-                    let my_node = snapshot.state.get_my_node().expect("should be Some");
+                    let my_node = state.get_my_node().expect("should be Some");
 
                     self.meshtastic_command_tx
                         .send(CommandToMeshtastic::BroadcastNodeInfo {
@@ -96,7 +96,7 @@ impl NodesService {
                         })?;
                 }
                 AppEvent::NodeDeleteRequested(node_num) => {
-                    let my_node_num = snapshot.state.my_node_key.expect("should be Some");
+                    let my_node_num = state.my_node_key.expect("should be Some");
 
                     self.meshtastic_command_tx
                         .send(CommandToMeshtastic::DeleteNode { node_num, my_node_num })?;
@@ -235,10 +235,10 @@ impl NodesService {
     }
 
     fn update_online_nodes(&self) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
         let now = Utc::now();
 
-        let count = snapshot.state.nodes.iter().fold(0, |mut counter, (_, node)| {
+        let count = state.nodes.iter().fold(0, |mut counter, (_, node)| {
             if let Some(last_heard) = node.last_heard
                 && (now - last_heard).num_seconds() < ONLINE_NODE_THRESHOLD_SECS
             {

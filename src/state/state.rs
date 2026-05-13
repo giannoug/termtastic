@@ -1,11 +1,13 @@
+use chrono::DateTime;
+use hostaddr::HostAddr;
+use itertools::Itertools;
+use meshtastic::protobufs::User;
+use ordermap::OrderMap;
+use std::cmp::Ordering;
 use std::{
     collections::{HashMap, VecDeque},
     time::{Duration, Instant},
 };
-
-use hostaddr::HostAddr;
-use meshtastic::protobufs::User;
-use ordermap::OrderMap;
 
 use crate::types::*;
 
@@ -45,7 +47,7 @@ pub struct State {
     pub toast_queue: VecDeque<Toast>,
     pub toast_t: Instant,
     pub toast: Option<Toast>,
-    pub ui_config: UIConfig,
+    pub ui_config: UiConfig,
 }
 
 impl Default for State {
@@ -97,5 +99,65 @@ impl State {
 
     pub fn get_active_channel(&self) -> Option<&Channel> {
         self.active_channel_key.and_then(|key| self.channels.get(&key))
+    }
+
+    pub fn update_nodes_view(&mut self) {
+        let filter = &self.nodes_sort_filter;
+
+        self.nodes_view = self
+            .nodes
+            .values()
+            .filter(|n| {
+                if filter.is_empty() {
+                    return true;
+                }
+
+                n.fulltext.contains(filter)
+            })
+            .sorted_by(|n1, n2| {
+                match (n1.my, n2.my) {
+                    (true, true) => return Ordering::Equal,
+                    (false, true) => return Ordering::Greater,
+                    (true, false) => return Ordering::Less,
+                    _ => {}
+                };
+
+                match &self.nodes_sort_by {
+                    NodesSortBy::Hops => n1
+                        .hops
+                        .unwrap_or(u32::MAX)
+                        .cmp(&n2.hops.unwrap_or(u32::MAX))
+                        .then(n1.snr.total_cmp(&n2.snr).reverse()),
+                    NodesSortBy::LastHeard => n1
+                        .last_heard
+                        .unwrap_or(DateTime::default())
+                        .cmp(&n2.last_heard.unwrap_or(DateTime::default()))
+                        .reverse(),
+                    NodesSortBy::ShortName => n1.short_name().cmp(&n2.short_name()),
+                    NodesSortBy::LongName => n1.long_name().cmp(&n2.long_name()),
+                    NodesSortBy::HwModel => n1
+                        .hw_model()
+                        .cmp(&n2.hw_model())
+                        .then(n1.short_name().cmp(&n2.short_name())),
+                    NodesSortBy::Role => n1.role().cmp(&n2.role()).then(
+                        n1.hops
+                            .unwrap_or(u32::MAX)
+                            .cmp(&n2.hops.unwrap_or(u32::MAX))
+                            .then(n1.snr.total_cmp(&n2.snr).reverse()),
+                    ),
+                }
+            })
+            .map(|node| node.key)
+            .collect();
+    }
+
+    pub fn update_aggregated_devices(&mut self) {
+        self.aggregated_devices = self
+            .tcp_devices
+            .iter()
+            .map(|h| Device::Tcp(h.clone()))
+            .chain(self.discovered_devices.clone())
+            .sorted()
+            .collect();
     }
 }

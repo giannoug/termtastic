@@ -5,7 +5,7 @@ use meshtastic::protobufs::{config, module_config, routing, User};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,
-    NodesSortBy, Tab, Toast, UIConfig,
+    NodesSortBy, Tab, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ pub enum StateAction {
         key: FormItemKey,
         value: FormValue,
     },
-    UIConfigSet {
-        config: UIConfig,
+    UiConfigSet {
+        config: UiConfig,
     },
 }

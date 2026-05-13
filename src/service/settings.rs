@@ -18,8 +18,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::serde::{from_formdata, to_formdata};
-use crate::state::StateSnapshot;
-use crate::types::{AppEvent, Channel, FormData, FormId, SettingsFormState, SettingsItem, Toast, UIConfig};
+use crate::types::{AppEvent, Channel, FormData, FormId, SettingsFormState, SettingsItem, Toast, UiConfig};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::{State, StateAction},
@@ -29,8 +28,9 @@ pub static SETTINGS: LazyLock<Vec<SettingsItem>> = LazyLock::new(|| build_settin
 
 pub struct SettingsService {
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
+    state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
 }
@@ -38,8 +38,9 @@ pub struct SettingsService {
 impl SettingsService {
     pub fn new(
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
+        state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
         meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
     ) -> Self {
@@ -47,6 +48,7 @@ impl SettingsService {
             app_event_rx,
             state_rx,
             state_action_tx,
+            state_changed_rx,
             meshtastic_command_tx,
             meshtastic_event_rx,
         }
@@ -55,8 +57,8 @@ impl SettingsService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Ok(_) = self.state_rx.changed() => self.handle_state_change()?,
-                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
+                event = self.state_changed_rx.recv() => self.handle_state_change(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
                 event = self.meshtastic_event_rx.recv() => self.handle_meshtastic_event(event)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -68,24 +70,33 @@ impl SettingsService {
         Ok(())
     }
 
-    fn handle_state_change(&self) -> anyhow::Result<()> {
-        let snapshot = self.state_rx.borrow();
+    fn handle_state_change(&self, event: Result<Vec<&'static str>, broadcast::error::RecvError>) -> anyhow::Result<()> {
+        match event {
+            Ok(changed) => {
+                if changed.contains(&name_of!(ui_config in State)) {
+                    let state = self.state_rx.borrow();
 
-        if matches!(
-            snapshot.state.settings_form_state,
-            SettingsFormState::Saving { id: FormId::AppUi }
-        ) && snapshot.changed.contains(&name_of!(ui_config in State))
-        {
-            self.state_action_tx
-                .send(StateAction::Toast(Toast::success("setting saved")))?;
+                    if matches!(
+                        state.settings_form_state,
+                        SettingsFormState::Saving { id: FormId::AppUi }
+                    ) {
+                        self.state_action_tx
+                            .send(StateAction::Toast(Toast::success("setting saved")))?;
 
-            self.start_config_loading(&FormId::AppUi)?;
+                        self.start_config_loading(&FormId::AppUi)?;
+                    }
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
+            }
+            _ => {}
         }
 
         Ok(())
     }
 
-    async fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
+    fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(app_event) => match app_event {
                 AppEvent::SettingsFormSelected(id) => {
@@ -236,198 +247,180 @@ impl SettingsService {
     }
 
     fn load_config(&self, id: &FormId) -> anyhow::Result<FormData> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
 
-        let data =
-            match id {
-                FormId::AppUi => to_formdata(&snapshot.state.ui_config)?,
-                FormId::RadioLora => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .lora
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Lora config not loaded"))?,
-                )?,
-                FormId::RadioChannels => {
-                    let channels = snapshot
-                        .state
-                        .channels
-                        .iter()
-                        .filter(|(_, ch)| ch.role.is_direct() == false)
-                        .collect::<OrderMap<_, _>>();
+        let data = match id {
+            FormId::AppUi => to_formdata(&state.ui_config)?,
+            FormId::RadioLora => to_formdata(
+                state
+                    .device_config
+                    .lora
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Lora config not loaded"))?,
+            )?,
+            FormId::RadioChannels => {
+                let channels = state
+                    .channels
+                    .iter()
+                    .filter(|(_, ch)| ch.role.is_direct() == false)
+                    .collect::<OrderMap<_, _>>();
 
-                    if channels.is_empty() {
-                        return Err(anyhow::anyhow!("Channels data not loaded"));
-                    }
-
-                    to_formdata(&channels)?
+                if channels.is_empty() {
+                    return Err(anyhow::anyhow!("Channels data not loaded"));
                 }
-                FormId::RadioSecurity => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .security
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Security config not loaded"))?,
-                )?,
-                FormId::DeviceDevice => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .device
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Device config not loaded"))?,
-                )?,
-                FormId::DeviceUser => to_formdata(
-                    snapshot
-                        .state
-                        .device_user
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("User config not loaded"))?,
-                )?,
-                FormId::DevicePosition => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .position
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Position config not loaded"))?,
-                )?,
-                FormId::DevicePower => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .power
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Power config not loaded"))?,
-                )?,
-                FormId::DeviceDisplay => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .display
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Display config not loaded"))?,
-                )?,
-                FormId::DeviceBluetooth => to_formdata(
-                    snapshot
-                        .state
-                        .device_config
-                        .bluetooth
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Bluetooth config not loaded"))?,
-                )?,
-                FormId::DeviceAdministration => FormData::new(),
-                FormId::ModuleMqtt => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .mqtt
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("MQTT config not loaded"))?,
-                )?,
-                FormId::ModuleSerial => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .serial
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Serial config not loaded"))?,
-                )?,
-                FormId::ModuleExternalNotification => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .external_notification
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("External Notification config not loaded"))?,
-                )?,
-                FormId::ModuleStoreAndForward => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .store_forward
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Store & Forward config not loaded"))?,
-                )?,
-                FormId::ModuleRangeTest => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .range_test
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Range Test config not loaded"))?,
-                )?,
-                FormId::ModuleTelemetry => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .telemetry
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Telemetry config not loaded"))?,
-                )?,
-                FormId::ModuleCannedMessage => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .canned_message
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Canned Message config not loaded"))?,
-                )?,
-                FormId::ModuleNeighborInfo => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .neighbor
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Neighbor Info config not loaded"))?,
-                )?,
-                FormId::ModuleAmbientLighting => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .ambient_lighting
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Ambient Lighting config not loaded"))?,
-                )?,
-                FormId::ModuleDetectionSensor => to_formdata(
-                    snapshot
-                        .state
-                        .device_module_config
-                        .detection_sensor
-                        .as_ref()
-                        .ok_or(anyhow::anyhow!("Detection Sensor config not loaded"))?,
-                )?,
-                FormId::ModuleTrafficManagement => {
-                    to_formdata(snapshot.state.device_module_config.traffic_management.as_ref().ok_or(
-                        anyhow::anyhow!(
-                            "Traffic Management config not loaded or it's not supported by the device firmware"
-                        ),
-                    )?)?
-                }
-            };
+
+                to_formdata(&channels)?
+            }
+            FormId::RadioSecurity => to_formdata(
+                state
+                    .device_config
+                    .security
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Security config not loaded"))?,
+            )?,
+            FormId::DeviceDevice => to_formdata(
+                state
+                    .device_config
+                    .device
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Device config not loaded"))?,
+            )?,
+            FormId::DeviceUser => to_formdata(
+                state
+                    .device_user
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("User config not loaded"))?,
+            )?,
+            FormId::DevicePosition => to_formdata(
+                state
+                    .device_config
+                    .position
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Position config not loaded"))?,
+            )?,
+            FormId::DevicePower => to_formdata(
+                state
+                    .device_config
+                    .power
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Power config not loaded"))?,
+            )?,
+            FormId::DeviceDisplay => to_formdata(
+                state
+                    .device_config
+                    .display
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Display config not loaded"))?,
+            )?,
+            FormId::DeviceBluetooth => to_formdata(
+                state
+                    .device_config
+                    .bluetooth
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Bluetooth config not loaded"))?,
+            )?,
+            FormId::DeviceAdministration => FormData::new(),
+            FormId::ModuleMqtt => to_formdata(
+                state
+                    .device_module_config
+                    .mqtt
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("MQTT config not loaded"))?,
+            )?,
+            FormId::ModuleSerial => to_formdata(
+                state
+                    .device_module_config
+                    .serial
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Serial config not loaded"))?,
+            )?,
+            FormId::ModuleExternalNotification => to_formdata(
+                state
+                    .device_module_config
+                    .external_notification
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("External Notification config not loaded"))?,
+            )?,
+            FormId::ModuleStoreAndForward => to_formdata(
+                state
+                    .device_module_config
+                    .store_forward
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Store & Forward config not loaded"))?,
+            )?,
+            FormId::ModuleRangeTest => to_formdata(
+                state
+                    .device_module_config
+                    .range_test
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Range Test config not loaded"))?,
+            )?,
+            FormId::ModuleTelemetry => to_formdata(
+                state
+                    .device_module_config
+                    .telemetry
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Telemetry config not loaded"))?,
+            )?,
+            FormId::ModuleCannedMessage => to_formdata(
+                state
+                    .device_module_config
+                    .canned_message
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Canned Message config not loaded"))?,
+            )?,
+            FormId::ModuleNeighborInfo => to_formdata(
+                state
+                    .device_module_config
+                    .neighbor
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Neighbor Info config not loaded"))?,
+            )?,
+            FormId::ModuleAmbientLighting => to_formdata(
+                state
+                    .device_module_config
+                    .ambient_lighting
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Ambient Lighting config not loaded"))?,
+            )?,
+            FormId::ModuleDetectionSensor => to_formdata(
+                state
+                    .device_module_config
+                    .detection_sensor
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Detection Sensor config not loaded"))?,
+            )?,
+            FormId::ModuleTrafficManagement => to_formdata(
+                state
+                    .device_module_config
+                    .traffic_management
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!(
+                        "Traffic Management config not loaded or it's not supported by the device firmware"
+                    ))?,
+            )?,
+        };
 
         Ok(data)
     }
 
     fn save_config(&self, id: &FormId) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
-        let form_data = snapshot.state.settings_form_data.as_ref().expect("should be Some");
+        let state = &self.state_rx.borrow();
+        let form_data = state.settings_form_data.as_ref().expect("should be Some");
 
         self.state_action_tx
             .send(StateAction::SettingsFormSavingStart { id: id.clone() })?;
 
         match id {
             FormId::AppUi => {
-                self.state_action_tx.send(StateAction::UIConfigSet {
-                    config: from_formdata::<UIConfig>(&form_data)?,
+                self.state_action_tx.send(StateAction::UiConfigSet {
+                    config: from_formdata::<UiConfig>(&form_data)?,
                 })?;
             }
             FormId::RadioLora => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Lora(from_formdata::<LoRaConfig>(&form_data)?),
                 })?;
             }
@@ -442,56 +435,56 @@ impl SettingsService {
                 self.meshtastic_command_tx
                     .send(CommandToMeshtastic::SaveChannelsConfig {
                         form_id: id.clone(),
-                        my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                        my_node_num: state.my_node_key.expect("should be Some"),
                         channels: msh_channels,
                     })?;
             }
             FormId::RadioSecurity => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Security(from_formdata::<SecurityConfig>(&form_data)?),
                 })?;
             }
             FormId::DeviceDevice => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Device(from_formdata::<DeviceConfig>(&form_data)?),
                 })?;
             }
             FormId::DeviceUser => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveUser {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     user: from_formdata::<User>(&form_data)?,
                 })?;
             }
             FormId::DevicePosition => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Position(from_formdata::<PositionConfig>(&form_data)?),
                 })?;
             }
             FormId::DevicePower => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Power(from_formdata::<PowerConfig>(&form_data)?),
                 })?;
             }
             FormId::DeviceDisplay => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Display(from_formdata::<DisplayConfig>(&form_data)?),
                 })?;
             }
             FormId::DeviceBluetooth => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: config::PayloadVariant::Bluetooth(from_formdata::<BluetoothConfig>(&form_data)?),
                 })?;
             }
@@ -499,21 +492,21 @@ impl SettingsService {
             FormId::ModuleMqtt => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::Mqtt(from_formdata::<MqttConfig>(&form_data)?),
                 })?;
             }
             FormId::ModuleSerial => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::Serial(from_formdata::<SerialConfig>(&form_data)?),
                 })?;
             }
             FormId::ModuleExternalNotification => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::ExternalNotification(from_formdata::<
                         ExternalNotificationConfig,
                     >(&form_data)?),
@@ -522,7 +515,7 @@ impl SettingsService {
             FormId::ModuleStoreAndForward => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::StoreForward(from_formdata::<StoreForwardConfig>(
                         &form_data,
                     )?),
@@ -531,21 +524,21 @@ impl SettingsService {
             FormId::ModuleRangeTest => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::RangeTest(from_formdata::<RangeTestConfig>(&form_data)?),
                 })?;
             }
             FormId::ModuleTelemetry => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::Telemetry(from_formdata::<TelemetryConfig>(&form_data)?),
                 })?;
             }
             FormId::ModuleCannedMessage => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::CannedMessage(from_formdata::<CannedMessageConfig>(
                         &form_data,
                     )?),
@@ -554,7 +547,7 @@ impl SettingsService {
             FormId::ModuleNeighborInfo => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::NeighborInfo(from_formdata::<NeighborInfoConfig>(
                         &form_data,
                     )?),
@@ -563,7 +556,7 @@ impl SettingsService {
             FormId::ModuleAmbientLighting => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::AmbientLighting(from_formdata::<AmbientLightingConfig>(
                         &form_data,
                     )?),
@@ -572,7 +565,7 @@ impl SettingsService {
             FormId::ModuleDetectionSensor => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::DetectionSensor(from_formdata::<DetectionSensorConfig>(
                         &form_data,
                     )?),
@@ -581,7 +574,7 @@ impl SettingsService {
             FormId::ModuleTrafficManagement => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
-                    my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                    my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::TrafficManagement(from_formdata::<TrafficManagementConfig>(
                         &form_data,
                     )?),

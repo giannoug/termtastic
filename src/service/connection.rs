@@ -6,7 +6,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time;
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::state::StateSnapshot;
+use crate::state::State;
 use crate::types::{AppEvent, ConnectionState, Device, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
@@ -20,7 +20,7 @@ const RECONNECTION_BACKOFF_MAX_MILLIS: u64 = 30_000;
 pub struct ConnectionService {
     app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -30,7 +30,7 @@ impl ConnectionService {
     pub fn new(
         app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -104,18 +104,18 @@ impl ConnectionService {
                     };
                 }
                 AppEvent::DeviceRebootRequested => {
-                    let snapshot = &self.state_rx.borrow();
+                    let state = &self.state_rx.borrow();
 
                     self.meshtastic_command_tx.send(CommandToMeshtastic::Reboot {
-                        my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                        my_node_num: state.my_node_key.expect("should be Some"),
                         secs: 3,
                     })?;
                 }
                 AppEvent::DeviceShutdownRequested => {
-                    let snapshot = &self.state_rx.borrow();
+                    let state = &self.state_rx.borrow();
 
                     self.meshtastic_command_tx.send(CommandToMeshtastic::Shutdown {
-                        my_node_num: snapshot.state.my_node_key.expect("should be Some"),
+                        my_node_num: state.my_node_key.expect("should be Some"),
                         secs: 3,
                     })?;
                 }
@@ -181,9 +181,9 @@ impl ConnectionService {
                     self.state_action_tx.send(StateAction::RxTrigger)?;
 
                     if let PayloadVariant::Packet(p) = packet {
-                        let snapshot = &self.state_rx.borrow();
-                        let from = snapshot.state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
-                        let to = snapshot.state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
+                        let state = &self.state_rx.borrow();
+                        let from = state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
+                        let to = state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
 
                         tracing::debug!("PACKET from=\"{:?}\" to=\"{:?}\": {:?}", from, to, p);
                     } else {
@@ -202,12 +202,12 @@ impl ConnectionService {
     }
 
     fn check_connection(&self) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
 
-        match (&snapshot.state.active_device, &snapshot.state.connection_state) {
+        match (&state.active_device, &state.connection_state) {
             (Some(device), ConnectionState::ProblemDetected { since, .. }) => {
                 let backoff_duration = Duration::from_millis(
-                    (RECONNECTION_BACKOFF_BASE_MILLIS * 2_u64.pow(snapshot.state.connection_attempt as u32))
+                    (RECONNECTION_BACKOFF_BASE_MILLIS * 2_u64.pow(state.connection_attempt as u32))
                         .min(RECONNECTION_BACKOFF_MAX_MILLIS),
                 );
 

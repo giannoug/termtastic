@@ -23,7 +23,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub nodes_sort_by: NodesSortBy,
     #[serde(default)]
-    pub ui_config: UIConfig,
+    pub ui_config: UiConfig,
 }
 
 impl From<&State> for AppConfig {
@@ -39,7 +39,7 @@ impl From<&State> for AppConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Hash, Default)]
-pub struct UIConfig {
+pub struct UiConfig {
     #[serde(default)]
     pub is_top_padding_hidden: bool,
     #[serde(default)]

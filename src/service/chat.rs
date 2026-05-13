@@ -6,7 +6,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 use tracing_unwrap::OptionExt;
 
-use crate::state::StateSnapshot;
+use crate::state::State;
 use crate::types::{MessageReaction, UNKNOWN_NODE};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
@@ -16,7 +16,7 @@ use crate::{
 
 pub struct ChatService {
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -25,7 +25,7 @@ pub struct ChatService {
 impl ChatService {
     pub fn new(
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
@@ -55,7 +55,7 @@ impl ChatService {
     }
 
     fn handle_app_event(&self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
 
         match event {
             Ok(app_event) => match app_event {
@@ -65,41 +65,7 @@ impl ChatService {
                 AppEvent::SwitchChannelRequested => {
                     self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
                 }
-                AppEvent::ChatMessageSubmitted { text, reply_message_id } => {
-                    match snapshot.state.get_active_channel() {
-                        Some(Channel {
-                            key,
-                            role: ChannelRole::Primary | ChannelRole::Secondary,
-                            ..
-                        }) => {
-                            self.meshtastic_command_tx
-                                .send(CommandToMeshtastic::SendBroadcastTextMessage {
-                                    my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                                    channel_id: *key,
-                                    reply_message_id,
-                                    text: TextMessage::Text(text),
-                                })?;
-                        }
-                        Some(Channel {
-                            key,
-                            role: ChannelRole::Direct,
-                            ..
-                        }) => {
-                            self.meshtastic_command_tx
-                                .send(CommandToMeshtastic::SendDirectTextMessage {
-                                    my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
-                                    node_num: *key,
-                                    reply_message_id,
-                                    text: TextMessage::Text(text),
-                                })?;
-                        }
-                        _ => {}
-                    }
-                }
-                AppEvent::ChatReactionSubmitted {
-                    emoji,
-                    reply_message_id,
-                } => match snapshot.state.get_active_channel() {
+                AppEvent::ChatMessageSubmitted { text, reply_message_id } => match state.get_active_channel() {
                     Some(Channel {
                         key,
                         role: ChannelRole::Primary | ChannelRole::Secondary,
@@ -107,7 +73,39 @@ impl ChatService {
                     }) => {
                         self.meshtastic_command_tx
                             .send(CommandToMeshtastic::SendBroadcastTextMessage {
-                                my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                my_node_num: state.my_node_key.expect_or_log("my node key should exists"),
+                                channel_id: *key,
+                                reply_message_id,
+                                text: TextMessage::Text(text),
+                            })?;
+                    }
+                    Some(Channel {
+                        key,
+                        role: ChannelRole::Direct,
+                        ..
+                    }) => {
+                        self.meshtastic_command_tx
+                            .send(CommandToMeshtastic::SendDirectTextMessage {
+                                my_node_num: state.my_node_key.expect_or_log("my node key should exists"),
+                                node_num: *key,
+                                reply_message_id,
+                                text: TextMessage::Text(text),
+                            })?;
+                    }
+                    _ => {}
+                },
+                AppEvent::ChatReactionSubmitted {
+                    emoji,
+                    reply_message_id,
+                } => match state.get_active_channel() {
+                    Some(Channel {
+                        key,
+                        role: ChannelRole::Primary | ChannelRole::Secondary,
+                        ..
+                    }) => {
+                        self.meshtastic_command_tx
+                            .send(CommandToMeshtastic::SendBroadcastTextMessage {
+                                my_node_num: state.my_node_key.expect_or_log("my node key should exists"),
                                 channel_id: *key,
                                 reply_message_id,
                                 text: TextMessage::Emoji(emoji),
@@ -120,7 +118,7 @@ impl ChatService {
                     }) => {
                         self.meshtastic_command_tx
                             .send(CommandToMeshtastic::SendDirectTextMessage {
-                                my_node_num: snapshot.state.my_node_key.expect_or_log("my node key should exists"),
+                                my_node_num: state.my_node_key.expect_or_log("my node key should exists"),
                                 node_num: *key,
                                 reply_message_id,
                                 text: TextMessage::Emoji(emoji),
@@ -175,9 +173,9 @@ impl ChatService {
                         Ok(Routing {
                             variant: Some(routing::Variant::ErrorReason(e)),
                         }) => {
-                            let snapshot = &self.state_rx.borrow();
+                            let state = &self.state_rx.borrow();
 
-                            if let Some(my) = snapshot.state.my_node_key
+                            if let Some(my) = state.my_node_key
                                 && packet.to == my
                             {
                                 let channel_key = if packet.to == packet.from {
@@ -199,9 +197,9 @@ impl ChatService {
                         _ => {}
                     },
                     PortNum::TextMessageApp | PortNum::ReplyApp => {
-                        let snapshot = &self.state_rx.borrow();
+                        let state = &self.state_rx.borrow();
 
-                        let channel_key = match (packet.from, packet.to, snapshot.state.my_node_key) {
+                        let channel_key = match (packet.from, packet.to, state.my_node_key) {
                             (_, 0 | u32::MAX, _) => packet.channel,
                             (from, to, Some(my)) if to == my => {
                                 self.state_action_tx
@@ -253,9 +251,9 @@ impl ChatService {
                         };
                     }
                     PortNum::RangeTestApp => {
-                        let snapshot = &self.state_rx.borrow();
+                        let state = &self.state_rx.borrow();
                         let text = String::from_utf8(data.payload.clone()).unwrap_or("can't decode payload".to_owned());
-                        let node = snapshot.state.nodes.get(&packet.from).unwrap_or(&UNKNOWN_NODE);
+                        let node = state.nodes.get(&packet.from).unwrap_or(&UNKNOWN_NODE);
 
                         tracing::info!(
                             packet_id = packet.id,

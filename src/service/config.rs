@@ -3,7 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::state::StateSnapshot;
+use crate::state::State;
 use crate::{
     state::StateAction,
     types::{AppConfig, AppEvent, Toast},
@@ -11,7 +11,7 @@ use crate::{
 
 pub struct ConfigService {
     app_event_rx: broadcast::Receiver<AppEvent>,
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     app_config_last_hash: u64,
 }
@@ -19,7 +19,7 @@ pub struct ConfigService {
 impl ConfigService {
     pub fn new(
         app_event_rx: broadcast::Receiver<AppEvent>,
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
     ) -> Self {
         Self {
@@ -33,7 +33,7 @@ impl ConfigService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
                 _ = self.state_rx.changed() => self.handle_state_change()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -45,7 +45,7 @@ impl ConfigService {
         Ok(())
     }
 
-    async fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
+    fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(AppEvent::InitializationRequested) => {
                 let app_config: AppConfig = confy::load(crate::APP_NAME, "app")?;
@@ -65,9 +65,9 @@ impl ConfigService {
     }
 
     fn handle_state_change(&mut self) -> anyhow::Result<()> {
-        let state_snapshot = &self.state_rx.borrow();
+        let state = self.state_rx.borrow();
 
-        let app_config: AppConfig = (&state_snapshot.state).into();
+        let app_config: AppConfig = (&*state).into();
         let app_config_hash = calculate_hash(&app_config);
 
         if app_config_hash != self.app_config_last_hash {

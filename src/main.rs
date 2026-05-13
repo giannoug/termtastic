@@ -27,7 +27,7 @@ pub const APP_VERSION: &str = env!("APP_VERSION");
 
 #[tokio::main]
 async fn main() {
-    let (store, state_action_tx, state_rx) = Store::new(State::default());
+    let (store, state_action_tx, state_rx, state_changed_rx) = Store::new(State::default());
 
     let (file_writer, _file_writer_guard) =
         tracing_appender::non_blocking(tracing_appender::rolling::daily("logs", format!("{}.log", APP_NAME)));
@@ -50,12 +50,7 @@ async fn main() {
 
     let config_service = ConfigService::new(event_rx.resubscribe(), state_rx.clone(), state_action_tx.clone());
 
-    let ui_service = UiService::new(
-        event_tx.clone(),
-        event_rx.resubscribe(),
-        state_rx.clone(),
-        state_action_tx.clone(),
-    );
+    let ui_service = UiService::new(event_tx.clone(), event_rx.resubscribe(), state_action_tx.clone());
 
     let nodes_service = NodesService::new(
         event_tx.clone(),
@@ -87,6 +82,7 @@ async fn main() {
         event_rx.resubscribe(),
         state_rx.clone(),
         state_action_tx.clone(),
+        state_changed_rx.resubscribe(),
         meshtastic_command_tx.clone(),
         meshtastic_event_rx.resubscribe(),
     );

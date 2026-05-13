@@ -26,7 +26,7 @@ use strum::IntoEnumIterator;
 use crate::serde::to_formdata;
 use crate::types::{
     AppEvent, Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind,
-    FormValue, UIConfig,
+    FormValue, UiConfig,
 };
 use nameof::name_of;
 
@@ -215,7 +215,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
         FormId::AppUi,
         Vec::from([
             FormItem::new(
-                FormItemKey::Simple(name_of!(is_top_padding_hidden in UIConfig)),
+                FormItemKey::Simple(name_of!(is_top_padding_hidden in UiConfig)),
                 "Hide top padding",
                 None,
                 FormItemKind::Switch,
@@ -223,7 +223,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |_| Ok(()),
             ),
             FormItem::new(
-                FormItemKey::Simple(name_of!(is_bottom_padding_hidden in UIConfig)),
+                FormItemKey::Simple(name_of!(is_bottom_padding_hidden in UiConfig)),
                 "Hide bottom padding",
                 None,
                 FormItemKind::Switch,
@@ -231,7 +231,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |_| Ok(()),
             ),
             FormItem::new(
-                FormItemKey::Simple(name_of!(is_left_padding_hidden in UIConfig)),
+                FormItemKey::Simple(name_of!(is_left_padding_hidden in UiConfig)),
                 "Hide left padding",
                 None,
                 FormItemKind::Switch,
@@ -239,7 +239,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |_| Ok(()),
             ),
             FormItem::new(
-                FormItemKey::Simple(name_of!(is_right_padding_hidden in UIConfig)),
+                FormItemKey::Simple(name_of!(is_right_padding_hidden in UiConfig)),
                 "Hide right padding",
                 None,
                 FormItemKind::Switch,

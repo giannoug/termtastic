@@ -12,12 +12,12 @@ use std::{
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::state::{StateAction, StateSnapshot};
+use crate::state::{State, StateAction};
 use crate::types::AppEvent;
 use crate::ui::component::{Component, Layout};
 
 pub struct Ui<'a> {
-    state_rx: watch::Receiver<StateSnapshot>,
+    state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     event_tx: broadcast::Sender<AppEvent>,
     crossterm_events: EventStream,
@@ -26,7 +26,7 @@ pub struct Ui<'a> {
 
 impl<'a> Ui<'a> {
     pub fn new(
-        state_rx: watch::Receiver<StateSnapshot>,
+        state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         event_tx: broadcast::Sender<AppEvent>,
     ) -> Self {
@@ -79,7 +79,7 @@ impl<'a> Ui<'a> {
                     subsys.request_shutdown();
                 }
 
-                self.layout.handle_event(&self.state_rx.borrow().state, &event, &|ev| {
+                self.layout.handle_event(&self.state_rx.borrow(), &event, &|ev| {
                     self.event_tx.send(ev)?;
                     Ok(())
                 })?;
@@ -94,16 +94,16 @@ impl<'a> Ui<'a> {
     }
 
     fn redraw(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> anyhow::Result<()> {
-        let snapshot = &self.state_rx.borrow();
+        let state = &self.state_rx.borrow();
 
-        if snapshot.state.need_clear_frame {
+        if state.need_clear_frame {
             terminal.clear()?;
             self.state_action_tx.send(StateAction::FrameCleared)?;
 
             return Ok(());
         }
 
-        terminal.draw(|frame| self.layout.render(&snapshot.state, frame, frame.area()))?;
+        terminal.draw(|frame| self.layout.render(&state, frame, frame.area()))?;
 
         Ok(())
     }
