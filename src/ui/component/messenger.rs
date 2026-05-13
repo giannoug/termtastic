@@ -24,8 +24,8 @@ pub struct Messenger<'a> {
     replying_to: HashMap<u32, (Node, u32)>,
     emoji_selector_state: EmojiSelectorState<'a>,
     is_emoji_selector_visible: bool,
-    reactions_viewer_state: ReactionsViewerState,
-    is_reactions_viewer_visible: bool,
+    reactions_viewer_state: ReactionViewerState,
+    is_reaction_viewer_visible: bool,
 }
 
 impl<'a> Messenger<'a> {
@@ -37,13 +37,13 @@ impl<'a> Messenger<'a> {
             replying_to: HashMap::default(),
             emoji_selector_state: EmojiSelectorState::new(),
             is_emoji_selector_visible: false,
-            reactions_viewer_state: ReactionsViewerState::new(),
-            is_reactions_viewer_visible: false,
+            reactions_viewer_state: ReactionViewerState::new(),
+            is_reaction_viewer_visible: false,
         }
     }
 
     fn get_hotkeys(&self, active_channel_key: u32) -> Vec<Hotkey> {
-        if self.is_reactions_viewer_visible {
+        if self.is_reaction_viewer_visible {
             return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
 
@@ -123,11 +123,11 @@ impl<'a> Component for Messenger<'a> {
 
         let messages = state.messages.get(&active_channel_key).unwrap_or(&EMPTY_MESSAGES_VEC);
 
-        if self.is_reactions_viewer_visible {
+        if self.is_reaction_viewer_visible {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) => match code {
                     KeyCode::Esc if kind == &KeyEventKind::Press => {
-                        self.is_reactions_viewer_visible = false;
+                        self.is_reaction_viewer_visible = false;
                         return Ok(true);
                     }
                     _ => {}
@@ -250,7 +250,7 @@ impl<'a> Component for Messenger<'a> {
                 KeyCode::F(7) if kind == &KeyEventKind::Press => {
                     if list_state.selected.and_then(|i| messages.get(i)).is_some() {
                         self.follow_chat.insert(active_channel_key, false);
-                        self.is_reactions_viewer_visible = true;
+                        self.is_reaction_viewer_visible = true;
                     }
 
                     return Ok(true);
@@ -348,7 +348,7 @@ impl<'a> Component for Messenger<'a> {
                 .infinite_scrolling(false)
                 .scroll_direction(ScrollDirection::Backward)
                 .scrollbar(default_scrollbar())
-                .add_modifier(if self.is_emoji_selector_visible || self.is_reactions_viewer_visible {
+                .add_modifier(if self.is_emoji_selector_visible || self.is_reaction_viewer_visible {
                     Modifier::DIM
                 } else {
                     Modifier::empty()
@@ -363,23 +363,21 @@ impl<'a> Component for Messenger<'a> {
         let input_block = Block::bordered()
             .padding(Padding::symmetric(1, 0))
             .border_type(BorderType::Rounded)
-            .border_style(Style::new().dark_gray());
+            .border_style(Style::new().dark_gray())
+            .add_modifier(if self.is_emoji_selector_visible || self.is_reaction_viewer_visible {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            });
 
         let input_block_area = input_block.inner(v[1]);
 
         let channel_name_spans = match (&active_channel.role, replying_to) {
-            (ChannelRole::Primary | ChannelRole::Secondary, None) => vec![
-                Span::from(format!("#{} ", active_channel.key)).dark_gray(),
-                Span::from(if !active_channel.name.is_empty() {
-                    &active_channel.name
-                } else if active_channel.role == ChannelRole::Primary {
-                    "Primary"
-                } else {
-                    "Secondary"
-                })
-                .fg(active_channel.psk.len().psk_len_to_color()),
-                Span::from(" ←").dark_gray(),
-            ],
+            (ChannelRole::Primary | ChannelRole::Secondary, None) => channel_name_to_spans(active_channel, state)
+                .iter()
+                .chain(iter::once(&Span::from(" ←").dark_gray()))
+                .cloned()
+                .collect(),
             (ChannelRole::Direct, None) => vec![
                 short_name_to_span(state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE)),
                 Span::from(" ←").dark_gray(),
@@ -420,8 +418,8 @@ impl<'a> Component for Messenger<'a> {
         .right_aligned()
         .render(input_block_area_h[3], frame.buffer_mut());
 
-        // reactions viewer
-        if self.is_reactions_viewer_visible
+        // reaction viewer
+        if self.is_reaction_viewer_visible
             && let Some(message) = list_state.selected.and_then(|i| messages.get(i))
         {
             let popup_area = Rect {
@@ -433,19 +431,19 @@ impl<'a> Component for Messenger<'a> {
 
             Clear.render(popup_area, frame.buffer_mut());
 
-            self.is_reactions_viewer_visible = true;
+            self.is_reaction_viewer_visible = true;
 
-            let reaction_items: Vec<ReactionsViewerItem> = message
+            let reaction_items: Vec<ReactionViewerItem> = message
                 .reactions
                 .iter()
                 .map(|reaction| {
                     let node = state.nodes.get(&reaction.node_key).unwrap_or(&UNKNOWN_NODE);
 
-                    ReactionsViewerItem { reaction, node }
+                    ReactionViewerItem { reaction, node }
                 })
                 .collect();
 
-            ReactionsViewerWidget::new(reaction_items).render(
+            ReactionViewerWidget::new(reaction_items).render(
                 popup_area,
                 frame.buffer_mut(),
                 &mut self.reactions_viewer_state,

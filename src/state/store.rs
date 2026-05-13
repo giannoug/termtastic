@@ -87,7 +87,9 @@ impl Store {
                     state.active_device = cfg.active_device;
                     state.tcp_devices = cfg.tcp_devices;
                     state.nodes_sort_by = cfg.nodes_sort_by;
+                    state.nodes_filter = cfg.nodes_filter;
                     state.ui_config = cfg.ui_config;
+                    state.update_nodes_view();
                     state.update_aggregated_devices();
 
                     changed.extend(vec![
@@ -95,7 +97,9 @@ impl Store {
                         name_of!(active_device in State),
                         name_of!(tcp_devices in State),
                         name_of!(nodes_sort_by in State),
+                        name_of!(nodes_filter in State),
                         name_of!(ui_config in State),
+                        name_of!(nodes_view in State),
                         name_of!(aggregated_devices in State),
                     ]);
                 });
@@ -158,38 +162,39 @@ impl Store {
             }
             StateAction::ConnectionStop => {
                 self.state_tx.send_modify(|state| {
-                    state.connection_state = Default::default();
-                    state.connection_attempt = 0;
-                    state.reconnection_backoff = None;
                     state.active_device = None;
-                    state.settings_form_state = Default::default();
-                    state.settings_form_data = None;
-                    state.settings_form_original_data = None;
-                    state.settings_form_is_changed = false;
+                    state.channels.clear();
+                    state.connection_attempt = 0;
+                    state.connection_state = Default::default();
                     state.device_config = Default::default();
                     state.device_module_config = Default::default();
                     state.device_user = Default::default();
-                    state.channels.clear();
-                    state.nodes_view.clear();
+                    state.my_node_key = None;
                     state.nodes.clear();
+                    state.nodes_view.clear();
                     state.online_nodes = 0;
+                    state.reconnection_backoff = None;
+                    state.settings_form_data = None;
+                    state.settings_form_is_changed = false;
+                    state.settings_form_original_data = None;
+                    state.settings_form_state = Default::default();
 
                     changed.extend(vec![
-                        name_of!(connection_state in State),
-                        name_of!(connection_attempt in State),
-                        name_of!(reconnection_backoff in State),
                         name_of!(active_device in State),
-                        name_of!(settings_form_state in State),
-                        name_of!(settings_form_data in State),
-                        name_of!(settings_form_original_data in State),
-                        name_of!(settings_form_is_changed in State),
+                        name_of!(channels in State),
+                        name_of!(connection_attempt in State),
+                        name_of!(connection_state in State),
                         name_of!(device_config in State),
                         name_of!(device_module_config in State),
                         name_of!(device_user in State),
-                        name_of!(channels in State),
-                        name_of!(nodes_view in State),
                         name_of!(nodes in State),
+                        name_of!(nodes_view in State),
                         name_of!(online_nodes in State),
+                        name_of!(reconnection_backoff in State),
+                        name_of!(settings_form_data in State),
+                        name_of!(settings_form_is_changed in State),
+                        name_of!(settings_form_original_data in State),
+                        name_of!(settings_form_state in State),
                     ]);
                 });
             }
@@ -379,7 +384,7 @@ impl Store {
                     true
                 });
             }
-            StateAction::NodeSet(mut node) => {
+            StateAction::NodeInit(mut node) => {
                 self.state_tx.send_modify(|state| {
                     if let Some(number) = state.my_node_key
                         && node.key == number
@@ -393,6 +398,80 @@ impl Store {
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                 });
             }
+            StateAction::NodeInitTemporary(mut node) => {
+                self.state_tx.send_modify(|state| {
+                    if let Some(number) = state.my_node_key
+                        && node.key == number
+                    {
+                        node.my = true;
+                    }
+
+                    let mut inserted = false;
+
+                    state.nodes.entry(node.key).or_insert_with(|| {
+                        inserted = true;
+                        node
+                    });
+
+                    if inserted {
+                        state.update_nodes_view();
+
+                        changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                    }
+                });
+            }
+            StateAction::NodeUpdate(mut node) => {
+                self.state_tx.send_modify(|state| {
+                    if let Some(number) = state.my_node_key
+                        && node.key == number
+                    {
+                        node.my = true;
+                    }
+
+                    if let Some(existing_node) = state.nodes.get_mut(&node.key) {
+                        existing_node.user = node.user;
+                        existing_node.hops = node.hops;
+                        existing_node.last_heard = node.last_heard;
+                        existing_node.snr = node.snr;
+                        existing_node.rssi = node.rssi;
+                        if existing_node.public_key.is_empty() {
+                            existing_node.public_key = node.public_key;
+                        }
+                        existing_node.my = node.my;
+                        existing_node.update_fulltext();
+                    }
+
+                    state.update_nodes_view();
+
+                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                });
+            }
+            StateAction::NodeUpdateLastHeard {
+                node_key,
+                hops,
+                snr,
+                rssi,
+            } => {
+                self.state_tx.send_if_modified(|state| {
+                    let Some(node) = state.nodes.get_mut(&node_key) else {
+                        return false;
+                    };
+
+                    node.last_heard = Some(Utc::now());
+                    node.hops = Some(hops);
+
+                    if hops == 0 {
+                        node.snr = snr;
+                        node.rssi = Some(rssi);
+                    }
+
+                    state.update_nodes_view();
+
+                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+
+                    true
+                });
+            }
             StateAction::NodeDelete(node_key) => {
                 self.state_tx.send_if_modified(|state| {
                     if state.nodes.remove(&node_key).is_none() {
@@ -404,20 +483,6 @@ impl Store {
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
 
                     true
-                });
-            }
-            StateAction::NodeEnsure(mut node) => {
-                self.state_tx.send_modify(|state| {
-                    if let Some(number) = state.my_node_key
-                        && node.key == number
-                    {
-                        node.my = true;
-                    }
-
-                    state.nodes.entry(node.key).or_insert(node);
-                    state.update_nodes_view();
-
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                 });
             }
             StateAction::ChannelSet(key, channel) => {
@@ -460,13 +525,10 @@ impl Store {
             }
             StateAction::NodesFilterSet(filter) => {
                 self.state_tx.send_modify(|state| {
-                    state.nodes_sort_filter = filter.to_lowercase();
+                    state.nodes_filter = filter.to_lowercase();
                     state.update_nodes_view();
 
-                    changed.extend(vec![
-                        name_of!(nodes_sort_filter in State),
-                        name_of!(nodes_view in State),
-                    ]);
+                    changed.extend(vec![name_of!(nodes_filter in State), name_of!(nodes_view in State)]);
                 });
             }
             StateAction::NodesOnlineSet(count) => {
@@ -478,26 +540,6 @@ impl Store {
                     state.online_nodes = count;
 
                     changed.push(name_of!(online_nodes in State));
-
-                    true
-                });
-            }
-            StateAction::NodeUpdateLastHeard { node_key, hops, snr } => {
-                self.state_tx.send_if_modified(|state| {
-                    let Some(node) = state.nodes.get_mut(&node_key) else {
-                        return false;
-                    };
-
-                    node.last_heard = Some(Utc::now());
-                    node.hops = Some(hops);
-
-                    if hops == 0 {
-                        node.snr = snr;
-                    }
-
-                    state.update_nodes_view();
-
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
 
                     true
                 });

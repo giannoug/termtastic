@@ -20,8 +20,8 @@ pub struct State {
     pub channels: OrderMap<u32, Channel>,
     pub connection_attempt: u16,
     pub connection_state: ConnectionState,
-    pub device_discovering_state: DeviceDiscoveringState,
     pub device_config: DeviceConfig,
+    pub device_discovering_state: DeviceDiscoveringState,
     pub device_module_config: DeviceModuleConfig,
     pub device_user: Option<User>,
     pub discovered_devices: Vec<Device>,
@@ -29,24 +29,24 @@ pub struct State {
     pub messages: HashMap<u32, VecDeque<Message>>,
     pub my_node_key: Option<u32>,
     pub need_clear_frame: bool,
-    pub nodes_sort_by: NodesSortBy,
-    pub nodes_sort_filter: String,
-    pub nodes_view: Vec<u32>,
     pub nodes: HashMap<u32, Node>,
+    pub nodes_sort_by: NodesSortBy,
+    pub nodes_filter: String,
+    pub nodes_view: Vec<u32>,
     pub online_nodes: u16,
     pub reconnection_backoff: Option<Duration>,
-    pub rx_t: Instant,
     pub rx: bool,
-    pub settings_form_state: SettingsFormState,
-    pub settings_form_original_data: Option<FormData>,
+    pub rx_t: Instant,
     pub settings_form_data: Option<FormData>,
     pub settings_form_is_changed: bool,
-    pub splash_logo_t: Instant,
+    pub settings_form_original_data: Option<FormData>,
+    pub settings_form_state: SettingsFormState,
     pub splash_logo: bool,
+    pub splash_logo_t: Instant,
     pub tcp_devices: Vec<HostAddr<String>>,
+    pub toast: Option<Toast>,
     pub toast_queue: VecDeque<Toast>,
     pub toast_t: Instant,
-    pub toast: Option<Toast>,
     pub ui_config: UiConfig,
 }
 
@@ -70,7 +70,7 @@ impl Default for State {
             my_node_key: None,
             need_clear_frame: false,
             nodes_sort_by: Default::default(),
-            nodes_sort_filter: Default::default(),
+            nodes_filter: Default::default(),
             nodes_view: Vec::with_capacity(200),
             nodes: HashMap::with_capacity(200),
             online_nodes: 0,
@@ -102,7 +102,7 @@ impl State {
     }
 
     pub fn update_nodes_view(&mut self) {
-        let filter = &self.nodes_sort_filter;
+        let filter: Vec<&str> = self.nodes_filter.split(" ").collect();
 
         self.nodes_view = self
             .nodes
@@ -112,7 +112,7 @@ impl State {
                     return true;
                 }
 
-                n.fulltext.contains(filter)
+                filter.iter().all(|token| n.fulltext.contains(token))
             })
             .sorted_by(|n1, n2| {
                 match (n1.my, n2.my) {

@@ -19,8 +19,8 @@ use crate::{
     types::{AppEvent, Node},
 };
 
+pub const ONLINE_NODE_THRESHOLD_SECS: i64 = 7200;
 const UPDATE_ONLINE_NODES_INTERVAL_SECS: u64 = 2;
-const ONLINE_NODE_THRESHOLD_SECS: i64 = 7200;
 
 #[allow(dead_code)]
 pub struct NodesService {
@@ -159,7 +159,7 @@ impl NodesService {
             from_radio::PayloadVariant::NodeInfo(node_info) => {
                 match Node::try_from(&node_info) {
                     Ok(node) => {
-                        self.state_action_tx.send(StateAction::NodeSet(node))?;
+                        self.state_action_tx.send(StateAction::NodeInit(node))?;
                         self.update_online_nodes()?;
                     }
                     Err(e) => {
@@ -174,14 +174,14 @@ impl NodesService {
             }
             from_radio::PayloadVariant::Packet(mesh_packet) => {
                 self.state_action_tx
-                    .send(StateAction::NodeEnsure((&mesh_packet).into()))?;
+                    .send(StateAction::NodeInitTemporary((&mesh_packet).into()))?;
 
                 match &mesh_packet.payload_variant {
                     Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {
                         PortNum::NodeinfoApp => match User::decode(&*data.payload) {
                             Ok(user) => {
                                 match Node::try_from((&mesh_packet, &user)) {
-                                    Ok(node) => self.state_action_tx.send(StateAction::NodeSet(node))?,
+                                    Ok(node) => self.state_action_tx.send(StateAction::NodeUpdate(node))?,
                                     Err(e) => {
                                         tracing::debug!(
                                             node_key = mesh_packet.from,
@@ -227,6 +227,7 @@ impl NodesService {
             node_key: packet.from,
             hops: packet.hop_start.saturating_sub(packet.hop_limit),
             snr: packet.rx_snr,
+            rssi: packet.rx_rssi,
         })?;
 
         self.update_online_nodes()?;

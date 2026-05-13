@@ -179,7 +179,7 @@ impl<'a> NodeInfoWidget<'a> {
         HotkeysWidget::new(
             vec![
                 Some(Hotkey::new("k", "copy public key")),
-                (!node.my).then_some(Hotkey::new("del", "delete")),
+                (!node.my).then_some(Hotkey::red("del", "remove")),
             ]
             .into_iter()
             .flatten()

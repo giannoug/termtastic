@@ -12,11 +12,11 @@ use crate::types::{MessageReaction, Node};
 use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span};
 use crate::ui::prelude::{Borders, Constraint, Layout, PlaceholderWidget};
 
-pub struct ReactionsViewerState {
+pub struct ReactionViewerState {
     list_state: ListState,
 }
 
-impl ReactionsViewerState {
+impl ReactionViewerState {
     pub fn new() -> Self {
         Self {
             list_state: ListState::default(),
@@ -54,23 +54,23 @@ impl ReactionsViewerState {
     }
 }
 
-pub struct ReactionsViewerItem<'a> {
+pub struct ReactionViewerItem<'a> {
     pub reaction: &'a MessageReaction,
     pub node: &'a Node,
 }
 
-pub struct ReactionsViewerWidget<'a> {
-    reactions: Vec<ReactionsViewerItem<'a>>,
+pub struct ReactionViewerWidget<'a> {
+    reactions: Vec<ReactionViewerItem<'a>>,
 }
 
-impl<'a> ReactionsViewerWidget<'a> {
-    pub fn new(reactions: Vec<ReactionsViewerItem<'a>>) -> Self {
+impl<'a> ReactionViewerWidget<'a> {
+    pub fn new(reactions: Vec<ReactionViewerItem<'a>>) -> Self {
         Self { reactions }
     }
 }
 
-impl<'a> StatefulWidget for ReactionsViewerWidget<'a> {
-    type State = ReactionsViewerState;
+impl<'a> StatefulWidget for ReactionViewerWidget<'a> {
+    type State = ReactionViewerState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let block = Block::bordered()
@@ -122,7 +122,7 @@ impl<'a> StatefulWidget for ReactionsViewerWidget<'a> {
 }
 
 struct ReactionWidget<'a> {
-    pub item: &'a ReactionsViewerItem<'a>,
+    pub item: &'a ReactionViewerItem<'a>,
     pub is_selected: bool,
     pub is_scrollable: bool,
 }

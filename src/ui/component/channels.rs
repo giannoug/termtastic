@@ -2,7 +2,6 @@ use std::{collections::VecDeque, ops::Index};
 
 use crate::ui::{helpers::default_scrollbar, prelude::*};
 use chrono::Local;
-use meshtastic::protobufs::config::lo_ra_config::ModemPreset;
 
 pub struct Channels {
     list_state: ListState,
@@ -88,12 +87,6 @@ impl<'a> Component for Channels {
             }
 
             let empty_messages_vec: VecDeque<Message> = VecDeque::default();
-            let radio_preset_name = state
-                .device_config
-                .lora
-                .as_ref()
-                .and_then(|lora| ModemPreset::try_from(lora.modem_preset).ok())
-                .and_then(|preset| Some(preset.as_channel_name()));
 
             let list_builder = ListBuilder::new(|context| {
                 let channel = channels.index(context.index);
@@ -104,12 +97,7 @@ impl<'a> Component for Channels {
 
                 let item = ChannelWidget {
                     channel,
-                    radio_preset_name: &radio_preset_name,
-                    direct_node: if channel.role.is_direct() {
-                        state.nodes.get(&channel.key)
-                    } else {
-                        None
-                    },
+                    channel_name_spans: channel_name_to_spans(channel, state),
                     last_message,
                     last_message_node,
                     is_selected: context.is_selected,
@@ -133,8 +121,7 @@ impl<'a> Component for Channels {
 
 struct ChannelWidget<'a> {
     pub channel: &'a Channel,
-    pub radio_preset_name: &'a Option<String>,
-    pub direct_node: Option<&'a Node>,
+    pub channel_name_spans: Vec<Span<'a>>,
     pub last_message: Option<&'a Message>,
     pub last_message_node: Option<&'a Node>,
     pub is_selected: bool,
@@ -168,49 +155,7 @@ impl<'a> Widget for ChannelWidget<'a> {
         let v0_h = Layout::horizontal([Constraint::Fill(3), Constraint::Fill(1), Constraint::Fill(1)]).split(v[0]);
 
         // first line
-        let security_span = match self.channel.psk.len() {
-            0 => Span::from("[non-encrypted]").red(),
-            1 => Span::from("[weak]").yellow(),
-            _ => Span::from("[encrypted]").green(),
-        };
-
-        let name_span = match (&self.channel.role, self.direct_node) {
-            (ChannelRole::Primary, _) => vec![
-                Span::from(format!("#{}", self.channel.key)).dark_gray(),
-                Span::from(" "),
-                Span::from(if !self.channel.name.is_empty() {
-                    &self.channel.name
-                } else if let Some(preset_name) = self.radio_preset_name.as_ref() {
-                    preset_name
-                } else {
-                    "Primary"
-                }),
-                Span::from(" ").dark_gray(),
-                security_span,
-            ],
-            (ChannelRole::Secondary, _) => vec![
-                Span::from(format!("#{}", self.channel.key)).dark_gray(),
-                Span::from(" "),
-                Span::from(if !self.channel.name.is_empty() {
-                    &self.channel.name
-                } else {
-                    "Secondary"
-                }),
-                Span::from(" ").dark_gray(),
-                security_span,
-            ],
-            (ChannelRole::Direct, Some(node)) => {
-                vec![short_name_to_span(node), Span::from(" "), Span::from(node.long_name())]
-            }
-            (ChannelRole::Direct, None) => {
-                vec![Span::from(format!("!{:x}", self.channel.key))]
-            }
-            (ChannelRole::Disabled, _) => {
-                vec![Span::from("Disabled")]
-            }
-        };
-
-        Line::from(name_span).render(v0_h[0], buf);
+        Line::from(self.channel_name_spans).render(v0_h[0], buf);
 
         let type_span = match &self.channel.role {
             ChannelRole::Primary => Span::from("PRIMARY"),

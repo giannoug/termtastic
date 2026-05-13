@@ -1,3 +1,5 @@
+use crate::service::ONLINE_NODE_THRESHOLD_SECS;
+use crate::state::State;
 use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
@@ -10,8 +12,6 @@ use std::{collections::HashMap, fmt::Debug, time::Instant};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 use tracing::Level;
 
-use crate::state::State;
-
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Default)]
 pub struct AppConfig {
     #[serde(default)]
@@ -23,6 +23,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub nodes_sort_by: NodesSortBy,
     #[serde(default)]
+    pub nodes_filter: String,
+    #[serde(default)]
     pub ui_config: UiConfig,
 }
 
@@ -33,6 +35,7 @@ impl From<&State> for AppConfig {
             active_device: value.active_device.clone(),
             tcp_devices: value.tcp_devices.clone(),
             nodes_sort_by: value.nodes_sort_by.clone(),
+            nodes_filter: value.nodes_filter.clone(),
             ui_config: value.ui_config.clone(),
         }
     }
@@ -205,6 +208,14 @@ impl Hotkey {
             label_color: Color::DarkGray,
         }
     }
+
+    pub fn red<S: Into<String>>(key: S, label: S) -> Self {
+        Self {
+            key: key.into(),
+            label: label.into(),
+            label_color: Color::Red,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -327,6 +338,9 @@ pub struct Node {
     pub rssi: Option<i32>,
     pub public_key: Vec<u8>,
     pub my: bool,
+    pub is_favorite: bool,
+    pub is_ignored: bool,
+    pub is_muted: bool,
     pub fulltext: String,
 }
 
@@ -336,6 +350,7 @@ pub struct NodeUser {
     pub long_name: String,
     pub role: i32,
     pub hw_model: i32,
+    pub is_licensed: bool,
     pub is_unmessagable: Option<bool>,
 }
 
@@ -347,6 +362,7 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
         long_name: "Unknown".to_owned(),
         role: -1,
         hw_model: -1,
+        is_licensed: false,
         is_unmessagable: None,
     }),
     hops: None,
@@ -355,7 +371,10 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
     rssi: None,
     public_key: vec![],
     my: false,
-    fulltext: "?".to_owned(),
+    is_favorite: false,
+    is_ignored: false,
+    is_muted: false,
+    fulltext: Default::default(),
 });
 
 impl Node {
@@ -390,8 +409,16 @@ impl Node {
     }
 
     pub fn update_fulltext(&mut self) {
-        self.fulltext = format!(
-            "{} {} {} {} {}",
+        let now = Utc::now();
+
+        let is_online = self
+            .last_heard
+            .and_then(|last_heard| Some((now - last_heard).num_seconds() < ONLINE_NODE_THRESHOLD_SECS))
+            .unwrap_or(false);
+
+        let is_direct = self.hops.and_then(|h| Some(h == 0)).unwrap_or(false);
+
+        self.fulltext = vec![
             self.user
                 .as_ref()
                 .and_then(|u| Some(&u.short_name))
@@ -404,8 +431,44 @@ impl Node {
                 .to_lowercase(),
             self.role().to_lowercase(),
             self.hw_model().to_lowercase(),
-            self.id,
-        );
+            self.id.clone(),
+            if is_online {
+                "$online".to_owned()
+            } else {
+                "$offline".to_owned()
+            },
+            if is_direct {
+                "$direct".to_owned()
+            } else {
+                "$remote".to_owned()
+            },
+            if let Some(hops) = self.hops {
+                format!("$hops{}", hops)
+            } else {
+                "".to_owned()
+            },
+            if self.is_favorite {
+                "$favorite".to_owned()
+            } else {
+                "".to_owned()
+            },
+            if self.is_ignored {
+                "$ignored".to_owned()
+            } else {
+                "".to_owned()
+            },
+            if self.is_muted {
+                "$muted".to_owned()
+            } else {
+                "".to_owned()
+            },
+            if self.user.is_some() {
+                "$stored".to_owned()
+            } else {
+                "$temporary".to_owned()
+            },
+        ]
+        .join(" ");
     }
 }
 
@@ -444,7 +507,10 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
             rssi: None,
             public_key: user.public_key.clone(),
             my: false,
-            fulltext: "".to_owned(),
+            is_favorite: value.is_favorite,
+            is_ignored: value.is_ignored,
+            is_muted: value.is_muted,
+            fulltext: Default::default(),
         };
 
         node.update_fulltext();
@@ -467,7 +533,10 @@ impl From<&meshtastic::protobufs::MeshPacket> for Node {
             rssi: Some(packet.rx_rssi),
             public_key: packet.public_key.clone(),
             my: false,
-            fulltext: "".to_owned(),
+            is_favorite: false,
+            is_ignored: false,
+            is_muted: false,
+            fulltext: Default::default(),
         };
 
         node.update_fulltext();
@@ -494,7 +563,10 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
             rssi: Some(packet.rx_rssi),
             public_key: user.public_key.clone(),
             my: false,
-            fulltext: "".to_owned(),
+            is_favorite: false,
+            is_ignored: false,
+            is_muted: false,
+            fulltext: Default::default(),
         };
 
         node.update_fulltext();
@@ -510,6 +582,7 @@ impl From<&meshtastic::protobufs::User> for NodeUser {
             long_name: value.long_name.clone(),
             role: value.role,
             hw_model: value.hw_model,
+            is_licensed: value.is_licensed,
             is_unmessagable: value.is_unmessagable,
         }
     }

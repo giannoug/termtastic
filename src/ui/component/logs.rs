@@ -67,6 +67,17 @@ impl Component for Logs {
                     }
                     _ => {}
                 },
+                Event::Mouse(MouseEvent { kind, .. }) => match kind {
+                    MouseEventKind::ScrollUp => {
+                        self.popup_scroll_state.prev();
+                        return Ok(true);
+                    }
+                    MouseEventKind::ScrollDown => {
+                        self.popup_scroll_state.next();
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
 
@@ -229,15 +240,13 @@ impl<'a> StatefulWidget for LogRecordWidget<'a> {
     where
         Self: Sized,
     {
-        let paragraph_area = Rect::new(area.x, area.y, area.width - 2, area.height);
+        let h = Layout::horizontal([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
 
         self.paragraph
             .scroll((state.get_position() as u16, 0))
-            .render(paragraph_area, buf);
+            .render(h[0], buf);
 
-        let scrollbar_area = Rect::new(area.x + area.width - 1, area.y, 1, area.height);
-
-        default_scrollbar().render(scrollbar_area, buf, state);
+        default_scrollbar().render(h[2], buf, state);
     }
 }
 

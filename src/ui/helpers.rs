@@ -1,9 +1,11 @@
-use crate::types::{HopsSnrRssiAware, Node};
+use crate::state::State;
+use crate::types::{Channel, ChannelRole, HopsSnrRssiAware, Node};
 use crate::ui::prelude::text;
 use base64::prelude::BASE64_STANDARD;
 use base64::{DecodeError, Engine};
 use chrono::{SubsecRound, TimeDelta, Utc};
 use itertools::Itertools;
+use meshtastic::protobufs::config::lo_ra_config::ModemPreset;
 use meshtastic::protobufs::routing;
 use ratatui::{
     style::{Color, Style, Stylize},
@@ -147,6 +149,53 @@ pub fn str_to_hyperlinked_lines(value: &str) -> Vec<Line<'_>> {
     result
 }
 
+pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<Span<'a>> {
+    let maybe_direct_node = (channel.role == ChannelRole::Direct)
+        .then_some(state.nodes.get(&channel.key))
+        .unwrap_or(None);
+
+    let radio_preset_name = state
+        .device_config
+        .lora
+        .as_ref()
+        .and_then(|lora| ModemPreset::try_from(lora.modem_preset).ok())
+        .and_then(|preset| Some(preset.as_channel_name()));
+
+    match (&channel.role, &maybe_direct_node) {
+        (ChannelRole::Primary, _) => vec![
+            Span::from(format!("#{}", &channel.key)).dark_gray(),
+            Span::from(" "),
+            Span::from(if !channel.name.is_empty() {
+                channel.name.clone()
+            } else if let Some(preset_name) = radio_preset_name {
+                preset_name.clone()
+            } else {
+                "Primary".to_owned()
+            })
+            .fg(channel.psk.len().psk_len_to_color()),
+        ],
+        (ChannelRole::Secondary, _) => vec![
+            Span::from(format!("#{}", channel.key)).dark_gray(),
+            Span::from(" "),
+            Span::from(if !channel.name.is_empty() {
+                &channel.name
+            } else {
+                "Secondary"
+            })
+            .fg(channel.psk.len().psk_len_to_color()),
+        ],
+        (ChannelRole::Direct, Some(node)) => {
+            vec![short_name_to_span(node), Span::from(" "), Span::from(node.long_name())]
+        }
+        (ChannelRole::Direct, None) => {
+            vec![Span::from(format!("!{:x}", channel.key))]
+        }
+        (ChannelRole::Disabled, _) => {
+            vec![Span::from("Disabled")]
+        }
+    }
+}
+
 pub fn default_scrollbar() -> Scrollbar<'static> {
     Scrollbar::new(ScrollbarOrientation::VerticalRight)
         .symbols(ScrollbarSet {
@@ -197,21 +246,22 @@ pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
 }
 
 pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware) -> Vec<Span<'a>> {
-    match provider.hops() {
-        _ if provider.my() => vec![Span::from("connected").blue()],
-        Some(0) => vec![
-            Some(Span::from(format!("{:.2}dB", provider.snr())).style(Style::new().fg(provider.snr().snr_to_color()))),
-            provider
-                .rssi()
-                .and_then(|rssi| Some(Span::from(format!(" RSSI {}", rssi)).fg(rssi.rssi_to_color()))),
-        ]
-        .iter()
-        .flatten()
-        .cloned()
-        .collect(),
-        Some(1) => vec![Span::from("1 hop")],
-        Some(hops) => vec![Span::from(format!("{} hops", hops))],
-        None => vec![Span::from("unknown").dark_gray()],
+    if provider.my() {
+        return vec![Span::from("connected").blue()];
+    }
+
+    match (provider.hops(), provider.rssi()) {
+        (Some(0), None) => {
+            vec![Span::from(format!("{:.2}dB", provider.snr())).style(Style::new().fg(provider.snr().snr_to_color()))]
+        }
+        (Some(0), Some(rssi)) => vec![
+            Span::from(format!("{:.2}dB", provider.snr())).style(Style::new().fg(provider.snr().snr_to_color())),
+            Span::from("/").dark_gray(),
+            Span::from(format!("{}dbm", rssi)).fg(rssi.rssi_to_color()),
+        ],
+        (Some(1), _) => vec![Span::from("1 hop")],
+        (Some(hops), _) => vec![Span::from(format!("{} hops", hops))],
+        _ => vec![Span::from("unknown").dark_gray()],
     }
 }
 

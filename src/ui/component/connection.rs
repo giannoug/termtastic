@@ -4,16 +4,18 @@ use crate::ui::prelude::*;
 
 pub struct Connection<'a> {
     list_state: ListState,
-    is_form_visible: bool,
+    is_tcp_form_visible: bool,
     popup_input_state: PopupInputState<'a>,
+    removing_tcp_device: Option<HostAddr<String>>,
 }
 
 impl<'a> Connection<'a> {
     pub fn new() -> Self {
         Self {
             list_state: ListState::default(),
-            is_form_visible: false,
+            is_tcp_form_visible: false,
             popup_input_state: PopupInputState::new(Some("TCP device"), Some("host[:port=4403]"), ""),
+            removing_tcp_device: None,
         }
     }
 
@@ -22,7 +24,7 @@ impl<'a> Connection<'a> {
             return vec![Hotkey::new("esc", "disconnect")];
         }
 
-        if self.is_form_visible {
+        if self.is_tcp_form_visible {
             return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
         }
 
@@ -36,7 +38,7 @@ impl<'a> Connection<'a> {
                 .and_then(|i| state.aggregated_devices.get(i))
                 .and_then(|d| Some(matches!(d, Device::Tcp(_))))
                 .unwrap_or(false)
-                .then_some(Hotkey::new("del", "delete")),
+                .then_some(Hotkey::red("del", "delete")),
         ]
         .into_iter()
         .flatten()
@@ -51,14 +53,35 @@ impl<'a> Component for Connection<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        if self.is_form_visible {
+        if let Some(removing_hostaddr) = &self.removing_tcp_device {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => {
+                        emit(AppEvent::TcpDeviceRemoved(removing_hostaddr.clone()))?;
+                        self.removing_tcp_device = None;
+
+                        return Ok(true);
+                    }
+                    KeyCode::Esc => {
+                        self.removing_tcp_device = None;
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
+            return self.popup_input_state.handle_event(event.clone());
+        }
+
+        if self.is_tcp_form_visible {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                     KeyCode::Enter => {
                         match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
                             Ok(addr) => {
                                 emit(AppEvent::TcpDeviceSubmitted(addr))?;
-                                self.is_form_visible = false;
+                                self.is_tcp_form_visible = false;
                             }
                             Err(e) => {
                                 self.popup_input_state.set_error(format!("invalid address: {}", e));
@@ -68,7 +91,7 @@ impl<'a> Component for Connection<'a> {
                         return Ok(true);
                     }
                     KeyCode::Esc => {
-                        self.is_form_visible = false;
+                        self.is_tcp_form_visible = false;
                         return Ok(true);
                     }
                     _ => {}
@@ -113,7 +136,7 @@ impl<'a> Component for Connection<'a> {
                 }
                 KeyCode::Char('t') => {
                     self.popup_input_state.reset();
-                    self.is_form_visible = true;
+                    self.is_tcp_form_visible = true;
 
                     return Ok(true);
                 }
@@ -127,7 +150,7 @@ impl<'a> Component for Connection<'a> {
                     if let Some(index) = self.list_state.selected
                         && let Device::Tcp(hostaddr) = &state.aggregated_devices[index]
                     {
-                        emit(AppEvent::TcpDeviceRemoved(hostaddr.clone()))?
+                        self.removing_tcp_device = Some(hostaddr.clone());
                     }
                     return Ok(true);
                 }
@@ -195,8 +218,19 @@ impl<'a> Component for Connection<'a> {
             PlaceholderWidget::dark_gray("no devices").render(v[0], frame.buffer_mut());
         }
 
-        if self.is_form_visible {
+        if self.is_tcp_form_visible {
             PopupInputWidget::new(36).render(v[0], frame.buffer_mut(), &mut self.popup_input_state);
+        }
+
+        if self.removing_tcp_device.is_some() {
+            PopupConfirmWidget::new(
+                "Are you sure to remove this device?",
+                "confirm",
+                "cancel",
+                40,
+                Color::Red,
+            )
+            .render(v[0], frame.buffer_mut());
         }
 
         if let Some(active_device) = &state.active_device {
