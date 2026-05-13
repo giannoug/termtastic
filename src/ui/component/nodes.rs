@@ -8,6 +8,8 @@ pub struct Nodes<'a> {
     nodeinfo_state: NodeInfoState,
     is_filter_help_visible: bool,
     filter_help_scroll_state: ScrollbarState,
+    is_emoji_selector_visible: bool,
+    emoji_selector_state: EmojiSelectorState<'a>,
 }
 
 impl<'a> Nodes<'a> {
@@ -24,10 +26,20 @@ impl<'a> Nodes<'a> {
             nodeinfo_state: NodeInfoState::new(),
             is_filter_help_visible: false,
             filter_help_scroll_state: ScrollbarState::default(),
+            is_emoji_selector_visible: false,
+            emoji_selector_state: EmojiSelectorState::new(),
         }
     }
 
     fn get_hotkeys(&self) -> Vec<Hotkey> {
+        if self.is_emoji_selector_visible {
+            return vec![
+                Hotkey::new("↑↓", "scroll"),
+                Hotkey::new("enter", "insert"),
+                Hotkey::new("esc", "close"),
+            ];
+        }
+
         if self.is_filter_help_visible {
             return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
@@ -41,6 +53,7 @@ impl<'a> Nodes<'a> {
             Hotkey::new("F1", "help"),
             Hotkey::new("enter [F4]", "node info"),
             Hotkey::new("F2", "direct"),
+            Hotkey::new("F5", "emoji"),
             Hotkey::new("F6", "sort by"),
         ]
     }
@@ -136,6 +149,31 @@ impl<'a> Component for Nodes<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if self.is_emoji_selector_visible {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => {
+                        if let Some(emoji) = self.emoji_selector_state.get_value() {
+                            self.filter_input.insert_str(emoji.glyph);
+                            self.is_emoji_selector_visible = false;
+                            emit(AppEvent::NodesFilterChanged(self.filter_input.lines()[0].clone()))?;
+
+                            return Ok(true);
+                        }
+                    }
+                    KeyCode::Esc => {
+                        self.is_emoji_selector_visible = false;
+                        self.emoji_selector_state.reset();
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            };
+
+            return self.emoji_selector_state.handle_event(event.clone());
+        }
+
         if self.is_filter_help_visible {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
@@ -228,6 +266,10 @@ impl<'a> Component for Nodes<'a> {
                     }
                     return Ok(true);
                 }
+                KeyCode::F(5) => {
+                    self.is_emoji_selector_visible = true;
+                    return Ok(true);
+                }
                 KeyCode::F(6) => {
                     emit(AppEvent::NodesSortByCyclePressed)?;
                     return Ok(true);
@@ -287,7 +329,7 @@ impl<'a> Component for Nodes<'a> {
         }
 
         let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)]).split(area);
-        let is_popup_visible = self.nodeinfo.is_some() || self.is_filter_help_visible;
+        let is_popup_visible = self.nodeinfo.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
 
         if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {
@@ -370,6 +412,20 @@ impl<'a> Component for Nodes<'a> {
         // filter help popup
         if self.is_filter_help_visible {
             self.render_filter_help(v[0], frame.buffer_mut());
+        }
+
+        // emoji selector
+        if self.is_emoji_selector_visible {
+            let popup_area = Rect {
+                x: v[0].x + v[0].width / 2 - 40 / 2,
+                y: v[0].y + v[0].height / 2 - 14 / 2,
+                width: 40,
+                height: 14,
+            };
+
+            Clear.render(popup_area, frame.buffer_mut());
+
+            EmojiSelectorWidget::new().render(popup_area, frame.buffer_mut(), &mut self.emoji_selector_state);
         }
 
         HotkeysWidget::new(&self.get_hotkeys()).render(v[2], frame.buffer_mut());

@@ -49,11 +49,9 @@ async fn main() {
     let (event_tx, event_rx) = broadcast::channel::<AppEvent>(1024);
 
     let config_service = ConfigService::new(event_rx.resubscribe(), state_rx.clone(), state_action_tx.clone());
-
-    let ui_service = UiService::new(event_tx.clone(), event_rx.resubscribe(), state_action_tx.clone());
+    let ui_service = UiService::new(event_rx.resubscribe(), state_action_tx.clone());
 
     let nodes_service = NodesService::new(
-        event_tx.clone(),
         event_rx.resubscribe(),
         state_rx.clone(),
         state_action_tx.clone(),

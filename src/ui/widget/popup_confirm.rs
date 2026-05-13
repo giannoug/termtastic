@@ -26,6 +26,7 @@ impl PopupConfirmWidget {
         }
     }
 
+    #[allow(unused)]
     pub fn yes_no<S: Into<String>>(text: S, width: u16) -> Self {
         Self {
             text: text.into(),

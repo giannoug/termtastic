@@ -143,9 +143,9 @@ impl SettingsService {
                 MeshtasticEvent::IncomingPacket(packet) => {
                     self.handle_meshtastic_packet(packet)?;
                 }
-                MeshtasticEvent::ConfigSaveFailed(form_id, _)
-                | MeshtasticEvent::ChannelsSaveFailed(form_id, _)
-                | MeshtasticEvent::UserSaveFailed(form_id, _) => {
+                MeshtasticEvent::ConfigSaveFailed(form_id)
+                | MeshtasticEvent::ChannelsSaveFailed(form_id)
+                | MeshtasticEvent::UserSaveFailed(form_id) => {
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::error("save failed (see logs)")))?;
 

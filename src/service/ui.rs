@@ -6,21 +6,17 @@ use crate::state::StateAction;
 use crate::types::Toast;
 use crate::ui::prelude::AppEvent;
 
-#[allow(dead_code)]
 pub struct UiService {
-    app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
 }
 
 impl UiService {
     pub fn new(
-        app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
     ) -> Self {
         Self {
-            app_event_tx,
             app_event_rx,
             state_action_tx,
         }

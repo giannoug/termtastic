@@ -218,7 +218,6 @@ impl Hotkey {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 #[repr(u128)]
 pub enum ToastKind {
@@ -245,7 +244,6 @@ pub struct Toast {
     pub text: String,
 }
 
-#[allow(dead_code)]
 impl Toast {
     pub fn success<S: Into<String>>(text: S) -> Self {
         Self {
@@ -293,20 +291,7 @@ pub enum NodesSortBy {
     HwModel,
 }
 
-#[allow(dead_code)]
 impl NodesSortBy {
-    pub fn prev(self) -> Self {
-        let current_index: usize = self as usize;
-        let (previous_index, overflowed) = current_index.overflowing_sub(1);
-
-        Self::from_repr(if overflowed {
-            NodesSortBy::COUNT - 1
-        } else {
-            previous_index
-        })
-        .unwrap_or(self)
-    }
-
     pub fn next(self) -> Self {
         let current_index = self as usize;
         let next_index = current_index.saturating_add(1);
@@ -642,7 +627,6 @@ impl From<meshtastic::protobufs::channel::Role> for ChannelRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub key: u32,
-    #[allow(dead_code)]
     pub id: u32,
     pub role: ChannelRole,
     pub name: String,
@@ -1145,14 +1129,11 @@ pub enum FormItemKey {
     },
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum FormItemKind {
     InputOfString,
     InputOfInt32,
-    InputOfUnsignedInt8,
     InputOfUnsignedInt32,
-    InputOfUnsignedInt64,
     InputOfFloat32,
     InputOfBase64,
     Enum(Vec<FormEnumVariant>),

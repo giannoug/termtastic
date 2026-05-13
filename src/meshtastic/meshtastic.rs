@@ -280,8 +280,7 @@ impl MeshtasticService {
                     Err(e) => {
                         tracing::error!("save config error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveFailed(form_id))?;
                     }
                 }
             }
@@ -322,14 +321,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("save config error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveFailed(form_id))?;
                     }
                     Err(e) => {
                         tracing::error!("save config timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ConfigSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ConfigSaveFailed(form_id))?;
                     }
                 }
             }
@@ -360,14 +357,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("save user error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::UserSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::UserSaveFailed(form_id))?;
                     }
                     Err(e) => {
                         tracing::error!("save user timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::UserSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::UserSaveFailed(form_id))?;
                     }
                 }
             }
@@ -430,14 +425,12 @@ impl MeshtasticService {
                     Ok(Err(e)) => {
                         tracing::error!("save channels error: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ChannelsSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ChannelsSaveFailed(form_id))?;
                     }
                     Err(e) => {
                         tracing::error!("save channels timeout: {:?}", e);
 
-                        self.event_tx
-                            .send(MeshtasticEvent::ChannelsSaveFailed(form_id, e.to_string()))?;
+                        self.event_tx.send(MeshtasticEvent::ChannelsSaveFailed(form_id))?;
                     }
                 }
             }

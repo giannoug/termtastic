@@ -155,9 +155,7 @@ impl<'a> Settings<'a> {
         match &form_item.kind {
             FormItemKind::InputOfString
             | FormItemKind::InputOfInt32
-            | FormItemKind::InputOfUnsignedInt8
             | FormItemKind::InputOfUnsignedInt32
-            | FormItemKind::InputOfUnsignedInt64
             | FormItemKind::InputOfFloat32 => {
                 self.active_form_item = Some(form_item);
                 self.popup_input_state = Some(PopupInputState::new(Some(form_item.title), None, value.to_string()));
@@ -515,8 +513,14 @@ impl<'a> Component for Settings<'a> {
 
                 // confirm popup
                 if self.is_exit_confirm_visible {
-                    PopupConfirmWidget::yes_no("There are unsaved settings, do you want to reset the fields?", 36)
-                        .render(form_block_area, frame.buffer_mut());
+                    PopupConfirmWidget::new(
+                        "There are unsaved settings, do you want to reset the fields?",
+                        "reset",
+                        "cancel",
+                        36,
+                        Color::Yellow,
+                    )
+                    .render(form_block_area, frame.buffer_mut());
                 }
             }
             SettingsFormState::Saving { .. } => {
@@ -543,16 +547,8 @@ fn handle_popup_input_submit(form_item: &FormItem, input_state: &mut PopupInputS
             let value = FormValue::from(input_value.parse::<i32>()?);
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
-        FormItemKind::InputOfUnsignedInt8 => {
-            let value = FormValue::from(input_value.parse::<u8>()?);
-            (form_item.validator)(&value).and_then(|_| Ok(value))
-        }
         FormItemKind::InputOfUnsignedInt32 => {
             let value = FormValue::from(input_value.parse::<u32>()?);
-            (form_item.validator)(&value).and_then(|_| Ok(value))
-        }
-        FormItemKind::InputOfUnsignedInt64 => {
-            let value = FormValue::from(input_value.parse::<u64>()?);
             (form_item.validator)(&value).and_then(|_| Ok(value))
         }
         FormItemKind::InputOfFloat32 => {
@@ -658,9 +654,7 @@ impl<'a> Widget for FormItemWidget<'a> {
         let line = match self.form_item.kind {
             FormItemKind::InputOfString
             | FormItemKind::InputOfInt32
-            | FormItemKind::InputOfUnsignedInt8
             | FormItemKind::InputOfUnsignedInt32
-            | FormItemKind::InputOfUnsignedInt64
             | FormItemKind::InputOfFloat32
             | FormItemKind::InputOfBase64
             | FormItemKind::BitMask(_) => {

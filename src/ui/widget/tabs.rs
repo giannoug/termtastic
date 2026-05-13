@@ -18,12 +18,12 @@ impl TabsWidget {
     }
 }
 
-#[allow(unstable_name_collisions)]
 impl Widget for TabsWidget {
     fn render(self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
+        #[allow(unstable_name_collisions)]
         let spans: Vec<Span> = self
             .tabs
             .iter()

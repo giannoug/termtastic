@@ -22,10 +22,10 @@ pub struct Messenger<'a> {
     input_widgets: HashMap<u32, TextArea<'a>>,
     follow_chat: HashMap<u32, bool>,
     replying_to: HashMap<u32, (Node, u32)>,
-    emoji_selector_state: EmojiSelectorState<'a>,
     is_emoji_selector_visible: bool,
-    reactions_viewer_state: ReactionViewerState,
+    emoji_selector_state: EmojiSelectorState<'a>,
     is_reaction_viewer_visible: bool,
+    reactions_viewer_state: ReactionViewerState,
 }
 
 impl<'a> Messenger<'a> {
@@ -484,10 +484,10 @@ struct MessageWidget<'a> {
     pub is_highlighted: bool,
 }
 
-#[allow(unstable_name_collisions)]
 impl MessageWidget<'_> {
     pub fn get_text_paragraph(&self) -> Paragraph<'_> {
         let reply_line = self.replied_message.and_then(|(_, m)| {
+            #[allow(unstable_name_collisions)]
             let spans: Vec<Span<'_>> = m
                 .text
                 .split('\n')

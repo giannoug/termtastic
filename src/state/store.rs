@@ -104,14 +104,6 @@ impl Store {
                     ]);
                 });
             }
-            StateAction::TabSwitchTo(tab) => {
-                self.state_tx.send_modify(|state| {
-                    state.active_tab = tab;
-                    state.need_clear_frame = true;
-
-                    changed.extend(vec![name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
-                });
-            }
             StateAction::TabSwitchToNext => {
                 self.state_tx.send_modify(|state| {
                     state.active_tab = state.active_tab.next();
@@ -439,11 +431,10 @@ impl Store {
                         }
                         existing_node.my = node.my;
                         existing_node.update_fulltext();
+                        state.update_nodes_view();
+
+                        changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                     }
-
-                    state.update_nodes_view();
-
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                 });
             }
             StateAction::NodeUpdateLastHeard {

@@ -5,7 +5,7 @@ use meshtastic::protobufs::{config, module_config, routing, User};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,
-    NodesSortBy, Tab, Toast, UiConfig,
+    NodesSortBy, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -57,8 +57,6 @@ pub enum StateAction {
     NodesOnlineSet(u16),
     RxTrigger,
     SplashLogo,
-    #[allow(dead_code)]
-    TabSwitchTo(Tab),
     TabSwitchToNext,
     TabSwitchToPrevious,
     FrameCleared,

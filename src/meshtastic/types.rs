@@ -13,14 +13,11 @@ pub enum MeshtasticEvent {
     MessageRejected(String),
     RadioStopped,
     ConfigSaved(FormId),
-    #[allow(dead_code)]
-    ConfigSaveFailed(FormId, String),
+    ConfigSaveFailed(FormId),
     ChannelsSaved(FormId),
-    #[allow(dead_code)]
-    ChannelsSaveFailed(FormId, String),
+    ChannelsSaveFailed(FormId),
     UserSaved(FormId),
-    #[allow(dead_code)]
-    UserSaveFailed(FormId, String),
+    UserSaveFailed(FormId),
     NodeInfoBroadcastSent,
     NodeInfoBroadcastFailed(String),
     NodeRemoveAccepted,
