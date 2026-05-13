@@ -62,6 +62,12 @@ impl ChatService {
                 AppEvent::ChannelSelected(number) => {
                     self.state_action_tx.send(StateAction::ChannelActiveSet(number))?;
                 }
+                AppEvent::ChannelPurgeRequested(key) => {
+                    self.state_action_tx.send(StateAction::ChannelPurge(key))?;
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::success("channel chat is purged")))?;
+                }
                 AppEvent::SwitchChannelRequested => {
                     self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
                 }

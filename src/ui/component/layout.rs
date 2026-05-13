@@ -16,6 +16,7 @@ pub struct Layout<'a> {
     connection_component: Connection<'a>,
     logs_component: Logs,
     logo: Text<'static>,
+    nodeinfo_state: NodeInfoState,
 }
 
 impl<'a> Layout<'a> {
@@ -29,6 +30,7 @@ impl<'a> Layout<'a> {
             connection_component: Connection::new(),
             logs_component: Logs::new(),
             logo: APP_LOGO_TEXT.clone(),
+            nodeinfo_state: NodeInfoState::default(),
         }
     }
 }
@@ -40,6 +42,35 @@ impl<'a> Component for Layout<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if let Some(node_key) = state.nodeinfo_popup {
+            if self.nodeinfo_state.handle_event(event.clone(), &mut |ev| match ev {
+                NodeInfoWidgetEvent::PublicKeyCopyRequested => {
+                    if let Some(node) = state.nodes.get(&node_key) {
+                        emit(AppEvent::CopyToClipboardRequested(node.public_key.base64_encode()))?;
+                    }
+
+                    Ok(())
+                }
+                NodeInfoWidgetEvent::NodeDeleteRequested => {
+                    emit(AppEvent::NodeDeleteRequested(node_key))?;
+                    Ok(())
+                }
+            })? {
+                return Ok(true);
+            }
+
+            if let Event::Key(KeyEvent {
+                code: KeyCode::Esc,
+                kind: KeyEventKind::Press,
+                ..
+            }) = event
+            {
+                emit(AppEvent::NodeInfoPopupCloseRequested)?;
+            }
+
+            return Ok(true);
+        }
+
         let is_handled = match state.active_tab {
             Tab::Chat => self.chat_component.handle_event(state, event, emit),
             Tab::Nodes => self.nodes_component.handle_event(state, event, emit),
@@ -97,7 +128,7 @@ impl<'a> Component for Layout<'a> {
             Constraint::Length(2),
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Min(1),
+            Constraint::Fill(1),
         ])
         .split(area);
 
@@ -117,6 +148,25 @@ impl<'a> Component for Layout<'a> {
             Tab::Logs => self.logs_component.render(state, frame, v[3]),
         }
 
+        // node info popup
+        if let Some(node_key) = state.nodeinfo_popup {
+            let popup_area = Rect {
+                x: area.x + area.width / 2 - 70 / 2,
+                y: area.y + area.height / 2 - 20 / 2,
+                width: 70,
+                height: 20,
+            };
+
+            Clear.render(popup_area, frame.buffer_mut());
+
+            NodeInfoWidget::new(state.nodes.get(&node_key)).render(
+                popup_area,
+                frame.buffer_mut(),
+                &mut self.nodeinfo_state,
+            );
+        }
+
+        // splash logo
         if state.splash_logo {
             let logo_width = self.logo.width() as u16;
             let logo_height = self.logo.height() as u16;
@@ -131,6 +181,7 @@ impl<'a> Component for Layout<'a> {
             (&self.logo).render(logo_popup_area, frame.buffer_mut());
         }
 
+        // toast
         if let Some(Toast { kind, text, .. }) = &state.toast {
             let toast_width = text.len() as u16 + 4;
 

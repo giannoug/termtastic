@@ -14,6 +14,7 @@ pub enum StateAction {
     ChannelActiveSet(u32),
     ChannelActiveUnset,
     ChannelSet(u32, Channel),
+    ChannelPurge(u32),
     ConnectionFail(String),
     ConnectionStart,
     ConnectionStop,
@@ -44,6 +45,8 @@ pub enum StateAction {
     MyNodeKeySet(u32),
     NodeInit(Node),
     NodeInitTemporary(Node),
+    NodeInfoPopupSetKey(u32),
+    NodeInfoPopupUnsetKey,
     NodeUpdate(Node),
     NodeUpdateLastHeard {
         node_key: u32,

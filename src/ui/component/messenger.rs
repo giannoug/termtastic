@@ -42,7 +42,7 @@ impl<'a> Messenger<'a> {
         }
     }
 
-    fn get_hotkeys(&self, active_channel_key: u32) -> Vec<Hotkey> {
+    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if self.is_reaction_viewer_visible {
             return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
@@ -54,6 +54,12 @@ impl<'a> Messenger<'a> {
                 Hotkey::new("esc", "close"),
             ];
         }
+
+        if state.nodeinfo_popup.is_some() {
+            return vec![Hotkey::new("esc", "close")];
+        }
+
+        let active_channel_key = state.active_channel_key.expect_or_log("channel should be selected");
 
         let is_input_contains_single_emoji = self
             .input_widgets
@@ -243,6 +249,17 @@ impl<'a> Component for Messenger<'a> {
 
                     return Ok(true);
                 }
+                KeyCode::F(4) if kind == &KeyEventKind::Press => {
+                    if let Some(node_key) = list_state
+                        .selected
+                        .and_then(|i| messages.get(i))
+                        .and_then(|message| Some(message.from))
+                    {
+                        emit(AppEvent::NodeInfoPopupRequested(node_key))?;
+                    }
+
+                    return Ok(true);
+                }
                 KeyCode::F(5) if kind == &KeyEventKind::Press => {
                     self.is_emoji_selector_visible = true;
                     return Ok(true);
@@ -310,6 +327,8 @@ impl<'a> Component for Messenger<'a> {
         }
 
         let v = Layout::vertical([Constraint::Min(0), Constraint::Length(3), Constraint::Length(1)]).split(area);
+        let is_any_popup_visible =
+            state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 
         // list
         if !messages.is_empty() {
@@ -348,7 +367,7 @@ impl<'a> Component for Messenger<'a> {
                 .infinite_scrolling(false)
                 .scroll_direction(ScrollDirection::Backward)
                 .scrollbar(default_scrollbar())
-                .add_modifier(if self.is_emoji_selector_visible || self.is_reaction_viewer_visible {
+                .add_modifier(if is_any_popup_visible {
                     Modifier::DIM
                 } else {
                     Modifier::empty()
@@ -364,7 +383,7 @@ impl<'a> Component for Messenger<'a> {
             .padding(Padding::symmetric(1, 0))
             .border_type(BorderType::Rounded)
             .border_style(Style::new().dark_gray())
-            .add_modifier(if self.is_emoji_selector_visible || self.is_reaction_viewer_visible {
+            .add_modifier(if is_any_popup_visible {
                 Modifier::DIM
             } else {
                 Modifier::empty()
@@ -464,7 +483,7 @@ impl<'a> Component for Messenger<'a> {
             EmojiSelectorWidget::new().render(popup_area, frame.buffer_mut(), &mut self.emoji_selector_state);
         }
 
-        HotkeysWidget::new(&self.get_hotkeys(active_channel.key)).render(v[2], frame.buffer_mut());
+        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[2], frame.buffer_mut());
     }
 }
 

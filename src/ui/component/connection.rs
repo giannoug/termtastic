@@ -71,7 +71,7 @@ impl<'a> Component for Connection<'a> {
                 _ => {}
             }
 
-            return self.popup_input_state.handle_event(event.clone());
+            return Ok(false);
         }
 
         if self.is_tcp_form_visible {

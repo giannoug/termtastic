@@ -5,15 +5,27 @@ use chrono::Local;
 
 pub struct Channels {
     list_state: ListState,
-    hotkeys: Vec<Hotkey>,
+    channel_purge_key: Option<u32>,
 }
 
 impl Channels {
     pub fn new() -> Self {
         Self {
             list_state: ListState::default(),
-            hotkeys: vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("enter", "open")],
+            channel_purge_key: None,
         }
+    }
+
+    fn channels<'a>(&self, state: &'a State) -> impl Iterator<Item = &'a Channel> {
+        state.channels.values().filter(|ch| !ch.role.is_disabled())
+    }
+
+    fn get_hotkeys(&self) -> Vec<Hotkey> {
+        vec![
+            Hotkey::new("↑↓", "scroll"),
+            Hotkey::new("enter", "open"),
+            Hotkey::new("del", "purge chat"),
+        ]
     }
 }
 
@@ -24,6 +36,27 @@ impl<'a> Component for Channels {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if let Some(channel_key) = &self.channel_purge_key {
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => {
+                        emit(AppEvent::ChannelPurgeRequested(*channel_key))?;
+                        self.channel_purge_key = None;
+
+                        return Ok(true);
+                    }
+                    KeyCode::Esc => {
+                        self.channel_purge_key = None;
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
+            return Ok(false);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                 KeyCode::Up => {
@@ -35,15 +68,15 @@ impl<'a> Component for Channels {
                     return Ok(true);
                 }
                 KeyCode::Enter => {
-                    if let Some(i) = self.list_state.selected {
-                        let channel = state
-                            .channels
-                            .values()
-                            .filter(|ch| !ch.role.is_disabled())
-                            .nth(i)
-                            .unwrap();
-
+                    if let Some(channel) = self.list_state.selected.and_then(|i| self.channels(state).nth(i)) {
                         emit(AppEvent::ChannelSelected(channel.key))?;
+                    }
+
+                    return Ok(true);
+                }
+                KeyCode::Delete | KeyCode::Backspace => {
+                    if let Some(channel) = self.list_state.selected.and_then(|i| self.channels(state).nth(i)) {
+                        self.channel_purge_key = Some(channel.key);
                     }
 
                     return Ok(true);
@@ -73,7 +106,7 @@ impl<'a> Component for Channels {
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
         let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
 
-        let channels: Vec<&Channel> = state.channels.values().filter(|ch| !ch.role.is_disabled()).collect();
+        let channels: Vec<&Channel> = self.channels(state).collect();
 
         if !channels.is_empty() {
             if let Some(selected) = self.list_state.selected
@@ -115,7 +148,18 @@ impl<'a> Component for Channels {
             PlaceholderWidget::dark_gray("no channels").render(v[0], frame.buffer_mut());
         }
 
-        HotkeysWidget::new(&self.hotkeys).render(v[1], frame.buffer_mut());
+        if self.channel_purge_key.is_some() {
+            PopupConfirmWidget::new(
+                "Are you sure to delete the channel chat?",
+                "confirm",
+                "cancel",
+                40,
+                Color::Red,
+            )
+            .render(v[0], frame.buffer_mut());
+        }
+
+        HotkeysWidget::new(&self.get_hotkeys()).render(v[1], frame.buffer_mut());
     }
 }
 

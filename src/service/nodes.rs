@@ -91,6 +91,12 @@ impl NodesService {
                             user: my_node.try_into()?,
                         })?;
                 }
+                AppEvent::NodeInfoPopupRequested(node_key) => {
+                    self.state_action_tx.send(StateAction::NodeInfoPopupSetKey(node_key))?;
+                }
+                AppEvent::NodeInfoPopupCloseRequested => {
+                    self.state_action_tx.send(StateAction::NodeInfoPopupUnsetKey)?;
+                }
                 AppEvent::NodeDeleteRequested(node_num) => {
                     let my_node_num = state.my_node_key.expect("should be Some");
 

@@ -56,6 +56,7 @@ pub struct UiConfig {
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     ChannelSelected(u32),
+    ChannelPurgeRequested(u32),
     SwitchChannelRequested,
     DeviceRediscoverRequested,
     DeviceRebootRequested,
@@ -86,6 +87,8 @@ pub enum AppEvent {
     NodesSortByCyclePressed,
     NodesFilterChanged(String),
     NodeInfoBroadcastRequested,
+    NodeInfoPopupRequested(u32),
+    NodeInfoPopupCloseRequested,
     NodeDeleteRequested(u32),
 }
 

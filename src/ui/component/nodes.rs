@@ -4,8 +4,6 @@ pub struct Nodes<'a> {
     list_state: ListState,
     filter_input: TextArea<'a>,
     is_filter_input_dirty: bool,
-    nodeinfo: Option<u32>,
-    nodeinfo_state: NodeInfoState,
     is_filter_help_visible: bool,
     filter_help_scroll_state: ScrollbarState,
     is_emoji_selector_visible: bool,
@@ -22,8 +20,6 @@ impl<'a> Nodes<'a> {
             list_state: ListState::default(),
             filter_input,
             is_filter_input_dirty: false,
-            nodeinfo: None,
-            nodeinfo_state: NodeInfoState::new(),
             is_filter_help_visible: false,
             filter_help_scroll_state: ScrollbarState::default(),
             is_emoji_selector_visible: false,
@@ -31,7 +27,7 @@ impl<'a> Nodes<'a> {
         }
     }
 
-    fn get_hotkeys(&self) -> Vec<Hotkey> {
+    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if self.is_emoji_selector_visible {
             return vec![
                 Hotkey::new("↑↓", "scroll"),
@@ -44,7 +40,7 @@ impl<'a> Nodes<'a> {
             return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
 
-        if self.nodeinfo.is_some() {
+        if state.nodeinfo_popup.is_some() {
             return vec![Hotkey::new("esc", "close")];
         }
 
@@ -208,36 +204,6 @@ impl<'a> Component for Nodes<'a> {
             return Ok(false);
         }
 
-        if let Some(node_key) = self.nodeinfo {
-            if self.nodeinfo_state.handle_event(event.clone(), &mut |ev| match ev {
-                NodeInfoWidgetEvent::PublicKeyCopyRequested => {
-                    if let Some(node) = state.nodes.get(&node_key) {
-                        emit(AppEvent::CopyToClipboardRequested(node.public_key.base64_encode()))?;
-                    }
-
-                    Ok(())
-                }
-                NodeInfoWidgetEvent::NodeDeleteRequested => {
-                    emit(AppEvent::NodeDeleteRequested(node_key))?;
-                    self.nodeinfo = None;
-                    Ok(())
-                }
-            })? {
-                return Ok(true);
-            }
-
-            if let Event::Key(KeyEvent {
-                code: KeyCode::Esc,
-                kind: KeyEventKind::Press,
-                ..
-            }) = event
-            {
-                self.nodeinfo = None;
-            }
-
-            return Ok(true);
-        }
-
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                 KeyCode::Up => {
@@ -262,7 +228,7 @@ impl<'a> Component for Nodes<'a> {
                 }
                 KeyCode::F(4) | KeyCode::Enter => {
                     if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
-                        self.nodeinfo = Some(*node_key);
+                        emit(AppEvent::NodeInfoPopupRequested(*node_key))?;
                     }
                     return Ok(true);
                 }
@@ -329,7 +295,8 @@ impl<'a> Component for Nodes<'a> {
         }
 
         let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)]).split(area);
-        let is_popup_visible = self.nodeinfo.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
+        let is_popup_visible =
+            state.nodeinfo_popup.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
 
         if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {
@@ -391,24 +358,6 @@ impl<'a> Component for Nodes<'a> {
             .centered()
             .render(sort_block_area, frame.buffer_mut());
 
-        // NodeInfo popup
-        if let Some(node_key) = self.nodeinfo {
-            let popup_area = Rect {
-                x: v[0].x + v[0].width / 2 - 70 / 2,
-                y: v[0].y + v[0].height / 2 - 20 / 2,
-                width: 70,
-                height: 20,
-            };
-
-            Clear.render(popup_area, frame.buffer_mut());
-
-            NodeInfoWidget::new(state.nodes.get(&node_key)).render(
-                popup_area,
-                frame.buffer_mut(),
-                &mut self.nodeinfo_state,
-            );
-        }
-
         // filter help popup
         if self.is_filter_help_visible {
             self.render_filter_help(v[0], frame.buffer_mut());
@@ -428,7 +377,7 @@ impl<'a> Component for Nodes<'a> {
             EmojiSelectorWidget::new().render(popup_area, frame.buffer_mut(), &mut self.emoji_selector_state);
         }
 
-        HotkeysWidget::new(&self.get_hotkeys()).render(v[2], frame.buffer_mut());
+        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[2], frame.buffer_mut());
     }
 }
 

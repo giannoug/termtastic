@@ -11,6 +11,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::types::ChannelRole;
 use crate::{
     state::{State, StateAction},
     types::{Channel, ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
@@ -412,6 +413,20 @@ impl Store {
                     }
                 });
             }
+            StateAction::NodeInfoPopupSetKey(node_key) => {
+                self.state_tx.send_modify(|state| {
+                    state.nodeinfo_popup = Some(node_key);
+
+                    changed.push(name_of!(nodeinfo_popup in State));
+                });
+            }
+            StateAction::NodeInfoPopupUnsetKey => {
+                self.state_tx.send_modify(|state| {
+                    state.nodeinfo_popup = None;
+
+                    changed.push(name_of!(nodeinfo_popup in State));
+                });
+            }
             StateAction::NodeUpdate(mut node) => {
                 self.state_tx.send_modify(|state| {
                     if let Some(number) = state.my_node_key
@@ -469,6 +484,14 @@ impl Store {
                         return false;
                     }
 
+                    if let Some(nodeinfo_key) = state.nodeinfo_popup
+                        && nodeinfo_key == node_key
+                    {
+                        state.nodeinfo_popup = None;
+
+                        changed.push(name_of!(nodeinfo_popup in State));
+                    }
+
                     state.update_nodes_view();
 
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
@@ -484,9 +507,9 @@ impl Store {
                     changed.push(name_of!(channels in State));
                 });
             }
-            StateAction::ChannelActiveSet(id) => {
+            StateAction::ChannelActiveSet(key) => {
                 self.state_tx.send_modify(|state| {
-                    state.active_channel_key = Some(id);
+                    state.active_channel_key = Some(key);
 
                     changed.push(name_of!(active_channel_key in State));
                 });
@@ -496,6 +519,37 @@ impl Store {
                     state.active_channel_key = None;
 
                     changed.push(name_of!(active_channel_key in State));
+                });
+            }
+            StateAction::ChannelPurge(key) => {
+                self.state_tx.send_if_modified(|state| {
+                    let Some(channel) = state.channels.get(&key) else {
+                        return false;
+                    };
+
+                    match &channel.role {
+                        ChannelRole::Primary | ChannelRole::Secondary => {
+                            state.messages.get_mut(&key).map(|messages| messages.clear());
+
+                            changed.push(name_of!(messages in State));
+
+                            true
+                        }
+                        ChannelRole::Direct => {
+                            state.messages.get_mut(&key).map(|messages| messages.clear());
+                            state.channels.remove(&key);
+                            state.active_channel_key = None;
+
+                            changed.extend(vec![
+                                name_of!(messages in State),
+                                name_of!(channels in State),
+                                name_of!(active_channel_key in State),
+                            ]);
+
+                            true
+                        }
+                        _ => false,
+                    }
                 });
             }
             StateAction::RxTrigger => {

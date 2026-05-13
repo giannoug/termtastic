@@ -13,7 +13,7 @@ use ratatui::{
 };
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
-#[derive(Default, Clone, Copy, PartialEq, FromRepr, Display, EnumIter, EnumCount)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, FromRepr, Display, EnumIter, EnumCount)]
 enum Tab {
     #[default]
     #[strum(to_string = "info")]
@@ -47,19 +47,22 @@ pub enum NodeInfoWidgetEvent {
     NodeDeleteRequested,
 }
 
+#[derive(Debug, Clone)]
 pub struct NodeInfoState {
     active_tab: Tab,
     is_delete_node_popup_visible: bool,
 }
 
-impl NodeInfoState {
-    pub fn new() -> Self {
+impl Default for NodeInfoState {
+    fn default() -> Self {
         Self {
             active_tab: Tab::default(),
             is_delete_node_popup_visible: false,
         }
     }
+}
 
+impl NodeInfoState {
     pub fn handle_event(
         &mut self,
         event: Event,
@@ -146,7 +149,7 @@ impl<'a> NodeInfoWidget<'a> {
             Line::from(if !node.public_key.is_empty() {
                 Span::from(format!("{}-byte", node.public_key.len())).green()
             } else {
-                "NONE".to_span().red()
+                "none".to_span().red()
             }),
         ])
         .render(v0_h[1], buf);
@@ -157,7 +160,7 @@ impl<'a> NodeInfoWidget<'a> {
             Line::from(node.id.to_span()),
             Line::default(),
             Line::from(Span::from("uptime").dark_gray()),
-            Line::from("No Data".to_span()),
+            Line::from("no data".to_span()),
             Line::default(),
             Line::from(Span::from("hardware").dark_gray()),
             Line::from(node.hw_model().to_span().magenta()),
