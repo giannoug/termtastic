@@ -300,7 +300,7 @@ impl<'a> Component for Nodes<'a> {
 
         if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {
-                let node = &state.nodes[&state.nodes_view[context.index as usize]];
+                let node = &state.nodes[&state.nodes_view[context.index]];
 
                 let item = NodeWidget {
                     node,

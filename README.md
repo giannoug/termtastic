@@ -16,20 +16,20 @@
 
 <table>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/00b57c3a-92e0-4437-af2f-43a8c1d71e6e" alt="Chat"/></td>
-    <td><img src="https://github.com/user-attachments/assets/3e11a3e8-5d87-4245-8321-d98392df69f3" alt="Emoji Selector"/></td>
+    <td><img src="https://github.com/user-attachments/assets/b806aec3-a1d8-4778-ab70-cb3eae633ef9" alt="Channels"/></td>
+    <td><img src="https://github.com/user-attachments/assets/a664ee0f-d252-44ec-bfb9-e2d221ec7ef7" alt="Chat"/></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/0826817f-35b8-4c14-b3d7-fabe04fa69af" alt="Nodes"/></td>
-    <td><img src="https://github.com/user-attachments/assets/bcfc81a8-b982-4977-8b7d-ccad23dc5a34" alt="Node Info Popup"/></td>
+    <td><img src="https://github.com/user-attachments/assets/b672f1da-54d8-4b22-8342-3fa13d117037" alt="Emoji Selector"/></td>
+    <td><img src="https://github.com/user-attachments/assets/71e34cf6-f2b2-46a8-9ab8-b9fc73c86294" alt="Nodes"/></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/c400a0e3-f53a-4716-8b00-559f381577f0" alt="Settings"/></td>
-    <td><img src="https://github.com/user-attachments/assets/8a2619df-4092-45d7-8fe0-737b19190cc2" alt="Connection"/></td>
+    <td><img src="https://github.com/user-attachments/assets/03da9c1e-d0b8-4b6a-ae5e-53e87e5bc064" alt="NodeInfo"/></td>
+    <td><img src="https://github.com/user-attachments/assets/3f3b464f-1dd6-432e-ae58-01a0d5f0ca10" alt="Connection"/></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/54e39ddf-a3e6-4c8d-8631-7e8c8e118ebc" alt="Logs"/></td>
-    <td><img src="https://github.com/user-attachments/assets/f8420d89-8f08-442d-9f42-1083cd6d5f2a" alt="Logs Expanded View"/></td>
+    <td><img src="https://github.com/user-attachments/assets/1c0ac2f2-6559-48bd-947b-599e40e08072" alt="Settings"/></td>
+    <td><img src="https://github.com/user-attachments/assets/8b1d1111-5fe2-4a1f-95e4-2a86e3dfaec5" alt="Logs"/></td>
   </tr>
 </table>
 
@@ -42,9 +42,9 @@
 - Dependency-free single-binary application
 - Fully asynchronous (Tokio channels-based)
 - Optimized for small screens (down to 80x24 characters)
-- Respects the user terminal colors
+- Respects the user terminal colors (no opinionated and fancy TrueColor color scheme)
 - Keyboard-centric UI navigation
-- Minimum using of emojis/non-ascii characters in UI
+- Minimum use of emoji/non-ascii characters in UI
 - Small memory footprint
 - Supports multiple connection protocols (TCP, BLE, Serial)
 - Informative logs tab
