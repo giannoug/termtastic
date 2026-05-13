@@ -37,6 +37,18 @@
 |:----------------------------------------------------------------------------------------|
 | Project is under active development, things could be changed completely without notice. |
 
+## Tech highlights
+
+- Dependency-free single-binary application
+- Fully asynchronous (Tokio channels-based)
+- Optimized for small screens (down to 80x24 characters)
+- Respects the user terminal colors
+- Keyboard-centric UI navigation
+- Minimum using of emojis/non-ascii characters in UI
+- Small memory footprint
+- Supports multiple connection protocols (TCP, BLE, Serial)
+- Informative logs tab
+
 ## Features
 
 > [!NOTE]  
@@ -49,6 +61,7 @@
 - [x] Scrollable channels list (Primary, Secondary)
 - [x] Direct conversations
 - [x] Display the last message for each channel
+- [x] Purge channel chat feature
 
 #### Messenger
 
@@ -59,6 +72,7 @@
 - [x] Display the time of messages
 - [x] Display the reactions (emojis)
 - [x] Ability to see detailed info about reactions
+- [x] Ability to see node info of the selected message author
 - [x] Ability to send broadcast messages to the channels
 - [x] Ability to send direct messages to the nodes
 - [x] Ability to reply to the messages
@@ -78,6 +92,8 @@
 - [x] Display the humanized last heard time of the nodes
 - [x] Sort nodes by different fields: last heard, hop count, distance, etc.
 - [x] Nodes fuzzy search
+- [x] Nodes filtering by special tokens
+- [x] Ability to see node info of the selected node
 
 #### Single node expanded view
 
