@@ -1,4 +1,6 @@
-use chrono::DateTime;
+use crate::service::ONLINE_NODE_THRESHOLD_SECS;
+use crate::types::*;
+use chrono::{DateTime, Utc};
 use hostaddr::HostAddr;
 use itertools::Itertools;
 use meshtastic::protobufs::User;
@@ -8,8 +10,6 @@ use std::{
     collections::{HashMap, VecDeque},
     time::{Duration, Instant},
 };
-
-use crate::types::*;
 
 #[derive(Debug, Clone)]
 pub struct State {
@@ -104,17 +104,36 @@ impl State {
     }
 
     pub fn update_nodes_view(&mut self) {
-        let filter: Vec<&str> = self.nodes_filter.split(" ").collect();
+        let filter: Vec<&str> = self
+            .nodes_filter
+            .split_whitespace()
+            .map(|t| t.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let now = Utc::now();
 
         self.nodes_view = self
             .nodes
             .values()
-            .filter(|n| {
+            .filter(|node| {
                 if filter.is_empty() {
                     return true;
                 }
 
-                filter.iter().all(|token| n.fulltext.contains(token))
+                let online_text = if node
+                    .last_heard
+                    .and_then(|last_heard| Some((now - last_heard).num_seconds() < ONLINE_NODE_THRESHOLD_SECS))
+                    .unwrap_or(false)
+                {
+                    "$online"
+                } else {
+                    "$offline"
+                };
+
+                filter
+                    .iter()
+                    .all(|token| node.fulltext.contains(token) || online_text.contains(token))
             })
             .sorted_by(|n1, n2| {
                 match (n1.my, n2.my) {

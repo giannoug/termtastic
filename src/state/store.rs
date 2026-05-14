@@ -90,7 +90,6 @@ impl Store {
                     state.nodes_sort_by = cfg.nodes_sort_by;
                     state.nodes_filter = cfg.nodes_filter;
                     state.ui_config = cfg.ui_config;
-                    state.update_nodes_view();
                     state.update_aggregated_devices();
 
                     changed.extend(vec![
@@ -383,10 +382,10 @@ impl Store {
                         && node.key == number
                     {
                         node.my = true;
+                        node.update_fulltext();
                     }
 
                     state.nodes.insert(node.key, node);
-                    state.update_nodes_view();
 
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                 });
@@ -397,6 +396,7 @@ impl Store {
                         && node.key == number
                     {
                         node.my = true;
+                        node.update_fulltext();
                     }
 
                     let mut inserted = false;
@@ -407,8 +407,6 @@ impl Store {
                     });
 
                     if inserted {
-                        state.update_nodes_view();
-
                         changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                     }
                 });
@@ -446,7 +444,6 @@ impl Store {
                         }
                         existing_node.my = node.my;
                         existing_node.update_fulltext();
-                        state.update_nodes_view();
 
                         changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
                     }
@@ -471,7 +468,7 @@ impl Store {
                         node.rssi = Some(rssi);
                     }
 
-                    state.update_nodes_view();
+                    node.update_fulltext();
 
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
 
@@ -491,8 +488,6 @@ impl Store {
 
                         changed.push(name_of!(nodeinfo_popup in State));
                     }
-
-                    state.update_nodes_view();
 
                     changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
 
@@ -563,7 +558,6 @@ impl Store {
             StateAction::NodesSortBySet(sort_by) => {
                 self.state_tx.send_modify(|state| {
                     state.nodes_sort_by = sort_by;
-                    state.update_nodes_view();
 
                     changed.extend(vec![name_of!(nodes_sort_by in State), name_of!(nodes_view in State)]);
                 });
@@ -571,7 +565,6 @@ impl Store {
             StateAction::NodesFilterSet(filter) => {
                 self.state_tx.send_modify(|state| {
                     state.nodes_filter = filter.to_lowercase();
-                    state.update_nodes_view();
 
                     changed.extend(vec![name_of!(nodes_filter in State), name_of!(nodes_view in State)]);
                 });
@@ -597,6 +590,7 @@ impl Store {
 
                     if let Some(node) = state.nodes.get_mut(&number) {
                         node.my = true;
+                        node.update_fulltext();
 
                         changed.push(name_of!(nodes in State));
                     }
@@ -814,6 +808,21 @@ impl Store {
         }
 
         if !changed.is_empty() {
+            let watch_fields = [
+                name_of!(my_node_key in State),
+                name_of!(nodes in State),
+                name_of!(nodes_filter in State),
+                name_of!(nodes_sort_by in State),
+            ];
+
+            if changed.iter().any(|field| watch_fields.contains(field)) {
+                self.state_tx.send_modify(|state| {
+                    state.update_nodes_view();
+
+                    changed.push(name_of!(nodes_view in State));
+                })
+            }
+
             self.changed_tx.send(changed)?;
         }
 

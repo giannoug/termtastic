@@ -1,4 +1,3 @@
-use crate::service::ONLINE_NODE_THRESHOLD_SECS;
 use crate::state::State;
 use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
@@ -397,16 +396,9 @@ impl Node {
     }
 
     pub fn update_fulltext(&mut self) {
-        let now = Utc::now();
-
-        let is_online = self
-            .last_heard
-            .and_then(|last_heard| Some((now - last_heard).num_seconds() < ONLINE_NODE_THRESHOLD_SECS))
-            .unwrap_or(false);
-
         let is_direct = self.hops.and_then(|h| Some(h == 0)).unwrap_or(false);
 
-        self.fulltext = vec![
+        self.fulltext = [
             self.user
                 .as_ref()
                 .and_then(|u| Some(&u.short_name))
@@ -420,11 +412,6 @@ impl Node {
             self.role().to_lowercase(),
             self.hw_model().to_lowercase(),
             self.id.clone(),
-            if is_online {
-                "$online".to_owned()
-            } else {
-                "$offline".to_owned()
-            },
             if is_direct {
                 "$direct".to_owned()
             } else {
@@ -456,6 +443,9 @@ impl Node {
                 "$temporary".to_owned()
             },
         ]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<String>>()
         .join(" ");
     }
 }
