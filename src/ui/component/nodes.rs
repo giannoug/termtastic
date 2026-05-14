@@ -320,7 +320,15 @@ impl<'a> Component for Nodes<'a> {
             PlaceholderWidget::dark_gray("no nodes").render(v[0], frame.buffer_mut());
         }
 
-        let v1_h = Layout::horizontal([Constraint::Fill(3), Constraint::Fill(2)]).split(v[1]);
+        let count_filtered = state.nodes_view.len().to_string();
+        let count_total = state.nodes.len().to_string();
+
+        let v1_h = Layout::horizontal([
+            Constraint::Fill(3),
+            Constraint::Max(count_filtered.len() as u16 + count_total.len() as u16 + 5),
+            Constraint::Fill(2),
+        ])
+        .split(v[1]);
 
         let filter_block = Block::bordered()
             .border_type(BorderType::Rounded)
@@ -337,6 +345,27 @@ impl<'a> Component for Nodes<'a> {
 
         self.filter_input.render(filter_block_area, frame.buffer_mut());
 
+        let count_block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::new().dark_gray())
+            .padding(Padding::symmetric(1, 0))
+            .add_modifier(if is_popup_visible {
+                Modifier::DIM
+            } else {
+                Modifier::empty()
+            });
+
+        let count_block_area = count_block.inner(v1_h[1]);
+        count_block.render(v1_h[1], frame.buffer_mut());
+
+        Line::from(vec![
+            Span::from(count_filtered),
+            Span::from("/").dark_gray(),
+            Span::from(count_total),
+        ])
+        .centered()
+        .render(count_block_area, frame.buffer_mut());
+
         let sort_block = Block::bordered()
             .border_type(BorderType::Rounded)
             .border_style(Style::new().magenta())
@@ -347,8 +376,8 @@ impl<'a> Component for Nodes<'a> {
                 Modifier::empty()
             });
 
-        let sort_block_area = sort_block.inner(v1_h[1]);
-        sort_block.render(v1_h[1], frame.buffer_mut());
+        let sort_block_area = sort_block.inner(v1_h[2]);
+        sort_block.render(v1_h[2], frame.buffer_mut());
 
         Line::from(Span::from(state.nodes_sort_by.to_string()).magenta())
             .centered()
