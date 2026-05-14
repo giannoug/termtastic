@@ -1,12 +1,12 @@
 use crossterm::{
     event::{Event, EventStream, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use futures::{future::FutureExt, StreamExt};
-use ratatui::{prelude::CrosstermBackend, Terminal};
+use futures::{StreamExt, future::FutureExt};
+use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{
-    io::{self, stdout, Stdout},
+    io::{self, Stdout, stdout},
     panic::{set_hook, take_hook},
 };
 use tokio::sync::{broadcast, mpsc, watch};

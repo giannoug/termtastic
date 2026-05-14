@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use meshtastic::Message;
 use meshtastic::protobufs::config::{
     self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
 };
@@ -7,10 +8,9 @@ use meshtastic::protobufs::module_config::{
     NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig, TrafficManagementConfig,
 };
 use meshtastic::protobufs::{
-    admin_message, from_radio, mesh_packet, module_config, AdminMessage, Channel as MeshtasticChannel, Config, ModuleConfig,
-    PortNum, User,
+    AdminMessage, Channel as MeshtasticChannel, Config, ModuleConfig, PortNum, User, admin_message, from_radio,
+    mesh_packet, module_config,
 };
-use meshtastic::Message;
 use nameof::name_of;
 use ordermap::OrderMap;
 use std::sync::LazyLock;

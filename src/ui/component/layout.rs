@@ -1,14 +1,14 @@
 use crate::ui::{
-    component::{Chat, Connection, Header, Logs, Nodes, Settings, TerminalSize},
+    component::{Chat, Connection, Header, Logs, Nodes, Settings},
     logo::APP_LOGO_TEXT,
     prelude::*,
 };
+use ratatui::layout::Layout as RatatuiLayout;
 use strum::IntoEnumIterator;
 
 const MIN_TERMINAL_SIZE: (u16, u16) = (80, 24);
 
 pub struct Layout<'a> {
-    terminal_size_component: TerminalSize,
     header_component: Header,
     chat_component: Chat<'a>,
     nodes_component: Nodes<'a>,
@@ -22,7 +22,6 @@ pub struct Layout<'a> {
 impl<'a> Layout<'a> {
     pub fn new() -> Self {
         Self {
-            terminal_size_component: TerminalSize::new(MIN_TERMINAL_SIZE),
             header_component: Header::new(),
             chat_component: Chat::new(),
             nodes_component: Nodes::new(),
@@ -36,6 +35,20 @@ impl<'a> Layout<'a> {
 }
 
 impl<'a> Component for Layout<'a> {
+    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
+        if let Some(node_key) = state.nodeinfo_popup {
+            return self.nodeinfo_state.get_hotkeys(state.nodes.get(&node_key));
+        }
+
+        match state.active_tab {
+            Tab::Chat => self.chat_component.get_hotkeys(state),
+            Tab::Nodes => self.nodes_component.get_hotkeys(state),
+            Tab::Settings => self.settings_component.get_hotkeys(state),
+            Tab::Connection => self.connection_component.get_hotkeys(state),
+            Tab::Logs => self.logs_component.get_hotkeys(state),
+        }
+    }
+
     fn handle_event(
         &mut self,
         state: &State,
@@ -44,6 +57,11 @@ impl<'a> Component for Layout<'a> {
     ) -> anyhow::Result<bool> {
         if let Some(node_key) = state.nodeinfo_popup {
             if self.nodeinfo_state.handle_event(event.clone(), &mut |ev| match ev {
+                NodeInfoWidgetEvent::PopupCloseRequested => {
+                    emit(AppEvent::NodeInfoPopupCloseRequested)?;
+
+                    Ok(())
+                }
                 NodeInfoWidgetEvent::PublicKeyCopyRequested => {
                     if let Some(node) = state.nodes.get(&node_key) {
                         emit(AppEvent::CopyToClipboardRequested(node.public_key.base64_encode()))?;
@@ -59,16 +77,7 @@ impl<'a> Component for Layout<'a> {
                 return Ok(true);
             }
 
-            if let Event::Key(KeyEvent {
-                code: KeyCode::Esc,
-                kind: KeyEventKind::Press,
-                ..
-            }) = event
-            {
-                emit(AppEvent::NodeInfoPopupCloseRequested)?;
-            }
-
-            return Ok(true);
+            return Ok(false);
         }
 
         let is_handled = match state.active_tab {
@@ -111,7 +120,7 @@ impl<'a> Component for Layout<'a> {
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
         if area.width < MIN_TERMINAL_SIZE.0 || area.height < MIN_TERMINAL_SIZE.1 {
-            self.terminal_size_component.render(state, frame, area);
+            TerminalSizeWidget::new(MIN_TERMINAL_SIZE).render(area, frame.buffer_mut());
             return;
         }
 
@@ -124,11 +133,12 @@ impl<'a> Component for Layout<'a> {
 
         let area = container.inner(frame.area());
 
-        let v = ratatui::layout::Layout::vertical([
+        let v = RatatuiLayout::vertical([
             Constraint::Length(2),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(1),
+            Constraint::Length(1),
         ])
         .split(area);
 
@@ -148,12 +158,15 @@ impl<'a> Component for Layout<'a> {
             Tab::Logs => self.logs_component.render(state, frame, v[3]),
         }
 
+        // hotkeys
+        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[4], frame.buffer_mut());
+
         // node info popup
         if let Some(node_key) = state.nodeinfo_popup {
             let popup_area = Rect {
-                x: area.x + area.width / 2 - 70 / 2,
+                x: area.x + area.width / 2 - 60 / 2,
                 y: area.y + area.height / 2 - 20 / 2,
-                width: 70,
+                width: 60,
                 height: 20,
             };
 

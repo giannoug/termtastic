@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use meshtastic::{
-    protobufs::{admin_message, from_radio, mesh_packet, AdminMessage, MeshPacket, PortNum, User},
     Message as _,
+    protobufs::{AdminMessage, MeshPacket, PortNum, User, admin_message, from_radio, mesh_packet},
 };
 use tokio::{
     sync::{broadcast, mpsc, watch},

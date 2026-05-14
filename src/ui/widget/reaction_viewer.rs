@@ -1,11 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
-use ratatui::style::{Color, Style, Stylize};
-use ratatui::text::{Line, Span, ToSpan};
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    widgets::{Block, BorderType, Padding, StatefulWidget, Widget},
-};
+use ratatui::prelude::*;
+use ratatui::text::ToSpan;
+use ratatui::widgets::{Block, BorderType, Padding, StatefulWidget, Widget};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 use crate::types::{MessageReaction, Node};

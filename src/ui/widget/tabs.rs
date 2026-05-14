@@ -1,8 +1,5 @@
-use crate::ui::prelude::{Buffer, Rect};
 use itertools::Itertools;
-use ratatui::prelude::Widget;
-use ratatui::style::Stylize;
-use ratatui::text::{Line, Span};
+use ratatui::prelude::*;
 
 pub struct TabsWidget {
     tabs: Vec<(usize, String)>,

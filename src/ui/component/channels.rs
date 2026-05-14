@@ -19,17 +19,17 @@ impl Channels {
     fn channels<'a>(&self, state: &'a State) -> impl Iterator<Item = &'a Channel> {
         state.channels.values().filter(|ch| !ch.role.is_disabled())
     }
+}
 
-    fn get_hotkeys(&self) -> Vec<Hotkey> {
+impl<'a> Component for Channels {
+    fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
         vec![
             Hotkey::new("↑↓", "scroll"),
             Hotkey::new("enter", "open"),
             Hotkey::new("del", "purge chat"),
         ]
     }
-}
 
-impl<'a> Component for Channels {
     fn handle_event(
         &mut self,
         state: &State,
@@ -104,8 +104,6 @@ impl<'a> Component for Channels {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
-
         let channels: Vec<&Channel> = self.channels(state).collect();
 
         if !channels.is_empty() {
@@ -143,9 +141,9 @@ impl<'a> Component for Channels {
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar());
 
-            list.render(v[0], frame.buffer_mut(), &mut self.list_state);
+            list.render(area, frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::dark_gray("no channels").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray("no channels").render(area, frame.buffer_mut());
         }
 
         if self.channel_purge_key.is_some() {
@@ -156,10 +154,8 @@ impl<'a> Component for Channels {
                 40,
                 Color::Red,
             )
-            .render(v[0], frame.buffer_mut());
+            .render(area, frame.buffer_mut());
         }
-
-        HotkeysWidget::new(&self.get_hotkeys()).render(v[1], frame.buffer_mut());
     }
 }
 

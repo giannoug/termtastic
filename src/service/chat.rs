@@ -1,6 +1,6 @@
 use meshtastic::{
-    protobufs::{from_radio::PayloadVariant, mesh_packet, routing, PortNum, Routing},
     Message as _,
+    protobufs::{PortNum, Routing, from_radio::PayloadVariant, mesh_packet, routing},
 };
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;

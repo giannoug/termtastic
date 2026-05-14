@@ -1,9 +1,7 @@
 use crate::{types::Hotkey, ui::widget::HotkeysWidget};
 use ratatui::style::Color;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
-    style::Style,
+    prelude::*,
     widgets::{Block, BorderType, Clear, Padding, Paragraph, Widget, Wrap},
 };
 

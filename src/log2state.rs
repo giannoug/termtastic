@@ -18,29 +18,21 @@ impl LogToState {
 }
 
 impl<S: tracing::Subscriber + Send + Sync> Layer<S> for LogToState {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _ctx: tracing_subscriber::layer::Context<'_, S>,
-    ) {
+    fn on_event(&self, event: &tracing::Event<'_>, _ctx: tracing_subscriber::layer::Context<'_, S>) {
         let level = *event.metadata().level();
         let source = event.metadata().target().to_string();
 
         let mut message = String::new();
-        let mut visitor = MessageVisitor {
-            message: &mut message,
-        };
+        let mut visitor = MessageVisitor { message: &mut message };
 
         event.record(&mut visitor);
 
-        let _ = self
-            .state_action_tx
-            .send(StateAction::LogRecordAdd(LogRecord {
-                datetime: Utc::now(),
-                level,
-                source,
-                message,
-            }));
+        let _ = self.state_action_tx.send(StateAction::LogRecordAdd(LogRecord {
+            datetime: Utc::now(),
+            level,
+            source,
+            message,
+        }));
     }
 }
 

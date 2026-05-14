@@ -2,10 +2,7 @@ use std::marker::PhantomData;
 
 use crossterm::event::Event;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::{Line, Span},
+    prelude::*,
     widgets::{Block, BorderType, Clear, Padding, StatefulWidget, Widget},
 };
 use ratatui_textarea::TextArea;

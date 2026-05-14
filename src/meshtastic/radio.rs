@@ -37,8 +37,7 @@ impl RadioService {
         match maybe_packet {
             Some(packet) => {
                 if let Some(payload) = packet.payload_variant {
-                    self.event_tx
-                        .send(MeshtasticEvent::IncomingPacket(payload))?;
+                    self.event_tx.send(MeshtasticEvent::IncomingPacket(payload))?;
                 }
 
                 Ok(true)

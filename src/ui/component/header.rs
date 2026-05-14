@@ -9,10 +9,14 @@ impl Header {
 }
 
 impl Component for Header {
+    fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
+        Vec::default()
+    }
+
     fn handle_event(
         &mut self,
         _state: &State,
-        _event: &crossterm::event::Event,
+        _event: &Event,
         _emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
         Ok(false)

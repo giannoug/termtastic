@@ -18,7 +18,9 @@ impl<'a> Connection<'a> {
             removing_tcp_device: None,
         }
     }
+}
 
+impl<'a> Component for Connection<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if state.active_device.is_some() {
             return vec![Hotkey::new("esc", "disconnect")];
@@ -44,9 +46,7 @@ impl<'a> Connection<'a> {
         .flatten()
         .collect()
     }
-}
 
-impl<'a> Component for Connection<'a> {
     fn handle_event(
         &mut self,
         state: &State,
@@ -177,8 +177,6 @@ impl<'a> Component for Connection<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::vertical([Constraint::Min(1), Constraint::Length(1)]).split(area);
-
         if !state.aggregated_devices.is_empty() {
             if self.list_state.selected.is_none()
                 && state.device_discovering_state == DeviceDiscoveringState::Done
@@ -213,13 +211,13 @@ impl<'a> Component for Connection<'a> {
                     Modifier::empty()
                 });
 
-            list.render(v[0], frame.buffer_mut(), &mut self.list_state);
+            list.render(area, frame.buffer_mut(), &mut self.list_state);
         } else {
-            PlaceholderWidget::dark_gray("no devices").render(v[0], frame.buffer_mut());
+            PlaceholderWidget::dark_gray("no devices").render(area, frame.buffer_mut());
         }
 
         if self.is_tcp_form_visible {
-            PopupInputWidget::new(36).render(v[0], frame.buffer_mut(), &mut self.popup_input_state);
+            PopupInputWidget::new(36).render(area, frame.buffer_mut(), &mut self.popup_input_state);
         }
 
         if self.removing_tcp_device.is_some() {
@@ -230,15 +228,15 @@ impl<'a> Component for Connection<'a> {
                 40,
                 Color::Red,
             )
-            .render(v[0], frame.buffer_mut());
+            .render(area, frame.buffer_mut());
         }
 
         if let Some(active_device) = &state.active_device {
             let popup_area = Rect {
-                x: v[0].x,
-                y: v[0].y + v[0].height / 3,
-                width: v[0].width,
-                height: v[0].height - v[0].height / 3,
+                x: area.x,
+                y: area.y + area.height / 3,
+                width: area.width,
+                height: area.height - area.height / 3,
             };
 
             let popup_block = Block::bordered()
@@ -292,8 +290,6 @@ impl<'a> Component for Connection<'a> {
                 block_v[3],
             );
         }
-
-        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[1], frame.buffer_mut())
     }
 }
 

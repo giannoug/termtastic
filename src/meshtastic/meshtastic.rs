@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use meshtastic::{
+    Message,
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{admin_message, from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
+    protobufs::{Config, FromRadio, MeshPacket, ModuleConfig, PortNum, admin_message, from_radio},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
-    Message,
 };
 use tokio::time::sleep;
 use tokio::{
@@ -19,8 +19,8 @@ use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, Su
 use tracing_unwrap::OptionExt;
 
 use crate::meshtastic::{
-    connect_via_ble, connect_via_serial, connect_via_tcp, types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
-    RadioService,
+    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp,
+    types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
 };
 
 const CONNECTION_TIMEOUT_SECS: u64 = 2;

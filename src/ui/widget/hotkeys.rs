@@ -1,8 +1,5 @@
 use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::Stylize,
-    text::{Line, Span},
+    prelude::*,
     widgets::{Paragraph, Widget, Wrap},
 };
 

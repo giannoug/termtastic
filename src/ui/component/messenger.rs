@@ -41,7 +41,9 @@ impl<'a> Messenger<'a> {
             is_reaction_viewer_visible: false,
         }
     }
+}
 
+impl<'a> Component for Messenger<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if self.is_reaction_viewer_visible {
             return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
@@ -104,9 +106,7 @@ impl<'a> Messenger<'a> {
         .flatten()
         .collect()
     }
-}
 
-impl<'a> Component for Messenger<'a> {
     fn handle_event(
         &mut self,
         state: &State,
@@ -326,7 +326,7 @@ impl<'a> Component for Messenger<'a> {
             list_state.select(Some(messages.len() - 1));
         }
 
-        let v = Layout::vertical([Constraint::Min(0), Constraint::Length(3), Constraint::Length(1)]).split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).split(area);
         let is_any_popup_visible =
             state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 
@@ -482,8 +482,6 @@ impl<'a> Component for Messenger<'a> {
 
             EmojiSelectorWidget::new().render(popup_area, frame.buffer_mut(), &mut self.emoji_selector_state);
         }
-
-        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[2], frame.buffer_mut());
     }
 }
 

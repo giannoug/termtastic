@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{config, module_config, routing, User};
+use meshtastic::protobufs::{User, config, module_config, routing};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,

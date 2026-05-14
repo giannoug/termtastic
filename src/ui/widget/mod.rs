@@ -8,6 +8,7 @@ mod popup_dropdown_bitmask;
 mod popup_input;
 mod reaction_viewer;
 mod tabs;
+mod terminal_size;
 
 pub use emoji_selector::*;
 pub use hotkeys::*;
@@ -19,3 +20,4 @@ pub use popup_dropdown_bitmask::*;
 pub use popup_input::*;
 pub use reaction_viewer::*;
 pub use tabs::*;
+pub use terminal_size::*;

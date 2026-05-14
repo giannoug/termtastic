@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use hostaddr::HostAddr;
+use meshtastic::protobufs::User;
 use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
@@ -20,7 +21,6 @@ use meshtastic::protobufs::module_config::{
     MqttConfig, NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig,
     TrafficManagementConfig,
 };
-use meshtastic::protobufs::User;
 use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;

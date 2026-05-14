@@ -16,6 +16,14 @@ impl<'a> Chat<'a> {
 }
 
 impl<'a> Component for Chat<'a> {
+    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
+        if state.get_active_channel().is_some() {
+            self.messenger_component.get_hotkeys(state)
+        } else {
+            self.channels_component.get_hotkeys(state)
+        }
+    }
+
     fn handle_event(
         &mut self,
         state: &State,

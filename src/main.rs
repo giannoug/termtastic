@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use tokio::sync::broadcast;
 use tokio_graceful_shutdown::{SubsystemBuilder, SubsystemHandle, Toplevel};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_unwrap::ResultExt;
 
 use crate::{

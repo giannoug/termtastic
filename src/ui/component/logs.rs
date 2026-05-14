@@ -19,8 +19,10 @@ impl Logs {
             popup_scroll_state: ScrollbarState::default(),
         }
     }
+}
 
-    fn get_hotkeys(&self) -> Vec<Hotkey> {
+impl Component for Logs {
+    fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
         if self.popup_record.is_some() {
             return vec![
                 Hotkey::new("↑↓".to_string(), "scroll".to_string()),
@@ -37,9 +39,7 @@ impl Logs {
             Hotkey::new("end".to_string(), "to bottom".to_string()),
         ]
     }
-}
 
-impl Component for Logs {
     fn handle_event(
         &mut self,
         state: &State,
@@ -159,7 +159,7 @@ impl Component for Logs {
             self.list_state.select(Some(state.logs.len() - 1));
         }
 
-        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
 
         if !state.logs.is_empty() {
             let list_builder = ListBuilder::new(|context| {
@@ -186,10 +186,10 @@ impl Component for Logs {
 
         if let Some(record) = &self.popup_record {
             let popup_area = Rect {
-                x: v[0].x,
-                y: v[0].y + v[0].height / 4,
-                width: v[0].width,
-                height: v[0].height - v[0].height / 4,
+                x: area.x,
+                y: area.y + area.height / 4,
+                width: area.width,
+                height: area.height - area.height / 4,
             };
 
             let popup_block = Block::new()
@@ -217,8 +217,6 @@ impl Component for Logs {
                 &mut self.popup_scroll_state,
             );
         }
-
-        HotkeysWidget::new(&self.get_hotkeys()).render(v[2], frame.buffer_mut());
     }
 }
 

@@ -28,41 +28,6 @@ impl<'a> Settings<'a> {
         }
     }
 
-    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
-        match &state.settings_form_state {
-            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("enter", "open"))],
-            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("esc", "cancel"))],
-            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("esc", "return"))],
-            SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => {
-                vec![Some(Hotkey::new("enter", "submit")), Some(Hotkey::new("esc", "cancel"))]
-            }
-            SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => {
-                vec![Some(Hotkey::new("enter", "select")), Some(Hotkey::new("esc", "cancel"))]
-            }
-            SettingsFormState::Loaded { .. } if self.popup_dropdown_bitmask_state.is_some() => {
-                vec![
-                    Some(Hotkey::new("space", "toggle")),
-                    Some(Hotkey::new("enter", "submit")),
-                    Some(Hotkey::new("esc", "cancel")),
-                ]
-            }
-            SettingsFormState::Loaded { .. } => vec![
-                Some(Hotkey::new("↑↓", "scroll")),
-                self.form_list_state
-                    .selected
-                    .is_some()
-                    .then_some(Hotkey::new("enter", "edit")),
-                state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
-                state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
-                Some(Hotkey::new("esc", "return")),
-            ],
-            SettingsFormState::Saving { .. } => vec![],
-        }
-        .into_iter()
-        .flatten()
-        .collect()
-    }
-
     fn render_form(
         &mut self,
         items: &Vec<FormItem>,
@@ -212,6 +177,41 @@ impl<'a> Settings<'a> {
 }
 
 impl<'a> Component for Settings<'a> {
+    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
+        match &state.settings_form_state {
+            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("enter", "open"))],
+            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("esc", "cancel"))],
+            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("esc", "return"))],
+            SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => {
+                vec![Some(Hotkey::new("enter", "submit")), Some(Hotkey::new("esc", "cancel"))]
+            }
+            SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => {
+                vec![Some(Hotkey::new("enter", "select")), Some(Hotkey::new("esc", "cancel"))]
+            }
+            SettingsFormState::Loaded { .. } if self.popup_dropdown_bitmask_state.is_some() => {
+                vec![
+                    Some(Hotkey::new("space", "toggle")),
+                    Some(Hotkey::new("enter", "submit")),
+                    Some(Hotkey::new("esc", "cancel")),
+                ]
+            }
+            SettingsFormState::Loaded { .. } => vec![
+                Some(Hotkey::new("↑↓", "scroll")),
+                self.form_list_state
+                    .selected
+                    .is_some()
+                    .then_some(Hotkey::new("enter", "edit")),
+                state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
+                state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
+                Some(Hotkey::new("esc", "return")),
+            ],
+            SettingsFormState::Saving { .. } => vec![],
+        }
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
     fn handle_event(
         &mut self,
         state: &State,
@@ -407,9 +407,7 @@ impl<'a> Component for Settings<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1), Constraint::Length(1)]).split(area);
-
-        let v0_h = Layout::horizontal([Constraint::Ratio(2, 6), Constraint::Ratio(4, 6)]).split(v[0]);
+        let h = Layout::horizontal([Constraint::Ratio(2, 6), Constraint::Ratio(4, 6)]).split(area);
 
         if self.settings_list_state.selected.is_none() {
             self.settings_list_state.select(Some(0));
@@ -425,9 +423,9 @@ impl<'a> Component for Settings<'a> {
                 Color::DarkGray
             });
 
-        let menu_block_area = menu_block.inner(v0_h[0]);
+        let menu_block_area = menu_block.inner(h[0]);
 
-        menu_block.render(v0_h[0], frame.buffer_mut());
+        menu_block.render(h[0], frame.buffer_mut());
 
         let menu_list_builder = ListBuilder::new(|context| {
             let settings_item = &SETTINGS[context.index];
@@ -469,7 +467,7 @@ impl<'a> Component for Settings<'a> {
             )
             .padding(Padding::symmetric(1, 0));
 
-        let form_block_area = form_block.inner(v0_h[1]);
+        let form_block_area = form_block.inner(h[1]);
 
         match &state.settings_form_state {
             SettingsFormState::Inactive => {
@@ -528,10 +526,7 @@ impl<'a> Component for Settings<'a> {
             }
         }
 
-        form_block.render(v0_h[1], frame.buffer_mut());
-
-        // Hotkeys
-        HotkeysWidget::new(&self.get_hotkeys(&state)).render(v[2], frame.buffer_mut());
+        form_block.render(h[1], frame.buffer_mut());
     }
 }
 

@@ -27,33 +27,6 @@ impl<'a> Nodes<'a> {
         }
     }
 
-    fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
-        if self.is_emoji_selector_visible {
-            return vec![
-                Hotkey::new("↑↓", "scroll"),
-                Hotkey::new("enter", "insert"),
-                Hotkey::new("esc", "close"),
-            ];
-        }
-
-        if self.is_filter_help_visible {
-            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
-        }
-
-        if state.nodeinfo_popup.is_some() {
-            return vec![Hotkey::new("esc", "close")];
-        }
-
-        vec![
-            Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("F1", "help"),
-            Hotkey::new("enter [F4]", "node info"),
-            Hotkey::new("F2", "direct"),
-            Hotkey::new("F5", "emoji"),
-            Hotkey::new("F6", "sort by"),
-        ]
-    }
-
     fn render_filter_help(&mut self, area: Rect, buf: &mut Buffer) {
         let popup_area = Rect {
             x: area.x + area.width / 2 - 50 / 2,
@@ -139,6 +112,29 @@ impl<'a> Nodes<'a> {
 }
 
 impl<'a> Component for Nodes<'a> {
+    fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
+        if self.is_emoji_selector_visible {
+            return vec![
+                Hotkey::new("↑↓", "scroll"),
+                Hotkey::new("enter", "insert"),
+                Hotkey::new("esc", "close"),
+            ];
+        }
+
+        if self.is_filter_help_visible {
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
+        }
+
+        vec![
+            Hotkey::new("↑↓", "scroll"),
+            Hotkey::new("F1", "help"),
+            Hotkey::new("enter [F4]", "node info"),
+            Hotkey::new("F2", "direct"),
+            Hotkey::new("F5", "emoji"),
+            Hotkey::new("F6", "sort by"),
+        ]
+    }
+
     fn handle_event(
         &mut self,
         state: &State,
@@ -294,7 +290,7 @@ impl<'a> Component for Nodes<'a> {
             self.list_state.select(Some(0));
         }
 
-        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3), Constraint::Length(1)]).split(area);
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).split(area);
         let is_popup_visible =
             state.nodeinfo_popup.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
 
@@ -376,8 +372,6 @@ impl<'a> Component for Nodes<'a> {
 
             EmojiSelectorWidget::new().render(popup_area, frame.buffer_mut(), &mut self.emoji_selector_state);
         }
-
-        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[2], frame.buffer_mut());
     }
 }
 

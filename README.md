@@ -11,6 +11,7 @@
   <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
   <a href="https://github.com/acelot/termtastic/actions"><img src="https://github.com/acelot/termtastic/actions/workflows/build.yml/badge.svg?event=push" height="20" alt="Build"/></a>
   <img src="https://img.shields.io/github/languages/code-size/acelot/termtastic?cacheSeconds=86400" height="20" alt="code size"/>
+  <img src="https://img.shields.io/badge/vibecode--free-pink" height="20" alt="vibecode-free"/>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/acelot/termtastic.svg?style=flat&v=2" height="20" alt="GPL-3.0"/></a>
 </p>
 
@@ -39,13 +40,14 @@
 
 ## Tech highlights
 
+- Vibecode-free fully handwritten code
 - Dependency-free single-binary application
 - Fully asynchronous (Tokio channels-based)
 - Optimized for small screens (down to 80x24 characters)
-- Respects the user terminal colors (no opinionated and fancy TrueColor color scheme)
+- Respects the user terminal colors (no fancy opinionated TrueColor schemes)
 - Keyboard-centric UI navigation
 - Minimum use of emoji/non-ascii characters in UI
-- Small memory footprint
+- Small memory footprint (~20KB)
 - Supports multiple connection protocols (TCP, BLE, Serial)
 - Informative logs tab
 
@@ -169,6 +171,8 @@
 
 - [x] RX indicator
 - [x] Online/Total nodes counter
+- [ ] Storing nodes in local DB
+- [ ] Storing messages in local DB
 
 ## Stack
 
@@ -216,4 +220,13 @@ To run an unsigned application on macOS, you need to dequarantine it using the c
 
 ```sh
 xattr -d com.apple.quarantine ./path/to/termtastic
+```
+
+### Why emojis are glitching/tearing on my terminal?
+
+If you are using `foot` terminal try to add these lines into your `foot.ini` config:
+
+```ini
+[tweak]
+grapheme-width-method=wcswidth
 ```

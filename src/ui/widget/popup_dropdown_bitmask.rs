@@ -2,10 +2,7 @@ use std::marker::PhantomData;
 
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::Style,
-    text::{Line, Span},
+    prelude::*,
     widgets::{Block, BorderType, Clear, Padding, StatefulWidget, Widget},
 };
 use tui_widget_list::{ListBuilder, ListState, ListView};

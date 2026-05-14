@@ -3,10 +3,7 @@ use std::marker::PhantomData;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
 use emoji::Emoji;
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
-    style::{Modifier, Style, Stylize},
-    text::{Line, Span},
+    prelude::*,
     widgets::{Block, BorderType, Padding, StatefulWidget, Widget},
 };
 use ratatui_textarea::TextArea;
