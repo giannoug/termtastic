@@ -36,10 +36,12 @@ impl Component for Header {
             v[0],
         );
 
-        let my_node_info = if let Some(my_node) = state.get_my_node() {
+        let my_node_info = if let Some(my_node) = state.get_my_node()
+            && !matches!(state.connection_state, ConnectionState::NotConnected)
+        {
             vec![
                 Span::from("node ").dark_gray(),
-                short_name_to_span(my_node),
+                short_name_to_span(my_node, true),
                 Span::from("  "),
             ]
         } else {

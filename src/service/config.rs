@@ -1,5 +1,5 @@
+use nameof::name_of;
 use std::hash::{DefaultHasher, Hash, Hasher};
-
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
@@ -10,22 +10,28 @@ use crate::{
 };
 
 pub struct ConfigService {
+    app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
     state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
+    state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
     app_config_last_hash: u64,
 }
 
 impl ConfigService {
     pub fn new(
+        app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
         state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
+        state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
     ) -> Self {
         Self {
+            app_event_tx,
             app_event_rx,
             state_rx,
             state_action_tx,
+            state_changed_rx,
             app_config_last_hash: 0,
         }
     }
@@ -34,7 +40,7 @@ impl ConfigService {
         loop {
             tokio::select! {
                 event = self.app_event_rx.recv() => self.handle_app_event(event)?,
-                _ = self.state_rx.changed() => self.handle_state_change()?,
+                event = self.state_changed_rx.recv() => self.handle_state_change(event)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     break;
@@ -51,9 +57,6 @@ impl ConfigService {
                 let app_config: AppConfig = confy::load(crate::APP_NAME, "app")?;
 
                 self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
-
-                self.state_action_tx
-                    .send(StateAction::Toast(Toast::normal("config loaded")))?;
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 tracing::warn!("broadcast receiver lagged by {} events", n);
@@ -64,15 +67,33 @@ impl ConfigService {
         Ok(())
     }
 
-    fn handle_state_change(&mut self) -> anyhow::Result<()> {
-        let state = self.state_rx.borrow();
+    fn handle_state_change(
+        &mut self,
+        event: Result<Vec<&'static str>, broadcast::error::RecvError>,
+    ) -> anyhow::Result<()> {
+        match event {
+            Ok(changed) => {
+                if changed.contains(&name_of!(config_loaded in State)) {
+                    self.app_event_tx.send(AppEvent::ConfigLoaded)?;
 
-        let app_config: AppConfig = (&*state).into();
-        let app_config_hash = calculate_hash(&app_config);
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("config loaded")))?;
+                }
 
-        if app_config_hash != self.app_config_last_hash {
-            confy::store(crate::APP_NAME, "app", &app_config)?;
-            self.app_config_last_hash = app_config_hash;
+                let state = self.state_rx.borrow();
+
+                let app_config: AppConfig = (&*state).into();
+                let app_config_hash = calculate_hash(&app_config);
+
+                if app_config_hash != self.app_config_last_hash {
+                    confy::store(crate::APP_NAME, "app", &app_config)?;
+                    self.app_config_last_hash = app_config_hash;
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(n)) => {
+                tracing::warn!("broadcast receiver lagged by {} events", n);
+            }
+            _ => {}
         }
 
         Ok(())

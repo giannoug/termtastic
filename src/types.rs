@@ -4,7 +4,6 @@ use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
 use meshtastic::protobufs::{channel, config, module_config, routing};
-use ratatui::style::Color;
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use std::{collections::HashMap, fmt::Debug, time::Instant};
@@ -25,6 +24,8 @@ pub struct AppConfig {
     pub nodes_filter: String,
     #[serde(default)]
     pub ui_config: UiConfig,
+    #[serde(default)]
+    pub my_node_key: Option<u32>,
 }
 
 impl From<&State> for AppConfig {
@@ -36,6 +37,7 @@ impl From<&State> for AppConfig {
             nodes_sort_by: value.nodes_sort_by.clone(),
             nodes_filter: value.nodes_filter.clone(),
             ui_config: value.ui_config.clone(),
+            my_node_key: value.my_node_key,
         }
     }
 }
@@ -75,6 +77,7 @@ pub enum AppEvent {
         emoji: &'static Emoji,
         reply_message_id: Option<u32>,
     },
+    ConfigLoaded,
     SplashLogoRequested,
     DirectChatRequested(u32),
     SettingsFormSelected(FormId),
@@ -199,7 +202,6 @@ impl Tab {
 pub struct Hotkey {
     pub key: String,
     pub label: String,
-    pub label_color: Color,
 }
 
 impl Hotkey {
@@ -207,15 +209,6 @@ impl Hotkey {
         Self {
             key: key.into(),
             label: label.into(),
-            label_color: Color::DarkGray,
-        }
-    }
-
-    pub fn red<S: Into<String>>(key: S, label: S) -> Self {
-        Self {
-            key: key.into(),
-            label: label.into(),
-            label_color: Color::Red,
         }
     }
 }
@@ -308,7 +301,6 @@ impl NodesSortBy {
 }
 
 pub trait HopsSnrRssiAware {
-    fn my(&self) -> bool;
     fn hops(&self) -> Option<u32>;
     fn snr(&self) -> f32;
     fn rssi(&self) -> Option<i32>;
@@ -324,7 +316,6 @@ pub struct Node {
     pub snr: f32,
     pub rssi: Option<i32>,
     pub public_key: Vec<u8>,
-    pub my: bool,
     pub is_favorite: bool,
     pub is_ignored: bool,
     pub is_muted: bool,
@@ -357,7 +348,6 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
     snr: 0.0,
     rssi: None,
     public_key: vec![],
-    my: false,
     is_favorite: false,
     is_ignored: false,
     is_muted: false,
@@ -451,10 +441,6 @@ impl Node {
 }
 
 impl HopsSnrRssiAware for Node {
-    fn my(&self) -> bool {
-        self.my
-    }
-
     fn hops(&self) -> Option<u32> {
         self.hops
     }
@@ -484,7 +470,6 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
             snr: value.snr,
             rssi: None,
             public_key: user.public_key.clone(),
-            my: false,
             is_favorite: value.is_favorite,
             is_ignored: value.is_ignored,
             is_muted: value.is_muted,
@@ -510,7 +495,6 @@ impl From<&meshtastic::protobufs::MeshPacket> for Node {
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
             public_key: packet.public_key.clone(),
-            my: false,
             is_favorite: false,
             is_ignored: false,
             is_muted: false,
@@ -540,7 +524,6 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
             public_key: user.public_key.clone(),
-            my: false,
             is_favorite: false,
             is_ignored: false,
             is_muted: false,
@@ -734,10 +717,6 @@ pub struct MessageReaction {
 }
 
 impl HopsSnrRssiAware for MessageReaction {
-    fn my(&self) -> bool {
-        false
-    }
-
     fn hops(&self) -> Option<u32> {
         Some(self.hops)
     }
@@ -792,10 +771,6 @@ pub struct Message {
 }
 
 impl HopsSnrRssiAware for Message {
-    fn my(&self) -> bool {
-        false
-    }
-
     fn hops(&self) -> Option<u32> {
         Some(self.hops)
     }

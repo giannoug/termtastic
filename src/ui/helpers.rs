@@ -185,7 +185,11 @@ pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<
             .fg(channel.psk.len().psk_len_to_color()),
         ],
         (ChannelRole::Direct, Some(node)) => {
-            vec![short_name_to_span(node), Span::from(" "), Span::from(node.long_name())]
+            vec![
+                short_name_to_span(node, state.my_node_key == Some(node.key)),
+                Span::from(" "),
+                Span::from(node.long_name()),
+            ]
         }
         (ChannelRole::Direct, None) => {
             vec![Span::from(format!("!{:x}", channel.key))]
@@ -245,9 +249,9 @@ pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
     ]
 }
 
-pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware) -> Vec<Span<'a>> {
-    if provider.my() {
-        return vec![Span::from("connected").blue()];
+pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware, my: bool) -> Vec<Span<'a>> {
+    if my {
+        return vec![Span::from("my node").blue()];
     }
 
     match (provider.hops(), provider.rssi()) {
@@ -265,10 +269,10 @@ pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware) -> Vec<Span<'a>> {
     }
 }
 
-pub fn short_name_to_span(node: &Node) -> text::Span<'_> {
+pub fn short_name_to_span(node: &Node, my: bool) -> text::Span<'_> {
     Span::from(pad_center(&node.short_name(), 6))
         .black()
-        .patch_style(if node.my {
+        .patch_style(if my {
             Style::new().white().on_blue()
         } else if node.user.is_none() {
             Style::new().on_yellow()
@@ -279,9 +283,9 @@ pub fn short_name_to_span(node: &Node) -> text::Span<'_> {
         })
 }
 
-pub fn last_heard_to_spans(node: &Node) -> Vec<Span<'_>> {
+pub fn last_heard_to_spans(node: &Node, my: bool) -> Vec<Span<'_>> {
     match node.last_heard {
-        Some(_) if node.my => vec![Span::from("now").blue()],
+        Some(_) if my => vec![Span::from("now").blue()],
         Some(dt) => humanize_duration(Utc::now().round_subsecs(0) - dt),
         None => vec![Span::from("?").dark_gray()],
     }

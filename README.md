@@ -1,11 +1,8 @@
-# termtastic
-
 <p align="center"><img src="./logo.png" width="466" alt="termtastic"></p>
 
 <p align="center">
   <b>termtastic</b> is a feature-rich handmade <a href="https://meshtastic.org">Meshtastic®</a> console client written in Rust.
 </p>
-
 
 <p align="center">
   <a href="https://meshtastic.org"><img src="./logo-mpowered.png" height="20" alt="M-Powered"/></a>
@@ -49,7 +46,7 @@
 - Minimum use of emoji/non-ascii characters in UI
 - Small memory footprint (~20KB)
 - Supports multiple connection protocols (TCP, BLE, Serial)
-- Informative logs tab
+- Uses standard system directories for storing configuration, database and logs
 
 ## Features
 
@@ -171,7 +168,7 @@
 
 - [x] RX indicator
 - [x] Online/Total nodes counter
-- [ ] Storing nodes in local DB
+- [x] Storing nodes in local DB
 - [ ] Storing messages in local DB
 
 ## Stack
@@ -191,6 +188,7 @@
 | Errors                      | [anyhow](https://github.com/dtolnay/anyhow)                     |
 | Datetime                    | [chrono](https://github.com/chronotope/chrono)                  |
 | Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                    |
+| Local DB                    | [native_db](https://github.com/vincent-herlemont/native_db)     |
 
 ## Compatibility
 

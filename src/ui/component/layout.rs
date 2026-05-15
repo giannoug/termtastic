@@ -37,7 +37,7 @@ impl<'a> Layout<'a> {
 impl<'a> Component for Layout<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if let Some(node_key) = state.nodeinfo_popup {
-            return self.nodeinfo_state.get_hotkeys(state.nodes.get(&node_key));
+            return self.nodeinfo_state.get_hotkeys(state.my_node_key == Some(node_key));
         }
 
         match state.active_tab {
@@ -172,7 +172,7 @@ impl<'a> Component for Layout<'a> {
 
             Clear.render(popup_area, frame.buffer_mut());
 
-            NodeInfoWidget::new(state.nodes.get(&node_key)).render(
+            NodeInfoWidget::new(state.nodes.get(&node_key), state.my_node_key == Some(node_key)).render(
                 popup_area,
                 frame.buffer_mut(),
                 &mut self.nodeinfo_state,

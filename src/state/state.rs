@@ -20,6 +20,8 @@ pub struct State {
     pub channels: OrderMap<u32, Channel>,
     pub connection_attempt: u16,
     pub connection_state: ConnectionState,
+    pub config_loaded: bool,
+    pub db_loaded: bool,
     pub device_config: DeviceConfig,
     pub device_discovering_state: DeviceDiscoveringState,
     pub device_module_config: DeviceModuleConfig,
@@ -61,6 +63,8 @@ impl Default for State {
             channels: OrderMap::with_capacity(10),
             connection_attempt: 0,
             connection_state: Default::default(),
+            config_loaded: false,
+            db_loaded: false,
             device_discovering_state: Default::default(),
             device_config: Default::default(),
             device_module_config: Default::default(),
@@ -136,7 +140,7 @@ impl State {
                     .all(|token| node.fulltext.contains(token) || online_text.contains(token))
             })
             .sorted_by(|n1, n2| {
-                match (n1.my, n2.my) {
+                match (Some(n1.key) == self.my_node_key, Some(n2.key) == self.my_node_key) {
                     (true, true) => return Ordering::Equal,
                     (false, true) => return Ordering::Greater,
                     (true, false) => return Ordering::Less,

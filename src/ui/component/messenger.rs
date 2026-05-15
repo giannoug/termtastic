@@ -348,6 +348,7 @@ impl<'a> Component for Messenger<'a> {
                     node: &node,
                     message,
                     replied_message,
+                    is_my_node: state.my_node_key == Some(node.key),
                     is_selected: context.is_selected,
                     is_highlighted: replying_to
                         .and_then(|(_, msg_key)| Some(message.id == *msg_key))
@@ -397,13 +398,17 @@ impl<'a> Component for Messenger<'a> {
                 .chain(iter::once(&Span::from(" ←").dark_gray()))
                 .cloned()
                 .collect(),
-            (ChannelRole::Direct, None) => vec![
-                short_name_to_span(state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE)),
-                Span::from(" ←").dark_gray(),
-            ],
+            (ChannelRole::Direct, None) => {
+                let node = state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE);
+
+                vec![
+                    short_name_to_span(node, state.my_node_key == Some(node.key)),
+                    Span::from(" ←").dark_gray(),
+                ]
+            }
             (_, Some((node, _))) => vec![
                 Span::from("reply to ").cyan(),
-                short_name_to_span(node),
+                short_name_to_span(node, state.my_node_key == Some(node.key)),
                 Span::from(" ←").dark_gray(),
             ],
             _ => unreachable!(),
@@ -458,7 +463,11 @@ impl<'a> Component for Messenger<'a> {
                 .map(|reaction| {
                     let node = state.nodes.get(&reaction.node_key).unwrap_or(&UNKNOWN_NODE);
 
-                    ReactionViewerItem { reaction, node }
+                    ReactionViewerItem {
+                        reaction,
+                        node,
+                        is_my_node: state.my_node_key == Some(node.key),
+                    }
                 })
                 .collect();
 
@@ -497,6 +506,7 @@ struct MessageWidget<'a> {
     pub node: &'a Node,
     pub message: &'a Message,
     pub replied_message: Option<(&'a Node, &'a Message)>,
+    pub is_my_node: bool,
     pub is_selected: bool,
     pub is_highlighted: bool,
 }
@@ -585,22 +595,22 @@ impl<'a> Widget for MessageWidget<'a> {
 
         if let Some((rep_node, _)) = self.replied_message {
             Line::from(vec![
-                short_name_to_span(self.node),
+                short_name_to_span(self.node, self.is_my_node),
                 " → ".to_span().dark_gray(),
-                short_name_to_span(rep_node).on_magenta(),
+                short_name_to_span(rep_node, self.is_my_node).on_magenta(),
             ])
             .render(v0_h[0], buf);
         } else {
             Line::from(vec![
-                short_name_to_span(self.node),
+                short_name_to_span(self.node, self.is_my_node),
                 " ".to_span(),
                 self.node.long_name().to_span().bold(),
             ])
             .render(v0_h[0], buf);
         }
 
-        if !self.node.my {
-            Line::from(hops_to_spans(self.message)).render(v0_h[1], buf);
+        if !self.is_my_node {
+            Line::from(hops_to_spans(self.message, false)).render(v0_h[1], buf);
         } else {
             routing_error_to_span(self.message.error).render(v0_h[1], buf);
         }

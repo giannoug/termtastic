@@ -1,18 +1,20 @@
 mod log2state;
 mod meshtastic;
+mod repository;
 mod serde;
 mod service;
 mod state;
 mod types;
 mod ui;
 
+use etcetera::BaseStrategy;
 use std::time::Duration;
-
 use tokio::sync::broadcast;
 use tokio_graceful_shutdown::{SubsystemBuilder, SubsystemHandle, Toplevel};
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_unwrap::ResultExt;
 
+use crate::service::PersistenceService;
 use crate::{
     log2state::LogToState,
     meshtastic::MeshtasticService,
@@ -27,10 +29,15 @@ pub const APP_VERSION: &str = env!("APP_VERSION");
 
 #[tokio::main]
 async fn main() {
+    let data_dir = etcetera::choose_base_strategy().unwrap().data_dir().join(APP_NAME);
+
     let (store, state_action_tx, state_rx, state_changed_rx) = Store::new(State::default());
 
-    let (file_writer, _file_writer_guard) =
-        tracing_appender::non_blocking(tracing_appender::rolling::daily("logs", format!("{}.log", APP_NAME)));
+    let (file_writer, _file_writer_guard) = tracing_appender::non_blocking(tracing_appender::rolling::daily(
+        data_dir.join("logs"),
+        format!("{}.log", APP_NAME),
+    ));
+
     let file_logger_layer = tracing_subscriber::fmt::layer()
         .with_writer(file_writer)
         .with_ansi(false);
@@ -45,54 +52,70 @@ async fn main() {
 
     tracing::info!("application started");
 
-    let (meshtastic_service, meshtastic_command_tx, meshtastic_event_rx) = MeshtasticService::new();
-    let (event_tx, event_rx) = broadcast::channel::<AppEvent>(1024);
+    let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(1024);
 
-    let config_service = ConfigService::new(event_rx.resubscribe(), state_rx.clone(), state_action_tx.clone());
-    let ui_service = UiService::new(event_rx.resubscribe(), state_action_tx.clone());
+    let (persistence_service, persisted_state_action_tx) =
+        PersistenceService::new(app_event_rx.resubscribe(), state_action_tx.clone(), data_dir);
+
+    let (meshtastic_service, meshtastic_command_tx, meshtastic_event_rx) = MeshtasticService::new();
+
+    let config_service = ConfigService::new(
+        app_event_tx.clone(),
+        app_event_rx.resubscribe(),
+        state_rx.clone(),
+        persisted_state_action_tx.clone(),
+        state_changed_rx.resubscribe(),
+    );
+
+    let ui_service = UiService::new(app_event_rx.resubscribe(), persisted_state_action_tx.clone());
 
     let nodes_service = NodesService::new(
-        event_rx.resubscribe(),
+        app_event_rx.resubscribe(),
         state_rx.clone(),
-        state_action_tx.clone(),
+        persisted_state_action_tx.clone(),
         meshtastic_command_tx.clone(),
         meshtastic_event_rx.resubscribe(),
     );
 
     let connection_service = ConnectionService::new(
-        event_tx.clone(),
-        event_rx.resubscribe(),
+        app_event_tx.clone(),
+        app_event_rx.resubscribe(),
         state_rx.clone(),
-        state_action_tx.clone(),
+        persisted_state_action_tx.clone(),
         meshtastic_command_tx.clone(),
         meshtastic_event_rx.resubscribe(),
     );
 
     let chat_service = ChatService::new(
-        event_rx.resubscribe(),
+        app_event_rx.resubscribe(),
         state_rx.clone(),
-        state_action_tx.clone(),
+        persisted_state_action_tx.clone(),
         meshtastic_command_tx.clone(),
         meshtastic_event_rx.resubscribe(),
     );
 
     let settings_service = SettingsService::new(
-        event_rx.resubscribe(),
+        app_event_rx.resubscribe(),
         state_rx.clone(),
-        state_action_tx.clone(),
+        persisted_state_action_tx.clone(),
         state_changed_rx.resubscribe(),
         meshtastic_command_tx.clone(),
         meshtastic_event_rx.resubscribe(),
     );
 
-    let event_tx_clone = event_tx.clone();
-    let state_action_tx_clone = state_action_tx.clone();
+    let event_tx_clone = app_event_tx.clone();
+    let persisted_state_action_tx_clone = persisted_state_action_tx.clone();
 
     event_tx_clone
         .send(AppEvent::InitializationRequested)
         .expect_or_log("InitializationRequested event should be sent");
 
     Toplevel::new(async |s: &mut SubsystemHandle| {
+        s.start(SubsystemBuilder::new(
+            "PersistenceService",
+            async |subsys: &mut SubsystemHandle| persistence_service.run(subsys).await,
+        ));
+
         s.start(SubsystemBuilder::new(
             "ConfigService",
             async |subsys: &mut SubsystemHandle| config_service.run(subsys).await,
@@ -133,7 +156,7 @@ async fn main() {
         ));
 
         s.start(SubsystemBuilder::new("UI", async |subsys: &mut SubsystemHandle| {
-            Ui::new(state_rx, state_action_tx_clone, event_tx_clone)
+            Ui::new(state_rx, persisted_state_action_tx_clone, event_tx_clone)
                 .run(subsys)
                 .await
         }));

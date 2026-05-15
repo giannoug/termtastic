@@ -131,6 +131,9 @@ impl<'a> Component for Channels {
                     channel_name_spans: channel_name_to_spans(channel, state),
                     last_message,
                     last_message_node,
+                    is_last_message_node_my: last_message_node
+                        .and_then(|node| Some(state.my_node_key == Some(node.key)))
+                        .unwrap_or(false),
                     is_selected: context.is_selected,
                 };
 
@@ -164,6 +167,7 @@ struct ChannelWidget<'a> {
     pub channel_name_spans: Vec<Span<'a>>,
     pub last_message: Option<&'a Message>,
     pub last_message_node: Option<&'a Node>,
+    pub is_last_message_node_my: bool,
     pub is_selected: bool,
 }
 
@@ -221,14 +225,14 @@ impl<'a> Widget for ChannelWidget<'a> {
             }
             (_, None, Some(message)) => {
                 vec![
-                    short_name_to_span(&UNKNOWN_NODE),
+                    short_name_to_span(&UNKNOWN_NODE, false),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]
             }
             (_, Some(node), Some(message)) => {
                 vec![
-                    short_name_to_span(node),
+                    short_name_to_span(node, self.is_last_message_node_my),
                     Span::from(" "),
                     Span::from(message.text.clone()).dark_gray(),
                 ]

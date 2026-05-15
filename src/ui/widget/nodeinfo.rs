@@ -104,15 +104,12 @@ impl NodeInfoState {
         Ok(false)
     }
 
-    pub fn get_hotkeys(&self, maybe_node: Option<&Node>) -> Vec<Hotkey> {
+    pub fn get_hotkeys(&self, is_my_node: bool) -> Vec<Hotkey> {
         match &self.active_tab {
             Tab::Info => vec![
                 Some(Hotkey::new("esc", "close")),
                 Some(Hotkey::new("k", "copy public key")),
-                maybe_node
-                    .and_then(|n| Some(!n.my))
-                    .unwrap_or(true)
-                    .then_some(Hotkey::red("del", "remove")),
+                is_my_node.then_some(Hotkey::new("del", "remove")),
             ]
             .into_iter()
             .flatten()
@@ -124,11 +121,12 @@ impl NodeInfoState {
 
 pub struct NodeInfoWidget<'a> {
     maybe_node: Option<&'a Node>,
+    is_my_node: bool,
 }
 
 impl<'a> NodeInfoWidget<'a> {
-    pub fn new(maybe_node: Option<&'a Node>) -> Self {
-        Self { maybe_node }
+    pub fn new(maybe_node: Option<&'a Node>, is_my_node: bool) -> Self {
+        Self { maybe_node, is_my_node }
     }
 
     fn render_info(&self, node: &Node, area: Rect, buf: &mut Buffer, state: &mut NodeInfoState) {
@@ -141,7 +139,7 @@ impl<'a> NodeInfoWidget<'a> {
             Line::from(node.short_name().to_span()),
             Line::default(),
             Line::from(Span::from("last heard").dark_gray()),
-            Line::from(last_heard_to_spans(node)),
+            Line::from(last_heard_to_spans(node, self.is_my_node)),
             Line::default(),
             Line::from(Span::from("device role").dark_gray()),
             Line::from(node.role().to_span()),
@@ -154,7 +152,7 @@ impl<'a> NodeInfoWidget<'a> {
             Line::from(node.key.to_span()),
             Line::default(),
             Line::from(Span::from("hops").dark_gray()),
-            Line::from(hops_to_spans(node)),
+            Line::from(hops_to_spans(node, self.is_my_node)),
             Line::default(),
             Line::from(Span::from("public key").dark_gray()),
             Line::from(if !node.public_key.is_empty() {

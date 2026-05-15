@@ -23,7 +23,7 @@ const TOAST_QUICK_TIMEOUT_MILLIS: u128 = 500;
 const SPLASH_LOGO_TIMEOUT_MILLIS: u128 = 1500;
 
 pub struct Store {
-    action_rx: mpsc::UnboundedReceiver<StateAction>,
+    state_action_rx: mpsc::UnboundedReceiver<StateAction>,
     state_tx: watch::Sender<State>,
     changed_tx: broadcast::Sender<Vec<&'static str>>,
 }
@@ -37,17 +37,17 @@ impl Store {
         watch::Receiver<State>,
         broadcast::Receiver<Vec<&'static str>>,
     ) {
-        let (action_tx, action_rx) = mpsc::unbounded_channel::<StateAction>();
+        let (state_action_tx, state_action_rx) = mpsc::unbounded_channel::<StateAction>();
         let (state_tx, state_rx) = watch::channel(initial_state);
         let (changed_tx, changed_rx) = broadcast::channel::<Vec<&'static str>>(1000);
 
         (
             Self {
-                action_rx,
+                state_action_rx,
                 state_tx,
                 changed_tx,
             },
-            action_tx,
+            state_action_tx,
             state_rx,
             changed_rx,
         )
@@ -58,7 +58,7 @@ impl Store {
 
         loop {
             tokio::select! {
-                Some(action) = self.action_rx.recv() => self.handle_action(action)?,
+                Some(action) = self.state_action_rx.recv() => self.handle_action(action)?,
                 _ = tick_interval.tick() => self.handle_tick()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
@@ -90,6 +90,8 @@ impl Store {
                     state.nodes_sort_by = cfg.nodes_sort_by;
                     state.nodes_filter = cfg.nodes_filter;
                     state.ui_config = cfg.ui_config;
+                    state.my_node_key = cfg.my_node_key;
+                    state.config_loaded = true;
                     state.update_aggregated_devices();
 
                     changed.extend(vec![
@@ -99,7 +101,8 @@ impl Store {
                         name_of!(nodes_sort_by in State),
                         name_of!(nodes_filter in State),
                         name_of!(ui_config in State),
-                        name_of!(nodes_view in State),
+                        name_of!(my_node_key in State),
+                        name_of!(config_loaded in State),
                         name_of!(aggregated_devices in State),
                     ]);
                 });
@@ -161,9 +164,6 @@ impl Store {
                     state.device_config = Default::default();
                     state.device_module_config = Default::default();
                     state.device_user = Default::default();
-                    state.my_node_key = None;
-                    state.nodes.clear();
-                    state.nodes_view.clear();
                     state.online_nodes = 0;
                     state.reconnection_backoff = None;
                     state.settings_form_data = None;
@@ -179,8 +179,6 @@ impl Store {
                         name_of!(device_config in State),
                         name_of!(device_module_config in State),
                         name_of!(device_user in State),
-                        name_of!(nodes in State),
-                        name_of!(nodes_view in State),
                         name_of!(online_nodes in State),
                         name_of!(reconnection_backoff in State),
                         name_of!(settings_form_data in State),
@@ -201,6 +199,14 @@ impl Store {
                         name_of!(connection_attempt in State),
                         name_of!(reconnection_backoff in State),
                     ]);
+                });
+            }
+            StateAction::DbDataApply { nodes } => {
+                self.state_tx.send_modify(|state| {
+                    state.nodes = nodes.into_iter().map(|n| (n.key, n)).collect();
+                    state.db_loaded = true;
+
+                    changed.extend(vec![name_of!(nodes in State), name_of!(db_loaded in State)]);
                 });
             }
             StateAction::ReconnectionBackoffSet(duration) => {
@@ -376,29 +382,15 @@ impl Store {
                     true
                 });
             }
-            StateAction::NodeInit(mut node) => {
+            StateAction::NodeInit(node) => {
                 self.state_tx.send_modify(|state| {
-                    if let Some(number) = state.my_node_key
-                        && node.key == number
-                    {
-                        node.my = true;
-                        node.update_fulltext();
-                    }
-
                     state.nodes.insert(node.key, node);
 
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                    changed.push(name_of!(nodes in State));
                 });
             }
-            StateAction::NodeInitTemporary(mut node) => {
-                self.state_tx.send_modify(|state| {
-                    if let Some(number) = state.my_node_key
-                        && node.key == number
-                    {
-                        node.my = true;
-                        node.update_fulltext();
-                    }
-
+            StateAction::NodeInitTemporary(node) => {
+                self.state_tx.send_if_modified(|state| {
                     let mut inserted = false;
 
                     state.nodes.entry(node.key).or_insert_with(|| {
@@ -407,8 +399,10 @@ impl Store {
                     });
 
                     if inserted {
-                        changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                        changed.push(name_of!(nodes in State));
                     }
+
+                    inserted
                 });
             }
             StateAction::NodeInfoPopupSetKey(node_key) => {
@@ -425,28 +419,25 @@ impl Store {
                     changed.push(name_of!(nodeinfo_popup in State));
                 });
             }
-            StateAction::NodeUpdate(mut node) => {
-                self.state_tx.send_modify(|state| {
-                    if let Some(number) = state.my_node_key
-                        && node.key == number
-                    {
-                        node.my = true;
-                    }
+            StateAction::NodeUpdate(node) => {
+                self.state_tx.send_if_modified(|state| {
+                    let Some(existing_node) = state.nodes.get_mut(&node.key) else {
+                        return false;
+                    };
 
-                    if let Some(existing_node) = state.nodes.get_mut(&node.key) {
-                        existing_node.user = node.user;
-                        existing_node.hops = node.hops;
-                        existing_node.last_heard = node.last_heard;
-                        existing_node.snr = node.snr;
-                        existing_node.rssi = node.rssi;
-                        if existing_node.public_key.is_empty() {
-                            existing_node.public_key = node.public_key;
-                        }
-                        existing_node.my = node.my;
-                        existing_node.update_fulltext();
-
-                        changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                    existing_node.user = node.user;
+                    existing_node.hops = node.hops;
+                    existing_node.last_heard = node.last_heard;
+                    existing_node.snr = node.snr;
+                    existing_node.rssi = node.rssi;
+                    if existing_node.public_key.is_empty() {
+                        existing_node.public_key = node.public_key;
                     }
+                    existing_node.update_fulltext();
+
+                    changed.push(name_of!(nodes in State));
+
+                    true
                 });
             }
             StateAction::NodeUpdateLastHeard {
@@ -470,7 +461,7 @@ impl Store {
 
                     node.update_fulltext();
 
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                    changed.push(name_of!(nodes in State));
 
                     true
                 });
@@ -489,7 +480,7 @@ impl Store {
                         changed.push(name_of!(nodeinfo_popup in State));
                     }
 
-                    changed.extend(vec![name_of!(nodes in State), name_of!(nodes_view in State)]);
+                    changed.push(name_of!(nodes in State));
 
                     true
                 });
@@ -559,14 +550,14 @@ impl Store {
                 self.state_tx.send_modify(|state| {
                     state.nodes_sort_by = sort_by;
 
-                    changed.extend(vec![name_of!(nodes_sort_by in State), name_of!(nodes_view in State)]);
+                    changed.push(name_of!(nodes_sort_by in State));
                 });
             }
             StateAction::NodesFilterSet(filter) => {
                 self.state_tx.send_modify(|state| {
                     state.nodes_filter = filter.to_lowercase();
 
-                    changed.extend(vec![name_of!(nodes_filter in State), name_of!(nodes_view in State)]);
+                    changed.push(name_of!(nodes_filter in State));
                 });
             }
             StateAction::NodesOnlineSet(count) => {
@@ -587,13 +578,6 @@ impl Store {
                     state.my_node_key = Some(number);
 
                     changed.push(name_of!(my_node_key in State));
-
-                    if let Some(node) = state.nodes.get_mut(&number) {
-                        node.my = true;
-                        node.update_fulltext();
-
-                        changed.push(name_of!(nodes in State));
-                    }
                 });
             }
             StateAction::DirectChatStart(node_key) => {

@@ -300,6 +300,7 @@ impl<'a> Component for Nodes<'a> {
 
                 let item = NodeWidget {
                     node,
+                    is_my_node: state.my_node_key == Some(node.key),
                     is_selected: context.is_selected,
                 };
 
@@ -406,6 +407,7 @@ impl<'a> Component for Nodes<'a> {
 
 struct NodeWidget<'a> {
     pub node: &'a Node,
+    pub is_my_node: bool,
     pub is_selected: bool,
 }
 
@@ -450,15 +452,15 @@ impl<'a> Widget for NodeWidget<'a> {
 
         // first line
         Line::from(vec![
-            short_name_to_span(self.node),
+            short_name_to_span(self.node, self.is_my_node),
             Span::from(" "),
             Span::from(self.node.long_name()),
         ])
         .render(v0_h[0], buf);
 
-        Line::from(hops_to_spans(self.node)).render(v0_h[1], buf);
+        Line::from(hops_to_spans(self.node, self.is_my_node)).render(v0_h[1], buf);
 
-        Line::from(last_heard_to_spans(self.node))
+        Line::from(last_heard_to_spans(self.node, self.is_my_node))
             .right_aligned()
             .render(v0_h[2], buf);
 

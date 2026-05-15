@@ -3,6 +3,7 @@ mod config;
 mod connection;
 mod forms;
 mod nodes;
+mod persistence;
 mod settings;
 mod ui;
 
@@ -11,5 +12,6 @@ pub use config::*;
 pub use connection::*;
 pub use forms::*;
 pub use nodes::*;
+pub use persistence::*;
 pub use settings::*;
 pub use ui::*;

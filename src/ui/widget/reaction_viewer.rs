@@ -53,6 +53,7 @@ impl ReactionViewerState {
 pub struct ReactionViewerItem<'a> {
     pub reaction: &'a MessageReaction,
     pub node: &'a Node,
+    pub is_my_node: bool,
 }
 
 pub struct ReactionViewerWidget<'a> {
@@ -145,7 +146,7 @@ impl<'a> Widget for ReactionWidget<'a> {
 
         // first line
         Line::from(vec![
-            short_name_to_span(self.item.node),
+            short_name_to_span(self.item.node, self.item.is_my_node),
             " ".to_span(),
             self.item.node.long_name().to_span(),
         ])
@@ -154,10 +155,10 @@ impl<'a> Widget for ReactionWidget<'a> {
         Span::from(&self.item.reaction.emoji).render(v0_h[2], buf);
 
         // second line
-        Line::from(if self.item.node.my {
+        Line::from(if self.item.is_my_node {
             vec![routing_error_to_span(self.item.reaction.routing_error)]
         } else {
-            hops_to_spans(self.item.reaction)
+            hops_to_spans(self.item.reaction, self.item.is_my_node)
         })
         .render(v1_h[0], buf);
 

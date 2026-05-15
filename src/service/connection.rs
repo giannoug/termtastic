@@ -220,7 +220,7 @@ impl ConnectionService {
                     self.connect(device)?;
                 }
             }
-            (Some(device), ConnectionState::NotConnected) => self.connect(device)?,
+            (Some(device), ConnectionState::NotConnected) if state.db_loaded => self.connect(device)?,
             _ => {}
         }
 

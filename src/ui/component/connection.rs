@@ -40,7 +40,7 @@ impl<'a> Component for Connection<'a> {
                 .and_then(|i| state.aggregated_devices.get(i))
                 .and_then(|d| Some(matches!(d, Device::Tcp(_))))
                 .unwrap_or(false)
-                .then_some(Hotkey::red("del", "delete")),
+                .then_some(Hotkey::new("del", "delete")),
         ]
         .into_iter()
         .flatten()
