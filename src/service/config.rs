@@ -82,12 +82,14 @@ impl ConfigService {
 
                 let state = self.state_rx.borrow();
 
-                let app_config: AppConfig = (&*state).into();
-                let app_config_hash = calculate_hash(&app_config);
+                if state.config_loaded {
+                    let app_config: AppConfig = (&*state).into();
+                    let app_config_hash = calculate_hash(&app_config);
 
-                if app_config_hash != self.app_config_last_hash {
-                    confy::store(crate::APP_NAME, "app", &app_config)?;
-                    self.app_config_last_hash = app_config_hash;
+                    if app_config_hash != self.app_config_last_hash {
+                        confy::store(crate::APP_NAME, "app", &app_config)?;
+                        self.app_config_last_hash = app_config_hash;
+                    }
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {

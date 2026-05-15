@@ -11,7 +11,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::types::ChannelRole;
+use crate::types::{ChannelRole, DbState};
 use crate::{
     state::{State, StateAction},
     types::{Channel, ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
@@ -201,12 +201,47 @@ impl Store {
                     ]);
                 });
             }
-            StateAction::DbDataApply { nodes } => {
+            StateAction::DbInitStart => {
+                self.state_tx.send_modify(|state| {
+                    state.db_state = DbState::InitializingStarted;
+
+                    changed.push(name_of!(db_state in State));
+                });
+            }
+            StateAction::DbInitFail(e) => {
+                self.state_tx.send_modify(|state| {
+                    state.db_state = DbState::InitializingFailed(e);
+
+                    changed.push(name_of!(db_state in State));
+                });
+            }
+            StateAction::DbInitSuccess => {
+                self.state_tx.send_modify(|state| {
+                    state.db_state = DbState::InitializingDone;
+
+                    changed.push(name_of!(db_state in State));
+                });
+            }
+            StateAction::DbLoadStart => {
+                self.state_tx.send_modify(|state| {
+                    state.db_state = DbState::DataLoadingStarted;
+
+                    changed.push(name_of!(db_state in State));
+                });
+            }
+            StateAction::DbLoadFail(e) => {
+                self.state_tx.send_modify(|state| {
+                    state.db_state = DbState::DataLoadingFailed(e);
+
+                    changed.push(name_of!(db_state in State));
+                });
+            }
+            StateAction::DbLoadSuccess { nodes } => {
                 self.state_tx.send_modify(|state| {
                     state.nodes = nodes.into_iter().map(|n| (n.key, n)).collect();
-                    state.db_loaded = true;
+                    state.db_state = DbState::DataLoadingDone;
 
-                    changed.extend(vec![name_of!(nodes in State), name_of!(db_loaded in State)]);
+                    changed.extend(vec![name_of!(nodes in State), name_of!(db_state in State)]);
                 });
             }
             StateAction::ReconnectionBackoffSet(duration) => {

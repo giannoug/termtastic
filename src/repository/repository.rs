@@ -33,6 +33,10 @@ impl<'a> Repository<'a> {
         Repository { db }
     }
 
+    pub fn check_integrity(&mut self) -> Result<bool, RepositoryError> {
+        Ok(self.db.check_integrity()?)
+    }
+
     pub fn nodes_get_all(&self) -> Result<Vec<super::entities::Node>, RepositoryError> {
         let r = self.db.r_transaction()?;
         let nodes: Vec<super::entities::Node> = r.scan().primary()?.all()?.try_collect()?;

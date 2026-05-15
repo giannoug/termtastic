@@ -98,13 +98,34 @@ impl<'a> PersistenceService<'a> {
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(AppEvent::InitializationRequested) => {
+                self.forward_state_action_tx.send(StateAction::DbInitStart)?;
+
                 match create_repository(&self.data_dir, DB_CACHE_SIZE) {
-                    Ok(repository) => {
-                        self.repository = Some(repository);
-                        tracing::info!("DB initialized");
-                    }
+                    Ok(mut repository) => match repository.check_integrity() {
+                        Ok(res) => {
+                            if res {
+                                tracing::info!("DB integrity check passed");
+                            } else {
+                                tracing::warn!("DB integrity check passed after repair");
+                            }
+
+                            tracing::info!("DB initializing finished");
+
+                            self.repository = Some(repository);
+                            self.forward_state_action_tx.send(StateAction::DbInitSuccess)?;
+                        }
+                        Err(e) => {
+                            tracing::error!("DB integrity check failed: {}", e);
+
+                            self.forward_state_action_tx
+                                .send(StateAction::DbInitFail(e.to_string()))?;
+                        }
+                    },
                     Err(e) => {
                         tracing::error!("DB initialization failed: {}", e);
+
+                        self.forward_state_action_tx
+                            .send(StateAction::DbInitFail(e.to_string()))?;
 
                         self.forward_state_action_tx
                             .send(StateAction::Toast(Toast::error("DB initialization failed")))?;
@@ -134,6 +155,8 @@ impl<'a> PersistenceService<'a> {
 
         tracing::info!("DB data load started");
 
+        self.forward_state_action_tx.send(StateAction::DbLoadStart)?;
+
         let nodes: Vec<Node> = match repository.nodes_get_all() {
             Ok(nodes) => {
                 tracing::info!("nodes loaded from DB: {}", nodes.len());
@@ -144,15 +167,19 @@ impl<'a> PersistenceService<'a> {
                 tracing::error!("nodes load failed: {}", e);
 
                 self.forward_state_action_tx
+                    .send(StateAction::DbLoadFail(e.to_string()))?;
+
+                self.forward_state_action_tx
                     .send(StateAction::Toast(Toast::error("nodes not loaded from DB")))?;
 
                 return Ok(());
             }
         };
 
-        self.forward_state_action_tx.send(StateAction::DbDataApply { nodes })?;
-
         tracing::info!("DB data load finished");
+
+        self.forward_state_action_tx
+            .send(StateAction::DbLoadSuccess { nodes })?;
 
         self.forward_state_action_tx
             .send(StateAction::Toast(Toast::normal("DB data loaded")))?;

@@ -54,6 +54,18 @@ pub struct UiConfig {
     pub is_right_padding_hidden: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub enum DbState {
+    #[default]
+    NotInitialized,
+    InitializingStarted,
+    InitializingFailed(String),
+    InitializingDone,
+    DataLoadingStarted,
+    DataLoadingFailed(String),
+    DataLoadingDone,
+}
+
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     ChannelSelected(u32),

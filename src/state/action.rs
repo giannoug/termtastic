@@ -20,7 +20,12 @@ pub enum StateAction {
     ConnectionStop,
     ConnectionSuccess,
     ReconnectionBackoffSet(Duration),
-    DbDataApply {
+    DbInitStart,
+    DbInitFail(String),
+    DbInitSuccess,
+    DbLoadStart,
+    DbLoadFail(String),
+    DbLoadSuccess {
         nodes: Vec<Node>,
     },
     DeviceActiveSet(Device),

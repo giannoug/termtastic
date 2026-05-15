@@ -192,7 +192,7 @@
 
 ## Compatibility
 
-✅ - tested, 🔬 - untested, ❌ - not working
+✅ – tested, 🔬 – untested, ❌ – not working
 
 | Feature                  | 🐧 Linux | 🍏 macOS | 🪟 Windows |
 |:-------------------------|:--------:|:--------:|:----------:|

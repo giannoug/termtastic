@@ -7,7 +7,7 @@ use tokio::time;
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::{AppEvent, ConnectionState, Device, Toast};
+use crate::types::{AppEvent, ConnectionState, DbState, Device, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
@@ -204,8 +204,8 @@ impl ConnectionService {
     fn check_connection(&self) -> anyhow::Result<()> {
         let state = &self.state_rx.borrow();
 
-        match (&state.active_device, &state.connection_state) {
-            (Some(device), ConnectionState::ProblemDetected { since, .. }) => {
+        match (&state.active_device, &state.connection_state, &state.db_state) {
+            (Some(device), ConnectionState::ProblemDetected { since, .. }, DbState::DataLoadingDone) => {
                 let backoff_duration = Duration::from_millis(
                     (RECONNECTION_BACKOFF_BASE_MILLIS * 2_u64.pow(state.connection_attempt as u32))
                         .min(RECONNECTION_BACKOFF_MAX_MILLIS),
@@ -220,7 +220,7 @@ impl ConnectionService {
                     self.connect(device)?;
                 }
             }
-            (Some(device), ConnectionState::NotConnected) if state.db_loaded => self.connect(device)?,
+            (Some(device), ConnectionState::NotConnected, DbState::DataLoadingDone) => self.connect(device)?,
             _ => {}
         }
 

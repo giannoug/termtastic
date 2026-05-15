@@ -48,9 +48,30 @@ impl Component for Header {
             vec![]
         };
 
-        let conn_info = match state.connection_state {
-            ConnectionState::NotConnected => vec![Span::from("not connected").dark_gray()],
-            ConnectionState::ProblemDetected { .. } => {
+        let conn_info = match (&state.connection_state, &state.db_state) {
+            (_, DbState::NotInitialized) => vec![],
+            (_, DbState::InitializingStarted) => vec![
+                Span::from("not connected: ").dark_gray(),
+                Span::from("DB initializing...").yellow(),
+            ],
+            (_, DbState::InitializingFailed(_)) => vec![
+                Span::from("not connected: ").dark_gray(),
+                Span::from(" DB init failed ").white().on_red(),
+            ],
+            (_, DbState::InitializingDone) => vec![
+                Span::from("not connected: ").dark_gray(),
+                Span::from("DB initialized").green(),
+            ],
+            (_, DbState::DataLoadingStarted) => vec![
+                Span::from("not connected: ").dark_gray(),
+                Span::from("DB loading...").yellow(),
+            ],
+            (_, DbState::DataLoadingFailed(_)) => vec![
+                Span::from("not connected: ").dark_gray(),
+                Span::from(" DB load failed ").white().on_red(),
+            ],
+            (ConnectionState::NotConnected, DbState::DataLoadingDone) => vec![Span::from("not connected").dark_gray()],
+            (ConnectionState::ProblemDetected { .. }, DbState::DataLoadingDone) => {
                 vec![
                     Span::from(format!(
                         "reconnecting in {} sec...",
@@ -62,8 +83,8 @@ impl Component for Header {
                     .red(),
                 ]
             }
-            ConnectionState::Connecting => vec![Span::from("connecting...").yellow()],
-            ConnectionState::Connected => vec![
+            (ConnectionState::Connecting, DbState::DataLoadingDone) => vec![Span::from("connecting...").yellow()],
+            (ConnectionState::Connected, DbState::DataLoadingDone) => vec![
                 Span::from("online ").dark_gray(),
                 Span::from(format!("{}/{} ", state.online_nodes, state.nodes.len())).green(),
                 Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),

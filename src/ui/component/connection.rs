@@ -249,19 +249,41 @@ impl<'a> Component for Connection<'a> {
             frame.render_widget(Clear, popup_area);
             frame.render_widget(popup_block, popup_area);
 
-            let conn_info: Vec<Line> = match &state.connection_state {
-                ConnectionState::NotConnected => {
+            let conn_info: Vec<Line> = match (&state.connection_state, &state.db_state) {
+                (_, DbState::NotInitialized) => vec![],
+                (_, DbState::InitializingStarted) => vec![Line::from(Span::from("DB initializing...").yellow())],
+                (_, DbState::InitializingFailed(error)) => {
+                    vec![
+                        Line::from(vec![
+                            Span::from("connection aborted: ").dark_gray(),
+                            Span::from("DB initialization failed").red(),
+                        ]),
+                        Line::from(""),
+                        Line::from(Span::from(error).dark_gray()),
+                    ]
+                }
+                (_, DbState::InitializingDone) => vec![Line::from(Span::from("DB initialized").green())],
+                (_, DbState::DataLoadingStarted) => vec![Line::from(Span::from("DB loading...").yellow())],
+                (_, DbState::DataLoadingFailed(error)) => vec![
+                    Line::from(vec![
+                        Span::from("connection aborted: ").dark_gray(),
+                        Span::from("DB loading failed").red(),
+                    ]),
+                    Line::from(""),
+                    Line::from(Span::from(error).dark_gray()),
+                ],
+                (ConnectionState::NotConnected, DbState::DataLoadingDone) => {
                     vec![Line::from(Span::from("not connected").dark_gray())]
                 }
-                ConnectionState::ProblemDetected { error, .. } => vec![
+                (ConnectionState::ProblemDetected { error, .. }, DbState::DataLoadingDone) => vec![
                     Line::from(Span::from(" connection problem ").white().on_red()),
                     Line::from(""),
                     Line::from(Span::from(error).dark_gray()),
                 ],
-                ConnectionState::Connecting => {
+                (ConnectionState::Connecting, DbState::DataLoadingDone) => {
                     vec![Line::from(Span::from("connecting...").yellow())]
                 }
-                ConnectionState::Connected => {
+                (ConnectionState::Connected, DbState::DataLoadingDone) => {
                     vec![Line::from(Span::from("connected").green())]
                 }
             };
