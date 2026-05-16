@@ -1,7 +1,6 @@
-use crate::APP_NAME;
 use itertools::Itertools;
 use native_db::{Builder, Database, Models};
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::LazyLock;
 
 static MODELS: LazyLock<Models> = LazyLock::new(|| {
@@ -10,11 +9,9 @@ static MODELS: LazyLock<Models> = LazyLock::new(|| {
     models
 });
 
-pub fn create_repository<'a>(dir: &PathBuf, cache_size: usize) -> Result<Repository<'a>, anyhow::Error> {
+pub fn create_repository<'a>(file: &Path, cache_size: usize) -> Result<Repository<'a>, anyhow::Error> {
     Ok(Repository::new(
-        Builder::new()
-            .set_cache_size(cache_size)
-            .create(&MODELS, dir.join(format!("{}.db", APP_NAME)))?,
+        Builder::new().set_cache_size(cache_size).create(&MODELS, file)?,
     ))
 }
 
@@ -35,6 +32,10 @@ impl<'a> Repository<'a> {
 
     pub fn check_integrity(&mut self) -> Result<bool, RepositoryError> {
         Ok(self.db.check_integrity()?)
+    }
+
+    pub fn compact(&mut self) -> Result<bool, RepositoryError> {
+        Ok(self.db.compact()?)
     }
 
     pub fn nodes_get_all(&self) -> Result<Vec<super::entities::Node>, RepositoryError> {

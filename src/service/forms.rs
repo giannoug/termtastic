@@ -1,10 +1,9 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use hostaddr::HostAddr;
-use meshtastic::protobufs::User;
 use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
@@ -21,13 +20,15 @@ use meshtastic::protobufs::module_config::{
     MqttConfig, NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig,
     TrafficManagementConfig,
 };
+use meshtastic::protobufs::User;
 use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;
 use crate::types::{
-    AppEvent, Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind,
-    FormValue, UiConfig,
+    AppEvent, Channel, DbInfo, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey,
+    FormItemKind, FormValue, UiConfig,
 };
+use crate::ui::helpers::format_thousands;
 use nameof::name_of;
 
 pub static FORMS: LazyLock<HashMap<FormId, Vec<FormItem>>> = LazyLock::new(|| build_forms());
@@ -244,6 +245,28 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 None,
                 FormItemKind::Switch,
                 |v| v.to_string(),
+                |_| Ok(()),
+            ),
+        ]),
+    );
+
+    forms.insert(
+        FormId::AppDb,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(file_size in DbInfo)),
+                "File Size",
+                Some("Database file current size in KBytes."),
+                FormItemKind::ReadOnly,
+                |v| format!("{} KB", format_thousands(v.as_u64() / 1024, ' ')),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::None,
+                "Compact DB",
+                Some("Try to compact the database to free some space."),
+                FormItemKind::Action(AppEvent::DbCompactRequested),
+                |_| "<COMPACT>".to_owned(),
                 |_| Ok(()),
             ),
         ]),
@@ -684,10 +707,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |_| Ok(()),
             ),
             FormItem::new(
-                FormItemKey::Custom {
-                    getter: |_| &FormValue::Option(None),
-                    setter: |_, _| {},
-                },
+                FormItemKey::None,
                 "Broadcast my NodeInfo",
                 None,
                 FormItemKind::Action(AppEvent::NodeInfoBroadcastRequested),
@@ -1381,10 +1401,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
         FormId::DeviceAdministration,
         Vec::from([
             FormItem::new(
-                FormItemKey::Custom {
-                    getter: |_| &FormValue::Option(None),
-                    setter: |_, _| {},
-                },
+                FormItemKey::None,
                 "Reboot Device",
                 None,
                 FormItemKind::Action(AppEvent::DeviceRebootRequested),
@@ -1392,10 +1409,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |_| Ok(()),
             ),
             FormItem::new(
-                FormItemKey::Custom {
-                    getter: |_| &FormValue::Option(None),
-                    setter: |_, _| {},
-                },
+                FormItemKey::None,
                 "Shutdown Device",
                 None,
                 FormItemKind::Action(AppEvent::DeviceShutdownRequested),

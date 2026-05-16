@@ -88,6 +88,7 @@ impl<'a> Settings<'a> {
                         .expect_or_log(format!("form data field not exists: {}", k).as_str()),
                 ),
                 FormItemKey::Custom { getter, .. } => (getter(original_data), getter(data)),
+                FormItemKey::None => (&FormValue::Option(None), &FormValue::Option(None)),
             };
 
             let item = FormItemWidget {
@@ -118,6 +119,7 @@ impl<'a> Settings<'a> {
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<()> {
         match &form_item.kind {
+            FormItemKind::ReadOnly => {}
             FormItemKind::InputOfString
             | FormItemKind::InputOfInt32
             | FormItemKind::InputOfUnsignedInt32
@@ -376,6 +378,7 @@ impl<'a> Component for Settings<'a> {
                                 .expect_or_log(format!("form data field not exists: {}", k).as_str()),
 
                             FormItemKey::Custom { getter, .. } => getter(data),
+                            FormItemKey::None => &FormValue::Option(None),
                         };
 
                         self.handle_form_item_edit(form_item, value, emit)?;
@@ -647,7 +650,8 @@ impl<'a> Widget for FormItemWidget<'a> {
 
         // value
         let line = match self.form_item.kind {
-            FormItemKind::InputOfString
+            FormItemKind::ReadOnly
+            | FormItemKind::InputOfString
             | FormItemKind::InputOfInt32
             | FormItemKind::InputOfUnsignedInt32
             | FormItemKind::InputOfFloat32

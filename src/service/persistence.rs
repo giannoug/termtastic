@@ -1,13 +1,15 @@
 use itertools::Itertools;
+use std::fs;
 use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::repository::{create_repository, Repository};
-use crate::types::Node;
+use crate::types::{DbInfo, Node};
 use crate::{
     state::StateAction,
     types::{AppEvent, Toast},
+    APP_NAME,
 };
 
 // We read the data from the DB only once during the initialization.
@@ -18,7 +20,7 @@ pub struct PersistenceService<'a> {
     app_event_rx: broadcast::Receiver<AppEvent>,
     forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
-    data_dir: PathBuf,
+    file_path: PathBuf,
     repository: Option<Repository<'a>>,
 }
 
@@ -35,7 +37,7 @@ impl<'a> PersistenceService<'a> {
                 app_event_rx,
                 forward_state_action_tx,
                 state_action_rx,
-                data_dir,
+                file_path: data_dir.join(format!("{}.db", APP_NAME)),
                 repository: None,
             },
             state_action_tx,
@@ -66,12 +68,15 @@ impl<'a> PersistenceService<'a> {
         match &action {
             StateAction::NodeInit(node) => {
                 repository.nodes_upsert(node.into())?;
+                self.load_db_info()?;
             }
             StateAction::NodeUpdate(node) => {
                 repository.nodes_upsert(node.into())?;
+                self.load_db_info()?;
             }
             StateAction::NodeDelete(node_key) => {
                 repository.nodes_remove(*node_key)?;
+                self.load_db_info()?;
             }
             StateAction::NodeUpdateLastHeard {
                 node_key,
@@ -85,6 +90,7 @@ impl<'a> PersistenceService<'a> {
                     node.rssi = Some(*rssi);
 
                     repository.nodes_upsert(node)?;
+                    self.load_db_info()?;
                 }
             }
             _ => {}
@@ -98,9 +104,11 @@ impl<'a> PersistenceService<'a> {
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(AppEvent::InitializationRequested) => {
+                tracing::info!("DB initializing started. Path: {}", self.file_path.display());
+
                 self.forward_state_action_tx.send(StateAction::DbInitStart)?;
 
-                match create_repository(&self.data_dir, DB_CACHE_SIZE) {
+                match create_repository(&self.file_path, DB_CACHE_SIZE) {
                     Ok(mut repository) => match repository.check_integrity() {
                         Ok(res) => {
                             if res {
@@ -108,8 +116,6 @@ impl<'a> PersistenceService<'a> {
                             } else {
                                 tracing::warn!("DB integrity check passed after repair");
                             }
-
-                            tracing::info!("DB initializing finished");
 
                             self.repository = Some(repository);
                             self.forward_state_action_tx.send(StateAction::DbInitSuccess)?;
@@ -132,7 +138,36 @@ impl<'a> PersistenceService<'a> {
                     }
                 }
 
+                tracing::info!("DB initializing finished");
+
                 self.load_data()?;
+                self.load_db_info()?;
+            }
+            Ok(AppEvent::DbCompactRequested) => {
+                if let Some(repository) = self.repository.as_mut() {
+                    match repository.compact() {
+                        Ok(true) => {
+                            tracing::info!("DB compacted");
+
+                            self.forward_state_action_tx
+                                .send(StateAction::Toast(Toast::success("DB compacted")))?;
+                        }
+                        Ok(false) => {
+                            tracing::info!("DB already compacted");
+
+                            self.forward_state_action_tx
+                                .send(StateAction::Toast(Toast::success("DB already compacted")))?;
+                        }
+                        Err(e) => {
+                            tracing::error!("DB compact failed: {}", e);
+
+                            self.forward_state_action_tx
+                                .send(StateAction::Toast(Toast::error("DB compact failed")))?;
+                        }
+                    }
+
+                    self.load_db_info()?;
+                }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 tracing::warn!("broadcast receiver lagged by {} events", n);
@@ -183,6 +218,16 @@ impl<'a> PersistenceService<'a> {
 
         self.forward_state_action_tx
             .send(StateAction::Toast(Toast::normal("DB data loaded")))?;
+
+        Ok(())
+    }
+
+    fn load_db_info(&self) -> anyhow::Result<()> {
+        let metadata = fs::metadata(&self.file_path)?;
+
+        self.forward_state_action_tx.send(StateAction::DbInfoSet(DbInfo {
+            file_size: metadata.len(),
+        }))?;
 
         Ok(())
     }

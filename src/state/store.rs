@@ -201,6 +201,13 @@ impl Store {
                     ]);
                 });
             }
+            StateAction::DbInfoSet(db_info) => {
+                self.state_tx.send_modify(|state| {
+                    state.db_info = db_info;
+
+                    changed.push(name_of!(db_info in State));
+                });
+            }
             StateAction::DbInitStart => {
                 self.state_tx.send_modify(|state| {
                     state.db_state = DbState::InitializingStarted;
@@ -805,6 +812,7 @@ impl Store {
                         FormItemKey::Custom { setter, .. } => {
                             setter(data, value);
                         }
+                        FormItemKey::None => {}
                     }
 
                     state.settings_form_is_changed = state.settings_form_data != state.settings_form_original_data;

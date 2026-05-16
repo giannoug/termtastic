@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use meshtastic::Message;
 use meshtastic::protobufs::config::{
     self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
 };
@@ -8,9 +7,10 @@ use meshtastic::protobufs::module_config::{
     NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig, TrafficManagementConfig,
 };
 use meshtastic::protobufs::{
-    AdminMessage, Channel as MeshtasticChannel, Config, ModuleConfig, PortNum, User, admin_message, from_radio,
-    mesh_packet, module_config,
+    admin_message, from_radio, mesh_packet, module_config, AdminMessage, Channel as MeshtasticChannel, Config, ModuleConfig,
+    PortNum, User,
 };
+use meshtastic::Message;
 use nameof::name_of;
 use ordermap::OrderMap;
 use std::sync::LazyLock;
@@ -85,6 +85,10 @@ impl SettingsService {
 
                         self.start_config_loading(&FormId::AppUi)?;
                     }
+                }
+
+                if changed.contains(&name_of!(db_info in State)) {
+                    self.start_config_loading(&FormId::AppDb)?;
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -251,6 +255,7 @@ impl SettingsService {
 
         let data = match id {
             FormId::AppUi => to_formdata(&state.ui_config)?,
+            FormId::AppDb => to_formdata(&state.db_info)?,
             FormId::RadioLora => to_formdata(
                 state
                     .device_config
@@ -417,6 +422,7 @@ impl SettingsService {
                     config: from_formdata::<UiConfig>(&form_data)?,
                 })?;
             }
+            FormId::AppDb => {}
             FormId::RadioLora => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
                     form_id: id.clone(),
@@ -591,6 +597,7 @@ fn build_settings() -> Vec<SettingsItem> {
         // App
         SettingsItem::group("App"),
         SettingsItem::form("UI", FormId::AppUi),
+        SettingsItem::form("Database", FormId::AppDb),
         // Radio
         SettingsItem::group("Radio"),
         SettingsItem::form("LoRa", FormId::RadioLora),

@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use meshtastic::{
+    protobufs::{admin_message, from_radio, mesh_packet, AdminMessage, MeshPacket, PortNum, User},
     Message as _,
-    protobufs::{AdminMessage, MeshPacket, PortNum, User, admin_message, from_radio, mesh_packet},
 };
 use tokio::{
     sync::{broadcast, mpsc, watch},
@@ -75,7 +75,11 @@ impl NodesService {
                 AppEvent::DirectChatRequested(node_key) => {
                     self.state_action_tx.send(StateAction::DirectChatStart(node_key))?;
                 }
-                AppEvent::NodesSortByCyclePressed => {
+                AppEvent::NodesSortByPrevRequested => {
+                    self.state_action_tx
+                        .send(StateAction::NodesSortBySet(state.nodes_sort_by.prev()))?;
+                }
+                AppEvent::NodesSortByNextRequested => {
                     self.state_action_tx
                         .send(StateAction::NodesSortBySet(state.nodes_sort_by.next()))?;
                 }

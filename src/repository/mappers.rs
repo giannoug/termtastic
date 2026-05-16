@@ -12,7 +12,7 @@ impl From<&Node> for entities::v1::Node {
         Self {
             id: value.id.clone(),
             key: value.key,
-            user: value.user.as_ref().map(|u| u.into()),
+            user: value.user.as_ref().map(Into::into),
             hops: value.hops,
             last_heard: value.last_heard,
             snr: value.snr,
@@ -30,7 +30,7 @@ impl From<entities::v1::Node> for Node {
         let mut node = Self {
             id: value.id,
             key: value.key,
-            user: value.user.map(|u| u.into()),
+            user: value.user.map(Into::into),
             hops: value.hops,
             last_heard: value.last_heard,
             snr: value.snr,

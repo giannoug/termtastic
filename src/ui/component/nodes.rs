@@ -1,4 +1,5 @@
 use crate::ui::prelude::*;
+use crossterm::event::KeyModifiers;
 
 pub struct Nodes<'a> {
     list_state: ListState,
@@ -201,7 +202,9 @@ impl<'a> Component for Nodes<'a> {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+            Event::Key(KeyEvent {
+                code, kind, modifiers, ..
+            }) if kind == &KeyEventKind::Press => match code {
                 KeyCode::Up => {
                     self.list_state.previous();
                     return Ok(true);
@@ -232,8 +235,12 @@ impl<'a> Component for Nodes<'a> {
                     self.is_emoji_selector_visible = true;
                     return Ok(true);
                 }
+                KeyCode::F(6) if modifiers.contains(KeyModifiers::SHIFT) => {
+                    emit(AppEvent::NodesSortByPrevRequested)?;
+                    return Ok(true);
+                }
                 KeyCode::F(6) => {
-                    emit(AppEvent::NodesSortByCyclePressed)?;
+                    emit(AppEvent::NodesSortByNextRequested)?;
                     return Ok(true);
                 }
                 KeyCode::F(2) => {

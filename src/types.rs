@@ -54,6 +54,11 @@ pub struct UiConfig {
     pub is_right_padding_hidden: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DbInfo {
+    pub file_size: u64,
+}
+
 #[derive(Debug, Clone, Default)]
 pub enum DbState {
     #[default]
@@ -71,6 +76,7 @@ pub enum AppEvent {
     ChannelSelected(u32),
     ChannelPurgeRequested(u32),
     SwitchChannelRequested,
+    DbCompactRequested,
     DeviceRediscoverRequested,
     DeviceRebootRequested,
     DeviceShutdownRequested,
@@ -98,7 +104,8 @@ pub enum AppEvent {
     SettingsFormSaveRequested(FormId),
     SettingsFormItemSubmitted(&'static FormItem, FormValue),
     CopyToClipboardRequested(String),
-    NodesSortByCyclePressed,
+    NodesSortByPrevRequested,
+    NodesSortByNextRequested,
     NodesFilterChanged(String),
     NodeInfoBroadcastRequested,
     NodeInfoPopupRequested(u32),
@@ -299,6 +306,18 @@ pub enum NodesSortBy {
 }
 
 impl NodesSortBy {
+    pub fn prev(self) -> Self {
+        let current_index: usize = self as usize;
+        let (previous_index, overflowed) = current_index.overflowing_sub(1);
+
+        Self::from_repr(if overflowed {
+            NodesSortBy::COUNT - 1
+        } else {
+            previous_index
+        })
+        .unwrap_or(self)
+    }
+
     pub fn next(self) -> Self {
         let current_index = self as usize;
         let next_index = current_index.saturating_add(1);
@@ -848,6 +867,7 @@ pub enum FormId {
     ModuleDetectionSensor,
     ModuleTrafficManagement,
     AppUi,
+    AppDb,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -1107,10 +1127,12 @@ pub enum FormItemKey {
         getter: fn(&FormData) -> &FormValue,
         setter: fn(&mut FormData, FormValue),
     },
+    None,
 }
 
 #[derive(Debug, Clone)]
 pub enum FormItemKind {
+    ReadOnly,
     InputOfString,
     InputOfInt32,
     InputOfUnsignedInt32,

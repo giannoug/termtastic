@@ -4,8 +4,8 @@ use hostaddr::HostAddr;
 use meshtastic::protobufs::{config, module_config, routing, User};
 
 use crate::types::{
-    AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,
-    NodesSortBy, Toast, UiConfig,
+    AppConfig, Channel, DbInfo, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction,
+    Node, NodesSortBy, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -20,6 +20,7 @@ pub enum StateAction {
     ConnectionStop,
     ConnectionSuccess,
     ReconnectionBackoffSet(Duration),
+    DbInfoSet(DbInfo),
     DbInitStart,
     DbInitFail(String),
     DbInitSuccess,

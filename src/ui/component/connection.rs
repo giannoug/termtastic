@@ -177,19 +177,28 @@ impl<'a> Component for Connection<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        if !state.aggregated_devices.is_empty() {
-            if self.list_state.selected.is_none()
-                && state.device_discovering_state == DeviceDiscoveringState::Done
-                && !state.aggregated_devices.is_empty()
-            {
-                if let Some(active) = &state.active_device {
-                    self.list_state
-                        .select(state.aggregated_devices.iter().position(|d| active == d));
-                } else {
-                    self.list_state.select(Some(0));
-                }
-            }
+        if self
+            .list_state
+            .selected
+            .and_then(|i| Some(i >= state.aggregated_devices.len()))
+            .unwrap_or(false)
+        {
+            self.list_state.selected = None;
+        }
 
+        if self.list_state.selected.is_none()
+            && state.device_discovering_state == DeviceDiscoveringState::Done
+            && !state.aggregated_devices.is_empty()
+        {
+            if let Some(active) = &state.active_device {
+                self.list_state
+                    .select(state.aggregated_devices.iter().position(|d| active == d));
+            } else {
+                self.list_state.select(Some(0));
+            }
+        }
+
+        if !state.aggregated_devices.is_empty() {
             let list_builder = ListBuilder::new(|context| {
                 let device = state.aggregated_devices.iter().nth(context.index).unwrap();
 
