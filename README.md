@@ -132,6 +132,7 @@
 - [x] Power
 - [x] Display
 - [x] Bluetooth
+- [x] Network
 
 #### Module
 

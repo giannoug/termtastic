@@ -5,7 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::repository::{create_repository, Repository};
-use crate::types::{DbInfo, Node};
+use crate::types::Node;
 use crate::{
     state::StateAction,
     types::{AppEvent, Toast},
@@ -68,15 +68,12 @@ impl<'a> PersistenceService<'a> {
         match &action {
             StateAction::NodeInit(node) => {
                 repository.nodes_upsert(node.into())?;
-                self.load_db_info()?;
             }
             StateAction::NodeUpdate(node) => {
                 repository.nodes_upsert(node.into())?;
-                self.load_db_info()?;
             }
             StateAction::NodeDelete(node_key) => {
                 repository.nodes_remove(*node_key)?;
-                self.load_db_info()?;
             }
             StateAction::NodeUpdateLastHeard {
                 node_key,
@@ -90,7 +87,6 @@ impl<'a> PersistenceService<'a> {
                     node.rssi = Some(*rssi);
 
                     repository.nodes_upsert(node)?;
-                    self.load_db_info()?;
                 }
             }
             _ => {}
@@ -141,13 +137,20 @@ impl<'a> PersistenceService<'a> {
                 tracing::info!("DB initializing finished");
 
                 self.load_data()?;
-                self.load_db_info()?;
             }
             Ok(AppEvent::DbCompactRequested) => {
                 if let Some(repository) = self.repository.as_mut() {
+                    let old_size = fs::metadata(&self.file_path)?.len();
+
                     match repository.compact() {
                         Ok(true) => {
-                            tracing::info!("DB compacted");
+                            let new_size = fs::metadata(&self.file_path)?.len();
+
+                            tracing::info!(
+                                "DB compacted, old size: {}KB, new size: {}KB",
+                                old_size / 1024,
+                                new_size / 1024
+                            );
 
                             self.forward_state_action_tx
                                 .send(StateAction::Toast(Toast::success("DB compacted")))?;
@@ -165,8 +168,6 @@ impl<'a> PersistenceService<'a> {
                                 .send(StateAction::Toast(Toast::error("DB compact failed")))?;
                         }
                     }
-
-                    self.load_db_info()?;
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -218,16 +219,6 @@ impl<'a> PersistenceService<'a> {
 
         self.forward_state_action_tx
             .send(StateAction::Toast(Toast::normal("DB data loaded")))?;
-
-        Ok(())
-    }
-
-    fn load_db_info(&self) -> anyhow::Result<()> {
-        let metadata = fs::metadata(&self.file_path)?;
-
-        self.forward_state_action_tx.send(StateAction::DbInfoSet(DbInfo {
-            file_size: metadata.len(),
-        }))?;
 
         Ok(())
     }

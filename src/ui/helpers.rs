@@ -224,21 +224,6 @@ pub fn pad_center(s: &str, width: usize) -> String {
     format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
 }
 
-pub fn format_thousands(n: u64, separator: char) -> String {
-    let s = n.to_string();
-    let mut result = String::new();
-
-    for (i, &byte) in s.as_bytes().iter().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            result.insert(0, separator);
-        }
-
-        result.insert(0, byte as char);
-    }
-
-    result
-}
-
 pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
     if delta.num_seconds() < 60 {
         return vec![Span::from("now").green()];

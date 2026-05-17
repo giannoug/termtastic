@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::Ipv4Addr;
 use std::sync::LazyLock;
 
 use base64::prelude::BASE64_STANDARD;
@@ -8,9 +9,11 @@ use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
 use meshtastic::protobufs::config::lo_ra_config::{ModemPreset, RegionCode};
+use meshtastic::protobufs::config::network_config::{AddressMode, IpV4Config, ProtocolFlags};
 use meshtastic::protobufs::config::position_config::{GpsMode, PositionFlags};
 use meshtastic::protobufs::config::{
-    BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
+    BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, NetworkConfig, PositionConfig, PowerConfig,
+    SecurityConfig,
 };
 use meshtastic::protobufs::module_config::canned_message_config::InputEventChar;
 use meshtastic::protobufs::module_config::detection_sensor_config::TriggerType;
@@ -25,10 +28,9 @@ use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;
 use crate::types::{
-    AppEvent, Channel, DbInfo, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey,
-    FormItemKind, FormValue, UiConfig,
+    AppEvent, Channel, FormBitMaskVariant, FormData, FormEnumVariant, FormId, FormItem, FormItemKey, FormItemKind,
+    FormValue, UiConfig,
 };
-use crate::ui::helpers::format_thousands;
 use nameof::name_of;
 
 pub static FORMS: LazyLock<HashMap<FormId, Vec<FormItem>>> = LazyLock::new(|| build_forms());
@@ -36,7 +38,7 @@ pub static FORMS: LazyLock<HashMap<FormId, Vec<FormItem>>> = LazyLock::new(|| bu
 static DEFAULT_MAP_REPORT_SETTINGS: LazyLock<FormData> =
     LazyLock::new(|| to_formdata(&MapReportSettings::default()).unwrap());
 
-static EMPTY_FORM_VALUE_VEC: FormValue = FormValue::Vec(vec![]);
+static DEFAULT_IPV4_CONFIG: LazyLock<FormData> = LazyLock::new(|| to_formdata(&IpV4Config::default()).unwrap());
 
 macro_rules! channel_form {
     ($($x:expr),* $(,)?) => {
@@ -52,6 +54,7 @@ macro_rules! channel_form {
                                     .expect("should exists")
                                     .as_nested()
                                     .get(name_of!(is_enabled in Channel))
+                                    .cloned()
                                     .expect("should exists")
                             },
                             setter: |data, value| {
@@ -77,6 +80,7 @@ macro_rules! channel_form {
                                     .expect("should exists")
                                     .as_nested()
                                     .get(name_of!(name in Channel))
+                                    .cloned()
                                     .expect("should exists")
                             },
                             setter: |data, value| {
@@ -105,6 +109,7 @@ macro_rules! channel_form {
                                     .expect("should exists")
                                     .as_nested()
                                     .get(name_of!(psk in Channel))
+                                    .cloned()
                                     .expect("should exists")
                             },
                             setter: |data, value| {
@@ -128,7 +133,7 @@ macro_rules! channel_form {
                 vec.push(
                     FormItem::new(
                         FormItemKey::Custom {
-                            getter: |_| &FormValue::Bool(false),
+                            getter: |_| FormValue::Option(None),
                             setter: |data, value| {
                                 data.get_mut($x)
                                     .expect("should exists")
@@ -155,6 +160,7 @@ macro_rules! channel_form {
                                     .expect("should exists")
                                     .as_nested()
                                     .get(name_of!(uplink_enabled in Channel))
+                                    .cloned()
                                     .expect("should exists")
                             },
                             setter: |data, value| {
@@ -183,6 +189,7 @@ macro_rules! channel_form {
                                     .expect("should exists")
                                     .as_nested()
                                     .get(name_of!(downlink_enabled in Channel))
+                                    .cloned()
                                     .expect("should exists")
                             },
                             setter: |data, value| {
@@ -252,24 +259,14 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
 
     forms.insert(
         FormId::AppDb,
-        Vec::from([
-            FormItem::new(
-                FormItemKey::Simple(name_of!(file_size in DbInfo)),
-                "File Size",
-                Some("Database file current size in KBytes."),
-                FormItemKind::ReadOnly,
-                |v| format!("{} KB", format_thousands(v.as_u64() / 1024, ' ')),
-                |_| Ok(()),
-            ),
-            FormItem::new(
-                FormItemKey::None,
-                "Compact DB",
-                Some("Try to compact the database to free some space."),
-                FormItemKind::Action(AppEvent::DbCompactRequested),
-                |_| "<COMPACT>".to_owned(),
-                |_| Ok(()),
-            ),
-        ]),
+        Vec::from([FormItem::new(
+            FormItemKey::None,
+            "Compact DB",
+            Some("Try to compact the database to free some space."),
+            FormItemKind::Action(AppEvent::DbCompactRequested),
+            |_| "<COMPACT>".to_owned(),
+            |_| Ok(()),
+        )]),
     );
 
     forms.insert(
@@ -523,6 +520,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 FormItemKey::Custom {
                     getter: |data| {
                         data.get(name_of!(private_key in SecurityConfig))
+                            .cloned()
                             .expect("should exists")
                     },
                     setter: |data, value| {
@@ -545,7 +543,8 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .expect("should exists")
                             .as_vec()
                             .get(0)
-                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                            .cloned()
+                            .unwrap_or(FormValue::Vec(vec![]))
                     },
                     setter: |data, value| {
                         let mut keys = data
@@ -575,7 +574,8 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .expect("should exists")
                             .as_vec()
                             .get(1)
-                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                            .cloned()
+                            .unwrap_or(FormValue::Vec(vec![]))
                     },
                     setter: |data, value| {
                         let mut keys = data
@@ -605,7 +605,8 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                             .expect("should exists")
                             .as_vec()
                             .get(2)
-                            .unwrap_or(&EMPTY_FORM_VALUE_VEC)
+                            .cloned()
+                            .unwrap_or(FormValue::Vec(vec![]))
                     },
                     setter: |data, value| {
                         let mut keys = data
@@ -1398,6 +1399,286 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     );
 
     forms.insert(
+        FormId::DeviceNetwork,
+        Vec::from([
+            FormItem::new(
+                FormItemKey::Simple(name_of!(wifi_enabled in NetworkConfig)),
+                "Wi-Fi Enabled",
+                Some("Enable WiFi (disables Bluetooth)."),
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(wifi_ssid in NetworkConfig)),
+                "SSID",
+                Some("If set, this node will try to join the specified wifi network and acquire an address via DHCP."),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| {
+                    (0..=32)
+                        .contains(&v.as_string().len())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Max length is 32"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(wifi_psk in NetworkConfig)),
+                "Password",
+                Some("SSID Preshared Key."),
+                FormItemKind::InputOfString,
+                |v| "*".repeat(v.as_string().len()),
+                |v| {
+                    (0..=64)
+                        .contains(&v.as_string().len())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Max length is 64"))
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(ntp_server in NetworkConfig)),
+                "NTP Server",
+                Some("NTP server to use if Wi-Fi is connected, defaults to meshtastic.pool.ntp.org."),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| {
+                    v.as_string()
+                        .parse::<HostAddr<String>>()
+                        .map(|_| ())
+                        .map_err(Into::into)
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(rsyslog_server in NetworkConfig)),
+                "Rsyslog Server",
+                Some("rsyslog server and port."),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| {
+                    v.as_string()
+                        .parse::<HostAddr<String>>()
+                        .map(|_| ())
+                        .map_err(Into::into)
+                },
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(address_mode in NetworkConfig)),
+                "IPv4 Mode",
+                None,
+                FormItemKind::Enum(
+                    AddressMode::iter()
+                        .map(|v| FormEnumVariant::new(v.as_str_name(), v as i32))
+                        .collect(),
+                ),
+                |v| {
+                    AddressMode::try_from(v.as_i32())
+                        .and_then(|r| Ok(r.as_str_name().to_owned()))
+                        .unwrap_or("?".to_owned())
+                },
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(ipv4_config in NetworkConfig))
+                            .and_then(|v| v.as_option())
+                            .and_then(|v| v.as_nested().get(name_of!(ip in IpV4Config)))
+                            .and_then(|v| Some(FormValue::String(Ipv4Addr::from(v.as_u32()).to_string())))
+                            .unwrap_or(FormValue::String("0.0.0.0".to_owned()))
+                    },
+                    setter: |data, value| {
+                        if data
+                            .get(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option()
+                            .is_none()
+                        {
+                            data.insert(
+                                name_of!(ipv4_config in NetworkConfig).to_owned(),
+                                FormValue::Option(Some(Box::new(FormValue::Nested(DEFAULT_IPV4_CONFIG.clone())))),
+                            );
+                        }
+
+                        let ipv4 = value.as_string().parse::<Ipv4Addr>().expect("should parse");
+
+                        data.get_mut(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option_mut()
+                            .expect("should be Some")
+                            .as_nested_mut()
+                            .insert(
+                                name_of!(ip in IpV4Config).to_owned(),
+                                FormValue::UnsignedInt32(ipv4.to_bits()),
+                            );
+                    },
+                },
+                "IP *",
+                Some("(*) The field only makes sense if \"IPv4 Mode\" field is set to \"STATIC\""),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| v.as_string().parse::<Ipv4Addr>().map(|_| ()).map_err(Into::into),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(ipv4_config in NetworkConfig))
+                            .and_then(|v| v.as_option())
+                            .and_then(|v| v.as_nested().get(name_of!(gateway in IpV4Config)))
+                            .and_then(|v| Some(FormValue::String(Ipv4Addr::from(v.as_u32()).to_string())))
+                            .unwrap_or(FormValue::String("0.0.0.0".to_owned()))
+                    },
+                    setter: |data, value| {
+                        if data
+                            .get(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option()
+                            .is_none()
+                        {
+                            data.insert(
+                                name_of!(ipv4_config in NetworkConfig).to_owned(),
+                                FormValue::Option(Some(Box::new(FormValue::Nested(DEFAULT_IPV4_CONFIG.clone())))),
+                            );
+                        }
+
+                        let ipv4 = value.as_string().parse::<Ipv4Addr>().expect("should parse");
+
+                        data.get_mut(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option_mut()
+                            .expect("should be Some")
+                            .as_nested_mut()
+                            .insert(
+                                name_of!(gateway in IpV4Config).to_owned(),
+                                FormValue::UnsignedInt32(ipv4.to_bits()),
+                            );
+                    },
+                },
+                "Gateway *",
+                Some("(*) The field only makes sense if \"IPv4 Mode\" field is set to \"STATIC\""),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| v.as_string().parse::<Ipv4Addr>().map(|_| ()).map_err(Into::into),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(ipv4_config in NetworkConfig))
+                            .and_then(|v| v.as_option())
+                            .and_then(|v| v.as_nested().get(name_of!(subnet in IpV4Config)))
+                            .and_then(|v| Some(FormValue::String(Ipv4Addr::from(v.as_u32()).to_string())))
+                            .unwrap_or(FormValue::String("0.0.0.0".to_owned()))
+                    },
+                    setter: |data, value| {
+                        if data
+                            .get(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option()
+                            .is_none()
+                        {
+                            data.insert(
+                                name_of!(ipv4_config in NetworkConfig).to_owned(),
+                                FormValue::Option(Some(Box::new(FormValue::Nested(DEFAULT_IPV4_CONFIG.clone())))),
+                            );
+                        }
+
+                        let ipv4 = value.as_string().parse::<Ipv4Addr>().expect("should parse");
+
+                        data.get_mut(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option_mut()
+                            .expect("should be Some")
+                            .as_nested_mut()
+                            .insert(
+                                name_of!(subnet in IpV4Config).to_owned(),
+                                FormValue::UnsignedInt32(ipv4.to_bits()),
+                            );
+                    },
+                },
+                "Subnet *",
+                Some("(*) The field only makes sense if \"IPv4 Mode\" field is set to \"STATIC\""),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| v.as_string().parse::<Ipv4Addr>().map(|_| ()).map_err(Into::into),
+            ),
+            FormItem::new(
+                FormItemKey::Custom {
+                    getter: |data| {
+                        data.get(name_of!(ipv4_config in NetworkConfig))
+                            .and_then(|v| v.as_option())
+                            .and_then(|v| v.as_nested().get(name_of!(dns in IpV4Config)))
+                            .and_then(|v| Some(FormValue::String(Ipv4Addr::from(v.as_u32()).to_string())))
+                            .unwrap_or(FormValue::String("0.0.0.0".to_owned()))
+                    },
+                    setter: |data, value| {
+                        if data
+                            .get(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option()
+                            .is_none()
+                        {
+                            data.insert(
+                                name_of!(ipv4_config in NetworkConfig).to_owned(),
+                                FormValue::Option(Some(Box::new(FormValue::Nested(DEFAULT_IPV4_CONFIG.clone())))),
+                            );
+                        }
+
+                        let ipv4 = value.as_string().parse::<Ipv4Addr>().expect("should parse");
+
+                        data.get_mut(name_of!(ipv4_config in NetworkConfig))
+                            .expect("should exists")
+                            .as_option_mut()
+                            .expect("should be Some")
+                            .as_nested_mut()
+                            .insert(
+                                name_of!(dns in IpV4Config).to_owned(),
+                                FormValue::UnsignedInt32(ipv4.to_bits()),
+                            );
+                    },
+                },
+                "DNS *",
+                Some("(*) The field only makes sense if \"IPv4 Mode\" field is set to \"STATIC\""),
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| v.as_string().parse::<Ipv4Addr>().map(|_| ()).map_err(Into::into),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(eth_enabled in NetworkConfig)),
+                "Ethernet Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(ipv6_enabled in NetworkConfig)),
+                "IPv6 Enabled",
+                None,
+                FormItemKind::Switch,
+                |v| v.to_string(),
+                |_| Ok(()),
+            ),
+            FormItem::new(
+                FormItemKey::Simple(name_of!(enabled_protocols in NetworkConfig)),
+                "Enabled Protocols",
+                Some("Defines which auxiliary network protocols are used to send packets."),
+                FormItemKind::BitMask(
+                    ProtocolFlags::iter()
+                        .filter(|v| v != &ProtocolFlags::NoBroadcast)
+                        .map(|v| FormBitMaskVariant::new(v.as_str_name(), v as u32))
+                        .collect(),
+                ),
+                |v| v.to_string(),
+                |v| {
+                    (0..=u32::MAX)
+                        .contains(&v.as_u32())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Must be between 0 and {}", u32::MAX))
+                },
+            ),
+        ]),
+    );
+
+    forms.insert(
         FormId::DeviceAdministration,
         Vec::from([
             FormItem::new(
@@ -1456,7 +1737,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 "Password",
                 None,
                 FormItemKind::InputOfString,
-                |v| v.to_string(),
+                |v| "*".repeat(v.as_string().len()),
                 |_| Ok(()),
             ),
             FormItem::new(
@@ -1515,8 +1796,12 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                     getter: |data| {
                         data.get(name_of!(map_report_settings in MqttConfig))
                             .and_then(|v| v.as_option())
-                            .and_then(|v| v.as_nested().get(name_of!(should_report_location in MapReportSettings)))
-                            .unwrap_or(&FormValue::Bool(false))
+                            .and_then(|v| {
+                                v.as_nested()
+                                    .get(name_of!(should_report_location in MapReportSettings))
+                                    .cloned()
+                            })
+                            .unwrap_or(FormValue::Bool(false))
                     },
                     setter: |data, value| {
                         if data
@@ -1555,8 +1840,12 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                     getter: |data| {
                         data.get(name_of!(map_report_settings in MqttConfig))
                             .and_then(|v| v.as_option())
-                            .and_then(|v| v.as_nested().get(name_of!(position_precision in MapReportSettings)))
-                            .unwrap_or(&FormValue::UnsignedInt32(1))
+                            .and_then(|v| {
+                                v.as_nested()
+                                    .get(name_of!(position_precision in MapReportSettings))
+                                    .cloned()
+                            })
+                            .unwrap_or(FormValue::UnsignedInt32(1))
                     },
                     setter: |data, value| {
                         if data
@@ -1600,8 +1889,12 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                     getter: |data| {
                         data.get(name_of!(map_report_settings in MqttConfig))
                             .and_then(|v| v.as_option())
-                            .and_then(|v| v.as_nested().get(name_of!(publish_interval_secs in MapReportSettings)))
-                            .unwrap_or(&FormValue::UnsignedInt32(3600))
+                            .and_then(|v| {
+                                v.as_nested()
+                                    .get(name_of!(publish_interval_secs in MapReportSettings))
+                                    .cloned()
+                            })
+                            .unwrap_or(FormValue::UnsignedInt32(3600))
                     },
                     setter: |data, value| {
                         if data

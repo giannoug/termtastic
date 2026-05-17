@@ -54,11 +54,6 @@ pub struct UiConfig {
     pub is_right_padding_hidden: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct DbInfo {
-    pub file_size: u64,
-}
-
 #[derive(Debug, Clone, Default)]
 pub enum DbState {
     #[default]
@@ -854,6 +849,7 @@ pub enum FormId {
     DevicePower,
     DeviceDisplay,
     DeviceBluetooth,
+    DeviceNetwork,
     DeviceAdministration,
     ModuleMqtt,
     ModuleSerial,
@@ -1124,7 +1120,7 @@ impl FormItem {
 pub enum FormItemKey {
     Simple(&'static str),
     Custom {
-        getter: fn(&FormData) -> &FormValue,
+        getter: fn(&FormData) -> FormValue,
         setter: fn(&mut FormData, FormValue),
     },
     None,
@@ -1132,6 +1128,7 @@ pub enum FormItemKey {
 
 #[derive(Debug, Clone)]
 pub enum FormItemKind {
+    #[allow(unused)]
     ReadOnly,
     InputOfString,
     InputOfInt32,

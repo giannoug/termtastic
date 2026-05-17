@@ -201,13 +201,6 @@ impl Store {
                     ]);
                 });
             }
-            StateAction::DbInfoSet(db_info) => {
-                self.state_tx.send_modify(|state| {
-                    state.db_info = db_info;
-
-                    changed.push(name_of!(db_info in State));
-                });
-            }
             StateAction::DbInitStart => {
                 self.state_tx.send_modify(|state| {
                     state.db_state = DbState::InitializingStarted;

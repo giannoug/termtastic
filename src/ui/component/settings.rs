@@ -83,19 +83,23 @@ impl<'a> Settings<'a> {
                 FormItemKey::Simple(k) => (
                     original_data
                         .get(k)
+                        .cloned()
                         .expect_or_log(format!("original form data not exists: {}", k).as_str()),
                     data.get(k)
+                        .cloned()
                         .expect_or_log(format!("form data field not exists: {}", k).as_str()),
                 ),
                 FormItemKey::Custom { getter, .. } => (getter(original_data), getter(data)),
-                FormItemKey::None => (&FormValue::Option(None), &FormValue::Option(None)),
+                FormItemKey::None => (FormValue::Option(None), FormValue::Option(None)),
             };
+
+            let is_changed = original_value != current_value;
 
             let item = FormItemWidget {
                 form_item,
                 value: current_value,
                 is_selected: context.is_selected,
-                is_changed: original_value != current_value,
+                is_changed,
             };
 
             (item, 1)
@@ -375,13 +379,13 @@ impl<'a> Component for Settings<'a> {
                         let value = match form_item.key {
                             FormItemKey::Simple(k) => data
                                 .get(k)
+                                .cloned()
                                 .expect_or_log(format!("form data field not exists: {}", k).as_str()),
-
                             FormItemKey::Custom { getter, .. } => getter(data),
-                            FormItemKey::None => &FormValue::Option(None),
+                            FormItemKey::None => FormValue::Option(None),
                         };
 
-                        self.handle_form_item_edit(form_item, value, emit)?;
+                        self.handle_form_item_edit(form_item, &value, emit)?;
                     }
                     (KeyCode::Esc, SettingsFormState::Loaded { .. }) => {
                         if state.settings_form_is_changed {
@@ -618,7 +622,7 @@ impl<'a> Widget for SettingsItemWidget<'a> {
 
 struct FormItemWidget<'a> {
     form_item: &'a FormItem,
-    value: &'a FormValue,
+    value: FormValue,
     is_selected: bool,
     is_changed: bool,
 }
@@ -657,7 +661,7 @@ impl<'a> Widget for FormItemWidget<'a> {
             | FormItemKind::InputOfFloat32
             | FormItemKind::InputOfBase64
             | FormItemKind::BitMask(_) => {
-                let formatted = (self.form_item.formatter)(self.value);
+                let formatted = (self.form_item.formatter)(&self.value);
                 let is_empty = formatted.is_empty();
 
                 Line::from(
@@ -673,7 +677,7 @@ impl<'a> Widget for FormItemWidget<'a> {
                 )
             }
             FormItemKind::Enum(_) => {
-                let formatted = format!("{} ↓", (self.form_item.formatter)(self.value));
+                let formatted = format!("{} ↓", (self.form_item.formatter)(&self.value));
 
                 Line::from(
                     Span::from(formatted).patch_style(match (self.is_selected, self.is_changed) {
@@ -686,7 +690,7 @@ impl<'a> Widget for FormItemWidget<'a> {
             }
             FormItemKind::Switch => {
                 let value = match self.value {
-                    FormValue::Bool(v) => *v,
+                    FormValue::Bool(v) => v,
                     FormValue::Option(Some(b)) => b.as_bool(),
                     _ => unreachable!(),
                 };
@@ -706,7 +710,7 @@ impl<'a> Widget for FormItemWidget<'a> {
                 )
             }
             FormItemKind::Button(_) => {
-                let formatted = (self.form_item.formatter)(self.value);
+                let formatted = (self.form_item.formatter)(&self.value);
 
                 Line::from(Span::from(formatted).blue().add_modifier(if self.is_selected {
                     Modifier::REVERSED
@@ -715,7 +719,7 @@ impl<'a> Widget for FormItemWidget<'a> {
                 }))
             }
             FormItemKind::Action(_) => {
-                let formatted = (self.form_item.formatter)(self.value);
+                let formatted = (self.form_item.formatter)(&self.value);
 
                 Line::from(Span::from(formatted).magenta().add_modifier(if self.is_selected {
                     Modifier::REVERSED

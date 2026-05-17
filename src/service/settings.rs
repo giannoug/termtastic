@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use meshtastic::protobufs::config::{
-    self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, PositionConfig, PowerConfig, SecurityConfig,
+    self, BluetoothConfig, DeviceConfig, DisplayConfig, LoRaConfig, NetworkConfig, PositionConfig, PowerConfig,
+    SecurityConfig,
 };
 use meshtastic::protobufs::module_config::{
     AmbientLightingConfig, CannedMessageConfig, DetectionSensorConfig, ExternalNotificationConfig, MqttConfig,
@@ -73,22 +74,18 @@ impl SettingsService {
     fn handle_state_change(&self, event: Result<Vec<&'static str>, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(changed) => {
-                if changed.contains(&name_of!(ui_config in State)) {
-                    let state = self.state_rx.borrow();
+                let state = self.state_rx.borrow();
 
-                    if matches!(
+                if changed.contains(&name_of!(ui_config in State))
+                    && matches!(
                         state.settings_form_state,
                         SettingsFormState::Saving { id: FormId::AppUi }
-                    ) {
-                        self.state_action_tx
-                            .send(StateAction::Toast(Toast::success("setting saved")))?;
+                    )
+                {
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::success("setting saved")))?;
 
-                        self.start_config_loading(&FormId::AppUi)?;
-                    }
-                }
-
-                if changed.contains(&name_of!(db_info in State)) {
-                    self.start_config_loading(&FormId::AppDb)?;
+                    self.start_config_loading(&FormId::AppUi)?;
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -255,7 +252,7 @@ impl SettingsService {
 
         let data = match id {
             FormId::AppUi => to_formdata(&state.ui_config)?,
-            FormId::AppDb => to_formdata(&state.db_info)?,
+            FormId::AppDb => FormData::default(),
             FormId::RadioLora => to_formdata(
                 state
                     .device_config
@@ -323,6 +320,13 @@ impl SettingsService {
                     .bluetooth
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Bluetooth config not loaded"))?,
+            )?,
+            FormId::DeviceNetwork => to_formdata(
+                state
+                    .device_config
+                    .network
+                    .as_ref()
+                    .ok_or(anyhow::anyhow!("Network config not loaded"))?,
             )?,
             FormId::DeviceAdministration => FormData::new(),
             FormId::ModuleMqtt => to_formdata(
@@ -494,6 +498,13 @@ impl SettingsService {
                     config: config::PayloadVariant::Bluetooth(from_formdata::<BluetoothConfig>(&form_data)?),
                 })?;
             }
+            FormId::DeviceNetwork => {
+                self.meshtastic_command_tx.send(CommandToMeshtastic::SaveConfig {
+                    form_id: id.clone(),
+                    my_node_num: state.my_node_key.expect("should be Some"),
+                    config: config::PayloadVariant::Network(from_formdata::<NetworkConfig>(&form_data)?),
+                })?;
+            }
             FormId::DeviceAdministration => {}
             FormId::ModuleMqtt => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
@@ -611,6 +622,7 @@ fn build_settings() -> Vec<SettingsItem> {
         SettingsItem::form("Power", FormId::DevicePower),
         SettingsItem::form("Display", FormId::DeviceDisplay),
         SettingsItem::form("Bluetooth", FormId::DeviceBluetooth),
+        SettingsItem::form("Network", FormId::DeviceNetwork),
         SettingsItem::form("Administration", FormId::DeviceAdministration),
         // Module
         SettingsItem::group("Module"),
