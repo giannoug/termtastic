@@ -94,8 +94,8 @@ impl<'a> Nodes<'a> {
                 Span::from("show only muted nodes"),
             ]),
             Line::from(vec![
-                Span::from("$temporary  ").magenta(),
-                Span::from("show only temporary nodes"),
+                Span::from("$unknown  ").magenta(),
+                Span::from("show only unknown nodes"),
             ]),
         ])
         .wrap(Wrap { trim: false })

@@ -173,7 +173,7 @@ impl<'a> NodeInfoWidget<'a> {
             Line::default(),
             Line::from(Span::from("status").dark_gray()),
             Line::from(if node.user.is_none() {
-                Span::from("TEMPORARY").yellow()
+                Span::from("UNKNOWN").yellow()
             } else {
                 Span::from("STORED").green()
             }),

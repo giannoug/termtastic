@@ -424,7 +424,7 @@ impl Store {
                     changed.push(name_of!(nodes in State));
                 });
             }
-            StateAction::NodeInitTemporary(node) => {
+            StateAction::NodeInitUnknown(node) => {
                 self.state_tx.send_if_modified(|state| {
                     let mut inserted = false;
 

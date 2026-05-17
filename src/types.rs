@@ -456,7 +456,7 @@ impl Node {
             if self.user.is_some() {
                 "$stored".to_owned()
             } else {
-                "$temporary".to_owned()
+                "$unknown".to_owned()
             },
         ]
         .into_iter()
