@@ -1,12 +1,11 @@
 use crate::service::ONLINE_NODE_THRESHOLD_SECS;
 use crate::types::*;
 use chrono::{DateTime, Utc};
-use hostaddr::HostAddr;
 use itertools::Itertools;
 use ordermap::OrderMap;
 use std::cmp::Ordering;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeSet, HashMap, VecDeque},
     time::{Duration, Instant},
 };
 
@@ -15,7 +14,6 @@ pub struct State {
     pub active_channel_key: Option<u32>,
     pub active_device: Option<Device>,
     pub active_tab: Tab,
-    pub aggregated_devices: Vec<Device>,
     pub channels: OrderMap<u32, Channel>,
     pub connection_attempt: u32,
     pub connection_state: ConnectionState,
@@ -23,7 +21,8 @@ pub struct State {
     pub device_config: DeviceConfig,
     pub device_discovering_state: DeviceDiscoveringState,
     pub device_module_config: DeviceModuleConfig,
-    pub discovered_devices: Vec<Device>,
+    pub devices_discovered: BTreeSet<Device>,
+    pub devices: BTreeSet<Device>,
     pub logs: Vec<LogRecord>,
     pub messages: HashMap<u32, VecDeque<Message>>,
     pub my_node_key: Option<u32>,
@@ -44,7 +43,6 @@ pub struct State {
     pub settings_form_state: SettingsFormState,
     pub splash_logo: bool,
     pub splash_logo_t: Instant,
-    pub tcp_devices: Vec<HostAddr<String>>,
     pub toast: Option<Toast>,
     pub toast_queue: VecDeque<Toast>,
     pub toast_t: Instant,
@@ -57,7 +55,6 @@ impl Default for State {
             active_channel_key: None,
             active_device: None,
             active_tab: Default::default(),
-            aggregated_devices: Default::default(),
             channels: OrderMap::with_capacity(10),
             connection_attempt: 0,
             connection_state: Default::default(),
@@ -65,7 +62,8 @@ impl Default for State {
             device_discovering_state: Default::default(),
             device_config: Default::default(),
             device_module_config: Default::default(),
-            discovered_devices: Vec::default(),
+            devices_discovered: Default::default(),
+            devices: Default::default(),
             logs: Vec::with_capacity(1000),
             messages: Default::default(),
             my_node_key: None,
@@ -86,7 +84,6 @@ impl Default for State {
             settings_form_is_changed: false,
             splash_logo_t: Instant::now(),
             splash_logo: false,
-            tcp_devices: Default::default(),
             toast_queue: Default::default(),
             toast_t: Instant::now(),
             toast: None,
@@ -170,16 +167,6 @@ impl State {
                 }
             })
             .map(|node| node.key)
-            .collect();
-    }
-
-    pub fn update_aggregated_devices(&mut self) {
-        self.aggregated_devices = self
-            .tcp_devices
-            .iter()
-            .map(|h| Device::Tcp(h.clone()))
-            .chain(self.discovered_devices.clone())
-            .sorted()
             .collect();
     }
 }

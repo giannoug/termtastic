@@ -84,40 +84,21 @@ impl Component for Logs {
             return Ok(false);
         }
 
+        if self.list_state.handle_navigation_events(event, state.logs.len()) {
+            if let Some(index) = self.list_state.selected {
+                self.follow = index == state.logs.len() - 1;
+            }
+
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.follow = false;
-                    self.list_state.previous();
-
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-
-                    if let Some(index) = self.list_state.selected {
-                        self.follow = index == state.logs.len() - 1;
-                    }
-
-                    return Ok(true);
-                }
                 KeyCode::Enter => {
                     if let Some(i) = self.list_state.selected {
                         self.popup_record = Some(state.logs[i].clone());
                         self.popup_scroll_state.first();
                     }
-
-                    return Ok(true);
-                }
-                KeyCode::Home => {
-                    self.follow = false;
-                    self.list_state.select(Some(0));
-
-                    return Ok(true);
-                }
-                KeyCode::End => {
-                    self.follow = true;
-                    self.list_state.select(Some(state.logs.len() - 1));
 
                     return Ok(true);
                 }
@@ -127,24 +108,6 @@ impl Component for Logs {
                 }
                 KeyCode::Tab | KeyCode::BackTab => {
                     return Ok(false);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.follow = false;
-                    self.list_state.previous();
-
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-
-                    if let Some(index) = self.list_state.selected {
-                        self.follow = index == state.logs.len() - 1;
-                    }
-
-                    return Ok(true);
                 }
                 _ => {}
             },

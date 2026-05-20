@@ -209,24 +209,18 @@ impl<'a> Component for Messenger<'a> {
             return Ok(true);
         }
 
+        if list_state.handle_navigation_events(event, messages.len()) {
+            if let Some(index) = list_state.selected {
+                self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
+            }
+
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) => match code {
-                KeyCode::Up if kind == &KeyEventKind::Press => {
-                    self.follow_chat.insert(active_channel_key, false);
-                    list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down if kind == &KeyEventKind::Press => {
-                    list_state.next();
-
-                    if let Some(index) = list_state.selected {
-                        self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
-                    }
-
-                    return Ok(true);
-                }
                 KeyCode::Esc if kind == &KeyEventKind::Press => {
-                    emit(AppEvent::SwitchChannelRequested)?;
+                    emit(AppEvent::ChannelSwitchRequested)?;
                     return Ok(true);
                 }
                 KeyCode::Enter if kind == &KeyEventKind::Press => {
@@ -274,24 +268,6 @@ impl<'a> Component for Messenger<'a> {
                 }
                 KeyCode::Tab | KeyCode::BackTab => {
                     // Capture these events to prevent handling by input widget
-                    return Ok(false);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.follow_chat.insert(active_channel_key, false);
-                    list_state.previous();
-
-                    return Ok(false);
-                }
-                MouseEventKind::ScrollDown => {
-                    list_state.next();
-
-                    if let Some(index) = list_state.selected {
-                        self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
-                    }
-
                     return Ok(false);
                 }
                 _ => {}
@@ -446,12 +422,7 @@ impl<'a> Component for Messenger<'a> {
         if self.is_reaction_viewer_visible
             && let Some(message) = list_state.selected.and_then(|i| messages.get(i))
         {
-            let popup_area = Rect {
-                x: v[0].x + v[0].width / 2 - 40 / 2,
-                y: v[0].y + v[0].height / 2 - 15 / 2,
-                width: 40,
-                height: 15,
-            };
+            let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(15));
 
             Clear.render(popup_area, frame.buffer_mut());
 
@@ -480,12 +451,7 @@ impl<'a> Component for Messenger<'a> {
 
         // emoji selector
         if self.is_emoji_selector_visible {
-            let popup_area = Rect {
-                x: v[0].x + v[0].width / 2 - 40 / 2,
-                y: v[0].y + v[0].height / 2 - 14 / 2,
-                width: 40,
-                height: 14,
-            };
+            let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(14));
 
             Clear.render(popup_area, frame.buffer_mut());
 

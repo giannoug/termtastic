@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use meshtastic::{
-    Message,
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{Config, FromRadio, MeshPacket, ModuleConfig, PortNum, admin_message, from_radio},
+    protobufs::{admin_message, from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
+    Message,
 };
 use tokio::time::sleep;
 use tokio::{
@@ -19,8 +19,8 @@ use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, Su
 use tracing_unwrap::OptionExt;
 
 use crate::meshtastic::{
-    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp,
-    types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
+    connect_via_ble, connect_via_serial, connect_via_tcp, types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
+    RadioService,
 };
 
 const CONNECTION_TIMEOUT_SECS: u64 = 2;
@@ -99,8 +99,8 @@ impl MeshtasticService {
 
     async fn handle_command(&mut self, cmd: CommandToMeshtastic, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         match cmd {
-            CommandToMeshtastic::ConnectViaTcp(hostaddr) => {
-                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(hostaddr)).await {
+            CommandToMeshtastic::ConnectViaTcp(addess) => {
+                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(addess)).await {
                     Ok(Ok((radio_rx, stream_api))) => {
                         self.handle_connection(radio_rx, stream_api, subsys);
                         self.event_tx.send(MeshtasticEvent::Connected)?;

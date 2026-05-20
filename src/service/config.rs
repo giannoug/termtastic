@@ -53,11 +53,17 @@ impl ConfigService {
 
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            Ok(AppEvent::InitializationRequested) => {
-                let app_config: AppConfig = confy::load(crate::APP_NAME, "app")?;
+            Ok(AppEvent::InitializationRequested) => match confy::load::<AppConfig>(crate::APP_NAME, "app") {
+                Ok(app_config) => {
+                    self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
+                }
+                Err(e) => {
+                    tracing::error!("can't load app config: {}", e);
 
-                self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
-            }
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("app config load failed")))?;
+                }
+            },
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 tracing::warn!("broadcast receiver lagged by {} events", n);
             }

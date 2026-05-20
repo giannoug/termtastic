@@ -42,10 +42,10 @@ impl UiService {
                 AppEvent::InitializationRequested | AppEvent::SplashLogoRequested => {
                     self.state_action_tx.send(StateAction::SplashLogo)?;
                 }
-                AppEvent::NextTabRequested => {
+                AppEvent::TabNextRequested => {
                     self.state_action_tx.send(StateAction::TabSwitchToNext)?;
                 }
-                AppEvent::PreviousTabRequested => {
+                AppEvent::TabPreviousRequested => {
                     self.state_action_tx.send(StateAction::TabSwitchToPrevious)?;
                 }
                 AppEvent::CopyToClipboardRequested(text) => match copy_to_clipboard(text) {

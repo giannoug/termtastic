@@ -29,12 +29,7 @@ impl<'a> Nodes<'a> {
     }
 
     fn render_filter_help(&mut self, area: Rect, buf: &mut Buffer) {
-        let popup_area = Rect {
-            x: area.x + area.width / 2 - 50 / 2,
-            y: area.y + area.height / 2 - 16 / 2,
-            width: 50,
-            height: 16,
-        };
+        let popup_area = area.centered(Constraint::Length(50), Constraint::Length(16));
 
         let popup_block = Block::bordered()
             .border_type(BorderType::Thick)
@@ -79,7 +74,8 @@ impl<'a> Nodes<'a> {
             Line::from(vec![
                 Span::from("$hops").magenta(),
                 Span::from("X      ").cyan(),
-                Span::from("show only nodes with hops == X"),
+                Span::from("show only nodes with hops == "),
+                Span::from("X").cyan(),
             ]),
             Line::from(vec![
                 Span::from("$favorite   ").magenta(),
@@ -92,6 +88,10 @@ impl<'a> Nodes<'a> {
             Line::from(vec![
                 Span::from("$muted      ").magenta(),
                 Span::from("show only muted nodes"),
+            ]),
+            Line::from(vec![
+                Span::from("$stored     ").magenta(),
+                Span::from("show only stored nodes"),
             ]),
             Line::from(vec![
                 Span::from("$unknown    ").magenta(),
@@ -201,26 +201,14 @@ impl<'a> Component for Nodes<'a> {
             return Ok(false);
         }
 
+        if self.list_state.handle_navigation_events(event, state.nodes_view.len()) {
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent {
                 code, kind, modifiers, ..
             }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                KeyCode::Home => {
-                    self.list_state.select(Some(0));
-                    return Ok(true);
-                }
-                KeyCode::End => {
-                    self.list_state.select(Some(state.nodes_view.len() - 1));
-                    return Ok(true);
-                }
                 KeyCode::F(1) => {
                     self.is_filter_help_visible = true;
                     return Ok(true);
@@ -252,17 +240,6 @@ impl<'a> Component for Nodes<'a> {
                 KeyCode::Tab | KeyCode::BackTab => {
                     // Capture these events to prevent handling them by input widget
                     return Ok(false);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-                    return Ok(true);
                 }
                 _ => {}
             },
@@ -398,12 +375,7 @@ impl<'a> Component for Nodes<'a> {
 
         // emoji selector
         if self.is_emoji_selector_visible {
-            let popup_area = Rect {
-                x: v[0].x + v[0].width / 2 - 40 / 2,
-                y: v[0].y + v[0].height / 2 - 14 / 2,
-                width: 40,
-                height: 14,
-            };
+            let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(14));
 
             Clear.render(popup_area, frame.buffer_mut());
 

@@ -70,12 +70,7 @@ impl<'a> StatefulWidget for PopupInputWidget<'a> {
     type State = PopupInputState<'a>;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let popup_area = Rect {
-            x: area.x + area.width / 2 - self.width / 2,
-            y: area.y + area.height / 2 - 2,
-            width: self.width,
-            height: 4,
-        };
+        let popup_area = area.centered(Constraint::Length(self.width), Constraint::Length(4));
 
         let v = Layout::vertical([Constraint::Length(3), Constraint::Length(1)]).split(popup_area);
 

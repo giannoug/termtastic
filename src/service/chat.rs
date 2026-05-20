@@ -1,6 +1,6 @@
 use meshtastic::{
+    protobufs::{from_radio::PayloadVariant, mesh_packet, routing, PortNum, Routing},
     Message as _,
-    protobufs::{PortNum, Routing, from_radio::PayloadVariant, mesh_packet, routing},
 };
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
@@ -68,7 +68,7 @@ impl ChatService {
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::success("channel chat is purged")))?;
                 }
-                AppEvent::SwitchChannelRequested => {
+                AppEvent::ChannelSwitchRequested => {
                     self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
                 }
                 AppEvent::ChatMessageSubmitted { text, reply_message_id } => match state.get_active_channel() {

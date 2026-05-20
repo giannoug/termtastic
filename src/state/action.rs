@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use hostaddr::HostAddr;
 use meshtastic::protobufs::{config, module_config, routing};
 
 use crate::types::{
@@ -24,13 +23,14 @@ pub enum StateAction {
         nodes: Vec<Node>,
     },
     DeviceActiveSet(Device),
-    DevicesAddTcp(HostAddr<String>),
+    DevicesAdd(Device),
+    DevicesRemove(Device),
+    DevicesDiscoveredAdd(Device),
     DeviceDiscoveringStart,
     DeviceDiscoveringFail(String),
-    DeviceDiscoveringDone(Vec<Device>),
+    DeviceDiscoveringDone,
     DeviceConfigSet(config::PayloadVariant),
     DeviceModuleConfigSet(module_config::PayloadVariant),
-    DevicesRemoveTcp(HostAddr<String>),
     LogRecordAdd(LogRecord),
     DirectChatStart(u32),
     MessageAdd(u32, Message),

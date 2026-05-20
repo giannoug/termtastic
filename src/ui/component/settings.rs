@@ -339,15 +339,21 @@ impl<'a> Component for Settings<'a> {
         }
 
         // default
+        if let SettingsFormState::Inactive = state.settings_form_state
+            && self.settings_list_state.handle_navigation_events(event, SETTINGS.len())
+        {
+            return Ok(true);
+        }
+
+        if let SettingsFormState::Loaded { id } = &state.settings_form_state
+            && self.form_list_state.handle_navigation_events(event, FORMS[&id].len())
+        {
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
                 match (code, &state.settings_form_state) {
-                    (KeyCode::Up, SettingsFormState::Inactive) => {
-                        self.settings_list_state.previous();
-                    }
-                    (KeyCode::Down, SettingsFormState::Inactive) => {
-                        self.settings_list_state.next();
-                    }
                     (KeyCode::Enter, SettingsFormState::Inactive) => {
                         if let Some(index) = self.settings_list_state.selected
                             && let Some(SettingsItem::Form { id, .. }) = SETTINGS.get(index)
@@ -357,12 +363,6 @@ impl<'a> Component for Settings<'a> {
                     }
                     (KeyCode::Esc, SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. }) => {
                         emit(AppEvent::SettingsFormCancelRequested)?;
-                    }
-                    (KeyCode::Up, SettingsFormState::Loaded { .. }) => {
-                        self.form_list_state.previous();
-                    }
-                    (KeyCode::Down, SettingsFormState::Loaded { .. }) => {
-                        self.form_list_state.next();
                     }
                     (KeyCode::Enter, SettingsFormState::Loaded { id }) => {
                         if self.is_exit_confirm_visible {

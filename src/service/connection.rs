@@ -1,6 +1,8 @@
+use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
 use futures::stream::{self, StreamExt};
+use hostaddr::HostAddr;
 use meshtastic::protobufs::from_radio;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time;
@@ -16,6 +18,7 @@ use crate::{
 const CONNECTION_CHECK_INTERVAL_MILLIS: u64 = 250;
 const RECONNECTION_BACKOFF_BASE_MILLIS: u64 = 1_000;
 const RECONNECTION_BACKOFF_MAX_MILLIS: u64 = 30_000;
+const MDNS_MESHTASTIC_DOMAIN: &'static str = "_meshtastic._tcp.local.";
 
 pub struct ConnectionService {
     app_event_tx: broadcast::Sender<AppEvent>,
@@ -24,6 +27,7 @@ pub struct ConnectionService {
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
+    mdns_daemon: Option<mdns_sd::ServiceDaemon>,
 }
 
 impl ConnectionService {
@@ -42,11 +46,16 @@ impl ConnectionService {
             state_action_tx,
             meshtastic_command_tx,
             meshtastic_event_rx,
+            mdns_daemon: None,
         }
     }
 
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         let mut connection_check_interval = time::interval(Duration::from_millis(CONNECTION_CHECK_INTERVAL_MILLIS));
+
+        self.mdns_daemon = mdns_sd::ServiceDaemon::new()
+            .map_err(|e| tracing::error!("can't start mDNS daemon: {}", e))
+            .ok();
 
         loop {
             tokio::select! {
@@ -55,6 +64,11 @@ impl ConnectionService {
                 _ = connection_check_interval.tick() => self.check_connection()?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
+
+                    if let Some(daemon) = self.mdns_daemon.take() {
+                        let _ = daemon.shutdown();
+                    }
+
                     break;
                 }
             }
@@ -66,9 +80,6 @@ impl ConnectionService {
     async fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(app_event) => match app_event {
-                AppEvent::InitializationRequested => {
-                    self.app_event_tx.send(AppEvent::DeviceRediscoverRequested)?;
-                }
                 AppEvent::DeviceSelected(hardware) => {
                     self.state_action_tx.send(StateAction::DeviceActiveSet(hardware))?;
                 }
@@ -81,16 +92,12 @@ impl ConnectionService {
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::normal("discovering...")))?;
 
-                    match discover_devices().await {
-                        Ok(devices) => {
-                            let devices_count = devices.len();
+                    match self.discover_devices().await {
+                        Ok(_) => {
+                            self.state_action_tx.send(StateAction::DeviceDiscoveringDone)?;
 
-                            self.state_action_tx.send(StateAction::DeviceDiscoveringDone(devices))?;
-
-                            self.state_action_tx.send(StateAction::Toast(Toast::normal(format!(
-                                "devices discovered: {}",
-                                devices_count
-                            ))))?;
+                            self.state_action_tx
+                                .send(StateAction::Toast(Toast::normal("discovery done")))?;
                         }
                         Err(e) => {
                             tracing::error!("device discovering failed: {}", e);
@@ -119,15 +126,11 @@ impl ConnectionService {
                         secs: 3,
                     })?;
                 }
-                AppEvent::TcpDeviceSubmitted(mut hostaddr) => {
-                    if !hostaddr.has_port() {
-                        hostaddr = hostaddr.with_port(4403);
-                    }
-
-                    self.state_action_tx.send(StateAction::DevicesAddTcp(hostaddr))?;
+                AppEvent::DeviceSubmitted(device) => {
+                    self.state_action_tx.send(StateAction::DevicesAdd(device))?;
                 }
-                AppEvent::TcpDeviceRemoved(hostaddr) => {
-                    self.state_action_tx.send(StateAction::DevicesRemoveTcp(hostaddr))?;
+                AppEvent::DeviceRemoveRequested(device) => {
+                    self.state_action_tx.send(StateAction::DevicesRemove(device))?;
                 }
                 _ => {}
             },
@@ -237,10 +240,10 @@ impl ConnectionService {
         self.state_action_tx.send(StateAction::ConnectionStart)?;
 
         match device {
-            Device::Tcp(hostaddr) => self
+            Device::Tcp(address) => self
                 .meshtastic_command_tx
-                .send(CommandToMeshtastic::ConnectViaTcp(hostaddr.clone()))?,
-            Device::Ble { address, .. } => self
+                .send(CommandToMeshtastic::ConnectViaTcp(address.clone()))?,
+            Device::Ble(address) => self
                 .meshtastic_command_tx
                 .send(CommandToMeshtastic::ConnectViaBle(address.to_owned()))?,
             Device::Serial(address) => self
@@ -250,69 +253,102 @@ impl ConnectionService {
 
         Ok(())
     }
-}
 
-async fn discover_devices() -> anyhow::Result<Vec<Device>> {
-    let mut devices: Vec<Device> = vec![];
+    async fn discover_devices(&self) -> anyhow::Result<()> {
+        // BLE
+        if let Some(adapter) = bluest::Adapter::default().await {
+            match adapter.wait_available().await {
+                Ok(()) => {
+                    let ble_devices: Vec<Device> = stream::iter(adapter.connected_devices().await?)
+                        .filter_map(|d| async move {
+                            match d.is_paired().await {
+                                Ok(false) => {
+                                    return None;
+                                }
+                                Err(e) => {
+                                    tracing::error!("can't obtain BLE device pair status for {}: {}", d.id(), e);
+                                    return None;
+                                }
+                                _ => {}
+                            }
 
-    // BLE
-    if let Some(adapter) = bluest::Adapter::default().await {
-        match adapter.wait_available().await {
-            Ok(()) => {
-                let ble_devices: Vec<Device> = stream::iter(adapter.connected_devices().await?)
-                    .filter_map(|d| async move {
-                        match d.is_paired().await {
-                            Ok(false) => {
+                            if !d.is_connected().await {
                                 return None;
                             }
-                            Err(e) => {
-                                tracing::error!("can't obtain BLE device pair status for {}: {}", d.id(), e);
-                                return None;
-                            }
-                            _ => {}
-                        }
 
-                        if !d.is_connected().await {
-                            return None;
-                        }
+                            Some(Device::Ble(d.id().to_string()))
+                        })
+                        .collect()
+                        .await;
 
-                        match d.name() {
-                            Ok(name) => Some(Device::Ble {
-                                name,
-                                address: d.id().to_string(),
-                            }),
-                            Err(e) => {
-                                tracing::error!("can't obtain BLE device name for {}: {}", d.id(), e);
-                                None
-                            }
-                        }
-                    })
-                    .collect()
-                    .await;
+                    for device in ble_devices.into_iter() {
+                        self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(device))?;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("can't fetch BLE devices: {}", e);
+                }
+            }
+        } else {
+            tracing::warn!(
+                "can't fetch BLE devices, possible reasons: no Bluetooth adapter, Bluetooth is turned off, permission denied"
+            );
+        }
 
-                devices.extend(ble_devices);
+        // Serial
+        match meshtastic::utils::stream::available_serial_ports() {
+            Ok(ports) => {
+                let serial_devices = ports.iter().map(|port| Device::Serial(port.to_owned()));
+
+                for device in serial_devices.into_iter() {
+                    self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(device))?;
+                }
             }
             Err(e) => {
-                tracing::error!("can't fetch BLE devices: {}", e);
+                tracing::error!("can't fetch serial ports: {}", e);
             }
+        };
+
+        // mDNS
+        if let Some(mdns_daemon) = &self.mdns_daemon {
+            match mdns_daemon.browse(MDNS_MESHTASTIC_DOMAIN) {
+                Ok(receiver) => {
+                    let now = Instant::now();
+
+                    while let Ok(event) = receiver.recv() {
+                        match event {
+                            mdns_sd::ServiceEvent::ServiceResolved(info) => {
+                                for addr in info.addresses.iter() {
+                                    match addr {
+                                        mdns_sd::ScopedIp::V4(ipv4) => {
+                                            self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(
+                                                Device::Tcp(HostAddr::from_ip_addr(IpAddr::from(*ipv4.addr()))),
+                                            ))?;
+                                        }
+                                        mdns_sd::ScopedIp::V6(ipv6) => {
+                                            self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(
+                                                Device::Tcp(HostAddr::from_ip_addr(IpAddr::from(*ipv6.addr()))),
+                                            ))?;
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            _ => {
+                                if now.elapsed().as_secs() > 2 {
+                                    tracing::debug!("mDNS timeout, stopping discovery");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("mDNS browse error: {}", e);
+                }
+            };
         }
-    } else {
-        tracing::warn!(
-            "can't fetch BLE devices, possible reasons: no Bluetooth adapter, Bluetooth is turned off, permission denied"
-        );
+
+        Ok(())
     }
-
-    // Serial
-    match meshtastic::utils::stream::available_serial_ports() {
-        Ok(ports) => {
-            let serial_devices = ports.iter().map(|port| Device::Serial(port.to_owned()));
-
-            devices.extend(serial_devices);
-        }
-        Err(e) => {
-            tracing::error!("can't fetch serial ports: {}", e);
-        }
-    };
-
-    Ok(devices)
 }

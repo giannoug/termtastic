@@ -527,13 +527,13 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                         data.insert(name_of!(private_key in SecurityConfig).to_owned(), value);
                     },
                 },
-                "",
-                None,
+                "Generate private key",
+                Some("WARNING! To communicate with other nodes, you need to exchange keys again."),
                 FormItemKind::Button(|_| {
                     let key: Vec<u8> = std::iter::repeat_with(|| fastrand::u8(..)).take(32).collect();
                     FormValue::from(key)
                 }),
-                |_| "<REGENERATE PRIVATE KEY>".to_owned(),
+                |_| "<REGENERATE>".to_owned(),
                 |_| Ok(()),
             ),
             FormItem::new(

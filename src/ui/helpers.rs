@@ -1,11 +1,11 @@
 use crate::state::State;
 use crate::types::{Channel, ChannelRole, HopsSnrRssiAware, Node};
-use crate::ui::prelude::text;
 use base64::prelude::BASE64_STANDARD;
 use base64::{DecodeError, Engine};
 use chrono::{SubsecRound, TimeDelta, Utc};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
 use itertools::Itertools;
-use meshtastic::protobufs::config::lo_ra_config::ModemPreset;
+use meshtastic::protobufs::config;
 use meshtastic::protobufs::routing;
 use ratatui::{
     style::{Color, Style, Stylize},
@@ -15,6 +15,7 @@ use ratatui::{
 };
 use regex::{Regex, RegexBuilder};
 use std::sync::LazyLock;
+use tui_widget_list::ListState;
 
 static LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new(r"[^:/?#\s]+://[^\s]+(?:[\s,.!?;:)\]}>]|$)")
@@ -97,7 +98,7 @@ pub trait ModemPresetExt {
     fn as_channel_name(&self) -> String;
 }
 
-impl ModemPresetExt for meshtastic::protobufs::config::lo_ra_config::ModemPreset {
+impl ModemPresetExt for config::lo_ra_config::ModemPreset {
     fn as_channel_name(&self) -> String {
         self.as_str_name()
             .to_lowercase()
@@ -158,7 +159,7 @@ pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<
         .device_config
         .lora
         .as_ref()
-        .and_then(|lora| ModemPreset::try_from(lora.modem_preset).ok())
+        .and_then(|lora| config::lo_ra_config::ModemPreset::try_from(lora.modem_preset).ok())
         .and_then(|preset| Some(preset.as_channel_name()));
 
     match (&channel.role, &maybe_direct_node) {
@@ -269,7 +270,7 @@ pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware, my: bool) -> Vec<Span
     }
 }
 
-pub fn short_name_to_span(node: &Node, my: bool) -> text::Span<'_> {
+pub fn short_name_to_span(node: &Node, my: bool) -> Span<'_> {
     Span::from(pad_center(&node.short_name(), 6))
         .black()
         .patch_style(if my {
@@ -296,5 +297,61 @@ pub fn routing_error_to_span<'a>(error: Option<routing::Error>) -> Span<'a> {
         Some(routing::Error::None) => Span::from("acked").green(),
         Some(e) => Span::from(e.as_str_name()).red(),
         None => Span::from("sent").dark_gray(),
+    }
+}
+
+pub trait ListStateExt {
+    fn handle_navigation_events(&mut self, event: &Event, items_count: usize) -> bool;
+
+    fn fix_selection(&mut self, items_count: usize);
+}
+
+impl ListStateExt for ListState {
+    fn handle_navigation_events(&mut self, event: &Event, items_count: usize) -> bool {
+        match event {
+            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                KeyCode::Home => {
+                    self.select(Some(0));
+                    return true;
+                }
+                KeyCode::End => {
+                    self.select(Some(items_count - 1));
+                    return true;
+                }
+                KeyCode::Up => {
+                    self.previous();
+                    return true;
+                }
+                KeyCode::Down => {
+                    self.next();
+                    return true;
+                }
+                _ => {}
+            },
+            Event::Mouse(MouseEvent { kind, .. }) => match kind {
+                MouseEventKind::ScrollUp => {
+                    self.previous();
+                    return true;
+                }
+                MouseEventKind::ScrollDown => {
+                    self.next();
+                    return true;
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+
+        false
+    }
+
+    fn fix_selection(&mut self, items_count: usize) {
+        if self.selected.and_then(|i| Some(i >= items_count)).unwrap_or(false) {
+            self.selected = None;
+        }
+
+        if self.selected.is_none() && items_count > 0 {
+            self.select(Some(0));
+        }
     }
 }

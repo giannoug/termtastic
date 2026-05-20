@@ -1,21 +1,76 @@
-use hostaddr::HostAddr;
-
 use crate::ui::prelude::*;
+use hostaddr::HostAddr;
 
 pub struct Connection<'a> {
     list_state: ListState,
-    is_tcp_form_visible: bool,
+    discovery_list_state: ListState,
     popup_input_state: PopupInputState<'a>,
-    removing_tcp_device: Option<HostAddr<String>>,
+    removing_device: Option<Device>,
+    is_discovery_popup_visible: bool,
+    is_tcp_form_visible: bool,
 }
 
 impl<'a> Connection<'a> {
     pub fn new() -> Self {
         Self {
             list_state: ListState::default(),
+            discovery_list_state: ListState::default(),
+            popup_input_state: PopupInputState::new(Some("new TCP device"), Some("host[:port=4403]"), ""),
+            removing_device: None,
+            is_discovery_popup_visible: false,
             is_tcp_form_visible: false,
-            popup_input_state: PopupInputState::new(Some("TCP device"), Some("host[:port=4403]"), ""),
-            removing_tcp_device: None,
+        }
+    }
+
+    fn render_discovery_popup(&mut self, area: Rect, buf: &mut Buffer, state: &State) {
+        let block = Block::bordered()
+            .border_type(BorderType::Thick)
+            .padding(Padding::new(1, 1, 1, 0))
+            .title(Line::from(vec![
+                Span::from(" device discovery "),
+                Span::from("[").dark_gray(),
+                match state.device_discovering_state {
+                    DeviceDiscoveringState::NotStarted => Span::from("not started"),
+                    DeviceDiscoveringState::Discovering => Span::from("discovering...").yellow(),
+                    DeviceDiscoveringState::Failed(_) => Span::from("failed").red(),
+                    DeviceDiscoveringState::Done => Span::from("done").green(),
+                },
+                Span::from("] ").dark_gray(),
+            ]));
+
+        let block_area = block.inner(area);
+
+        Clear.render(block_area, buf);
+        block.render(area, buf);
+
+        self.discovery_list_state.fix_selection(state.devices_discovered.len());
+
+        if !state.devices_discovered.is_empty() {
+            let list_builder = ListBuilder::new(|context| {
+                let device = state.devices_discovered.iter().nth(context.index).unwrap();
+
+                let item = DeviceWidget {
+                    device,
+                    is_selected: context.is_selected,
+                    centered: false,
+                };
+
+                (item, 1)
+            });
+
+            let list = ListView::new(list_builder, state.devices_discovered.len())
+                .infinite_scrolling(false)
+                .scrollbar(default_scrollbar());
+
+            list.render(block_area, buf, &mut self.discovery_list_state);
+        } else {
+            PlaceholderWidget::dark_gray(match &state.device_discovering_state {
+                DeviceDiscoveringState::NotStarted => "nothing to show",
+                DeviceDiscoveringState::Discovering => "discovering...",
+                DeviceDiscoveringState::Failed(e) => e.as_str(),
+                DeviceDiscoveringState::Done => "devices not found",
+            })
+            .render(block_area, buf);
         }
     }
 }
@@ -30,21 +85,17 @@ impl<'a> Component for Connection<'a> {
             return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
         }
 
+        if self.is_discovery_popup_visible {
+            return vec![Hotkey::new("enter", "select"), Hotkey::new("esc", "close")];
+        }
+
         vec![
-            Some(Hotkey::new("↑↓", "scroll")),
-            Some(Hotkey::new("enter", "connect")),
-            Some(Hotkey::new("t", "add TCP")),
-            Some(Hotkey::new("r", "rediscover")),
-            self.list_state
-                .selected
-                .and_then(|i| state.aggregated_devices.get(i))
-                .and_then(|d| Some(matches!(d, Device::Tcp(_))))
-                .unwrap_or(false)
-                .then_some(Hotkey::new("del", "delete")),
+            Hotkey::new("↑↓", "scroll"),
+            Hotkey::new("enter", "connect"),
+            Hotkey::new("t", "add TCP"),
+            Hotkey::new("d", "discover"),
+            Hotkey::new("del", "delete"),
         ]
-        .into_iter()
-        .flatten()
-        .collect()
     }
 
     fn handle_event(
@@ -53,17 +104,52 @@ impl<'a> Component for Connection<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        if let Some(removing_hostaddr) = &self.removing_tcp_device {
+        if let Some(removing_device) = self.removing_device.as_ref() {
             match event {
                 Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                     KeyCode::Enter => {
-                        emit(AppEvent::TcpDeviceRemoved(removing_hostaddr.clone()))?;
-                        self.removing_tcp_device = None;
+                        emit(AppEvent::DeviceRemoveRequested(removing_device.clone()))?;
+                        self.removing_device = None;
 
                         return Ok(true);
                     }
                     KeyCode::Esc => {
-                        self.removing_tcp_device = None;
+                        self.removing_device = None;
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
+            return Ok(false);
+        }
+
+        if self.is_discovery_popup_visible {
+            if self
+                .discovery_list_state
+                .handle_navigation_events(event, state.devices_discovered.len())
+            {
+                return Ok(true);
+            }
+
+            match event {
+                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                    KeyCode::Enter => {
+                        if let Some(device) = self
+                            .discovery_list_state
+                            .selected
+                            .and_then(|i| state.devices_discovered.iter().nth(i))
+                        {
+                            emit(AppEvent::DeviceSubmitted(device.clone()))?
+                        }
+
+                        self.is_discovery_popup_visible = false;
+
+                        return Ok(true);
+                    }
+                    KeyCode::Esc => {
+                        self.is_discovery_popup_visible = false;
                         return Ok(true);
                     }
                     _ => {}
@@ -80,7 +166,7 @@ impl<'a> Component for Connection<'a> {
                     KeyCode::Enter => {
                         match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
                             Ok(addr) => {
-                                emit(AppEvent::TcpDeviceSubmitted(addr))?;
+                                emit(AppEvent::DeviceSubmitted(Device::Tcp(addr)))?;
                                 self.is_tcp_form_visible = false;
                             }
                             Err(e) => {
@@ -120,18 +206,16 @@ impl<'a> Component for Connection<'a> {
             return Ok(false);
         }
 
+        if self.list_state.handle_navigation_events(event, state.devices.len()) {
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, .. }) => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                KeyCode::Char('r') => {
+                KeyCode::Char('d') => {
+                    self.is_discovery_popup_visible = true;
                     emit(AppEvent::DeviceRediscoverRequested)?;
+
                     return Ok(true);
                 }
                 KeyCode::Char('t') => {
@@ -141,32 +225,19 @@ impl<'a> Component for Connection<'a> {
                     return Ok(true);
                 }
                 KeyCode::Enter => {
-                    if let Some(index) = self.list_state.selected {
-                        emit(AppEvent::DeviceSelected(state.aggregated_devices[index].clone()))?
+                    if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
+                        emit(AppEvent::DeviceSelected(device.clone()))?
                     }
                     return Ok(true);
                 }
                 KeyCode::Delete | KeyCode::Backspace => {
-                    if let Some(index) = self.list_state.selected
-                        && let Device::Tcp(hostaddr) = &state.aggregated_devices[index]
-                    {
-                        self.removing_tcp_device = Some(hostaddr.clone());
+                    if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
+                        self.removing_device = Some(device.clone());
                     }
                     return Ok(true);
                 }
                 KeyCode::Tab | KeyCode::BackTab => {
                     return Ok(false);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-                    return Ok(true);
                 }
                 _ => {}
             },
@@ -177,30 +248,15 @@ impl<'a> Component for Connection<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        if self
-            .list_state
-            .selected
-            .and_then(|i| Some(i >= state.aggregated_devices.len()))
-            .unwrap_or(false)
-        {
-            self.list_state.selected = None;
+        self.list_state.fix_selection(state.devices.len());
+
+        if let Some(active) = &state.active_device {
+            self.list_state.select(state.devices.iter().position(|d| active == d));
         }
 
-        if self.list_state.selected.is_none()
-            && state.device_discovering_state == DeviceDiscoveringState::Done
-            && !state.aggregated_devices.is_empty()
-        {
-            if let Some(active) = &state.active_device {
-                self.list_state
-                    .select(state.aggregated_devices.iter().position(|d| active == d));
-            } else {
-                self.list_state.select(Some(0));
-            }
-        }
-
-        if !state.aggregated_devices.is_empty() {
+        if !state.devices.is_empty() {
             let list_builder = ListBuilder::new(|context| {
-                let device = state.aggregated_devices.iter().nth(context.index).unwrap();
+                let device = state.devices.iter().nth(context.index).unwrap();
 
                 let item = DeviceWidget {
                     device,
@@ -211,7 +267,7 @@ impl<'a> Component for Connection<'a> {
                 (item, 1)
             });
 
-            let list = ListView::new(list_builder, state.aggregated_devices.len())
+            let list = ListView::new(list_builder, state.devices.len())
                 .infinite_scrolling(false)
                 .scrollbar(default_scrollbar())
                 .add_modifier(if state.active_device.is_some() {
@@ -225,11 +281,19 @@ impl<'a> Component for Connection<'a> {
             PlaceholderWidget::dark_gray("no devices").render(area, frame.buffer_mut());
         }
 
+        if self.is_discovery_popup_visible {
+            self.render_discovery_popup(
+                area.centered(Constraint::Length(50), Constraint::Length(20)),
+                frame.buffer_mut(),
+                state,
+            );
+        }
+
         if self.is_tcp_form_visible {
             PopupInputWidget::new(36).render(area, frame.buffer_mut(), &mut self.popup_input_state);
         }
 
-        if self.removing_tcp_device.is_some() {
+        if self.removing_device.is_some() {
             PopupConfirmWidget::new(
                 "Are you sure to remove this device?",
                 "confirm",
@@ -314,11 +378,15 @@ impl<'a> Widget for DeviceWidget<'a> {
         Self: Sized,
     {
         let spans = match self.device {
-            Device::Ble { name, .. } => vec![Span::from(" BLE ").black().on_blue(), Span::from(" "), Span::from(name)],
-            Device::Tcp(hostaddr) => vec![
+            Device::Ble(address) => vec![
+                Span::from(" BLE ").black().on_blue(),
+                Span::from(" "),
+                Span::from(address),
+            ],
+            Device::Tcp(address) => vec![
                 Span::from(" TCP ").black().on_green(),
                 Span::from(" "),
-                Span::from(hostaddr.to_string()),
+                Span::from(address.to_string()),
             ],
             Device::Serial(address) => vec![
                 Span::from(" COM ").black().on_magenta(),

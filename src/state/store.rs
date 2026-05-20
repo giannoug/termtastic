@@ -30,9 +30,6 @@ const NODES_VIEW_WATCHLIST: [&'static str; 4] = [
     name_of!(nodes_sort_by in State),
 ];
 
-const AGGREGATED_DEVICES_WATCHLIST: [&'static str; 2] =
-    [name_of!(tcp_devices in State), name_of!(discovered_devices in State)];
-
 pub struct Store {
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
     state_tx: watch::Sender<State>,
@@ -97,7 +94,7 @@ impl Store {
                 self.state_tx.send_modify(|state| {
                     state.active_tab = cfg.active_tab;
                     state.active_device = cfg.active_device;
-                    state.tcp_devices = cfg.tcp_devices;
+                    state.devices = cfg.devices;
                     state.nodes_sort_by = cfg.nodes_sort_by;
                     state.nodes_filter = cfg.nodes_filter;
                     state.ui_config = cfg.ui_config;
@@ -107,7 +104,7 @@ impl Store {
                     changed.extend([
                         name_of!(active_tab in State),
                         name_of!(active_device in State),
-                        name_of!(tcp_devices in State),
+                        name_of!(devices in State),
                         name_of!(nodes_sort_by in State),
                         name_of!(nodes_filter in State),
                         name_of!(ui_config in State),
@@ -241,11 +238,26 @@ impl Store {
                     changed.push(name_of!(logs in State));
                 });
             }
+            StateAction::DevicesDiscoveredAdd(device) => {
+                self.state_tx.send_if_modified(|state| {
+                    if state.devices_discovered.insert(device) {
+                        changed.push(name_of!(devices_discovered in State));
+
+                        return true;
+                    }
+
+                    false
+                });
+            }
             StateAction::DeviceDiscoveringStart => {
                 self.state_tx.send_modify(|state| {
                     state.device_discovering_state = DeviceDiscoveringState::Discovering;
+                    state.devices_discovered.clear();
 
-                    changed.push(name_of!(device_discovering_state in State));
+                    changed.extend([
+                        name_of!(device_discovering_state in State),
+                        name_of!(devices_discovered in State),
+                    ]);
                 });
             }
             StateAction::DeviceDiscoveringFail(error) => {
@@ -255,28 +267,33 @@ impl Store {
                     changed.push(name_of!(device_discovering_state in State));
                 });
             }
-            StateAction::DeviceDiscoveringDone(devices) => {
+            StateAction::DeviceDiscoveringDone => {
                 self.state_tx.send_modify(|state| {
-                    state.discovered_devices = devices;
                     state.device_discovering_state = DeviceDiscoveringState::Done;
 
-                    changed.extend([
-                        name_of!(discovered_devices in State),
-                        name_of!(device_discovering_state in State),
-                    ]);
+                    changed.push(name_of!(device_discovering_state in State));
                 });
             }
-            StateAction::DevicesAddTcp(hostaddr) => {
+            StateAction::DevicesAdd(device) => {
                 self.state_tx.send_if_modified(|state| {
-                    if state.tcp_devices.contains(&hostaddr) {
-                        return false;
+                    if state.devices.insert(device) {
+                        changed.push(name_of!(devices in State));
+
+                        return true;
                     }
 
-                    state.tcp_devices.push(hostaddr);
+                    false
+                });
+            }
+            StateAction::DevicesRemove(device) => {
+                self.state_tx.send_if_modified(|state| {
+                    if state.devices.remove(&device) {
+                        changed.push(name_of!(devices in State));
 
-                    changed.push(name_of!(tcp_devices in State));
+                        return true;
+                    }
 
-                    true
+                    false
                 });
             }
             StateAction::DeviceConfigSet(variant) => {
@@ -368,19 +385,6 @@ impl Store {
                     }
 
                     changed.push(name_of!(device_module_config in State));
-                });
-            }
-            StateAction::DevicesRemoveTcp(hostaddr) => {
-                self.state_tx.send_if_modified(|state| {
-                    let Some(index) = state.tcp_devices.iter().position(|addr| addr == &hostaddr) else {
-                        return false;
-                    };
-
-                    state.tcp_devices.remove(index);
-
-                    changed.push(name_of!(tcp_devices in State));
-
-                    true
                 });
             }
             StateAction::NodeInit(node) => {
@@ -807,14 +811,6 @@ impl Store {
                     state.update_nodes_view();
 
                     changed.push(name_of!(nodes_view in State));
-                })
-            }
-
-            if changed.iter().any(|field| AGGREGATED_DEVICES_WATCHLIST.contains(field)) {
-                self.state_tx.send_modify(|state| {
-                    state.update_aggregated_devices();
-
-                    changed.push(name_of!(aggregated_devices in State));
                 })
             }
 

@@ -6,10 +6,17 @@ use meshtastic::protobufs::FromRadio;
 use meshtastic::utils;
 use tokio::sync::mpsc;
 
+const MESHTASTIC_DEFAULT_TCP_PORT: u16 = 4403;
+
 pub async fn connect_via_tcp(
-    hostaddr: HostAddr<String>,
+    address: HostAddr<String>,
 ) -> anyhow::Result<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)> {
-    let stream_handle = utils::stream::build_tcp_stream(hostaddr.to_string()).await?;
+    let stream_handle = utils::stream::build_tcp_stream(if !address.has_port() {
+        address.with_port(MESHTASTIC_DEFAULT_TCP_PORT).to_string()
+    } else {
+        address.to_string()
+    })
+    .await?;
 
     let stream_api = StreamApi::new();
     let (from_radio_receiver, connected_stream_api) = stream_api.connect(stream_handle).await;

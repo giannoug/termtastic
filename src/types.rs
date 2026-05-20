@@ -6,7 +6,11 @@ use hostaddr::HostAddr;
 use meshtastic::protobufs::{channel, config, module_config, routing};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
-use std::{collections::HashMap, fmt::Debug, time::Instant};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Debug,
+    time::Instant,
+};
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 use tracing::Level;
 
@@ -17,7 +21,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub active_device: Option<Device>,
     #[serde(default)]
-    pub tcp_devices: Vec<HostAddr<String>>,
+    pub devices: BTreeSet<Device>,
     #[serde(default)]
     pub nodes_sort_by: NodesSortBy,
     #[serde(default)]
@@ -33,7 +37,7 @@ impl From<&State> for AppConfig {
         Self {
             active_tab: value.active_tab,
             active_device: value.active_device.clone(),
-            tcp_devices: value.tcp_devices.clone(),
+            devices: value.devices.clone(),
             nodes_sort_by: value.nodes_sort_by.clone(),
             nodes_filter: value.nodes_filter.clone(),
             ui_config: value.ui_config.clone(),
@@ -56,21 +60,9 @@ pub struct UiConfig {
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
-    ChannelSelected(u32),
     ChannelPurgeRequested(u32),
-    SwitchChannelRequested,
-    DbLoadRequested(u32),
-    DbCompactRequested,
-    DeviceRediscoverRequested,
-    DeviceRebootRequested,
-    DeviceShutdownRequested,
-    DeviceSelected(Device),
-    DisconnectionRequested,
-    InitializationRequested,
-    NextTabRequested,
-    PreviousTabRequested,
-    TcpDeviceRemoved(HostAddr<String>),
-    TcpDeviceSubmitted(HostAddr<String>),
+    ChannelSelected(u32),
+    ChannelSwitchRequested,
     ChatMessageSubmitted {
         text: String,
         reply_message_id: Option<u32>,
@@ -80,26 +72,38 @@ pub enum AppEvent {
         reply_message_id: Option<u32>,
     },
     ConfigLoaded,
-    SplashLogoRequested,
+    CopyToClipboardRequested(String),
+    DbCompactRequested,
+    DbLoadRequested(u32),
+    DeviceRebootRequested,
+    DeviceRediscoverRequested,
+    DeviceRemoveRequested(Device),
+    DeviceSelected(Device),
+    DeviceShutdownRequested,
+    DeviceSubmitted(Device),
     DirectChatRequested(u32),
-    SettingsFormSelected(FormId),
+    DisconnectionRequested,
+    InitializationRequested,
+    NodeDeleteRequested(u32),
+    NodeInfoBroadcastRequested,
+    NodeInfoPopupCloseRequested,
+    NodeInfoPopupRequested(u32),
+    NodesFilterChanged(String),
+    NodesSortByNextRequested,
+    NodesSortByPrevRequested,
     SettingsFormCancelRequested,
+    SettingsFormItemSubmitted(&'static FormItem, FormValue),
     SettingsFormResetRequested,
     SettingsFormSaveRequested(FormId),
-    SettingsFormItemSubmitted(&'static FormItem, FormValue),
-    CopyToClipboardRequested(String),
-    NodesSortByPrevRequested,
-    NodesSortByNextRequested,
-    NodesFilterChanged(String),
-    NodeInfoBroadcastRequested,
-    NodeInfoPopupRequested(u32),
-    NodeInfoPopupCloseRequested,
-    NodeDeleteRequested(u32),
+    SettingsFormSelected(FormId),
+    SplashLogoRequested,
+    TabNextRequested,
+    TabPreviousRequested,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
 pub enum Device {
-    Ble { name: String, address: String },
+    Ble(String),
     Tcp(HostAddr<String>),
     Serial(String),
 }
@@ -109,16 +113,11 @@ impl Ord for Device {
         match (self, other) {
             (Device::Tcp { .. }, Device::Ble { .. }) => std::cmp::Ordering::Less,
             (Device::Tcp { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (Device::Tcp(hostaddr), Device::Tcp(other_hostaddr)) => hostaddr.cmp(other_hostaddr),
+            (Device::Tcp(address), Device::Tcp(other_address)) => address.cmp(other_address),
 
             (Device::Ble { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Ble { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (
-                Device::Ble { address, .. },
-                Device::Ble {
-                    address: other_address, ..
-                },
-            ) => address.cmp(other_address),
+            (Device::Ble(address), Device::Ble(other_address)) => address.cmp(other_address),
 
             (Device::Serial { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Serial { .. }, Device::Ble { .. }) => std::cmp::Ordering::Greater,

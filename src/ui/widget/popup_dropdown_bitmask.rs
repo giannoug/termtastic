@@ -83,13 +83,7 @@ impl<'a> StatefulWidget for PopupDropdownBitmaskWidget<'a> {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let height = state.variants.len().min(MAX_VISIBLE_DROPDOWN_ITEMS) as u16 + 2;
-
-        let popup_area = Rect {
-            x: area.x + area.width / 2 - self.width / 2,
-            y: area.y + area.height / 2 - height / 2,
-            width: self.width,
-            height,
-        };
+        let popup_area = area.centered(Constraint::Length(self.width), Constraint::Length(height));
 
         let popup_block = Block::bordered()
             .border_type(BorderType::Thick)

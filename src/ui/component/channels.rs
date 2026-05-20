@@ -57,16 +57,15 @@ impl<'a> Component for Channels {
             return Ok(false);
         }
 
+        if self
+            .list_state
+            .handle_navigation_events(event, self.channels(state).count())
+        {
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
                 KeyCode::Enter => {
                     if let Some(channel) = self.list_state.selected.and_then(|i| self.channels(state).nth(i)) {
                         emit(AppEvent::ChannelSelected(channel.key))?;
@@ -83,17 +82,6 @@ impl<'a> Component for Channels {
                 }
                 KeyCode::Tab | KeyCode::BackTab => {
                     return Ok(false);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-                    return Ok(true);
                 }
                 _ => {}
             },

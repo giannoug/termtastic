@@ -99,11 +99,11 @@ impl<'a> Component for Layout<'a> {
         match event {
             Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
                 KeyCode::Tab => {
-                    emit(AppEvent::NextTabRequested)?;
+                    emit(AppEvent::TabNextRequested)?;
                     return Ok(true);
                 }
                 KeyCode::BackTab => {
-                    emit(AppEvent::PreviousTabRequested)?;
+                    emit(AppEvent::TabPreviousRequested)?;
                     return Ok(true);
                 }
                 KeyCode::F(12) => {
@@ -163,12 +163,7 @@ impl<'a> Component for Layout<'a> {
 
         // node info popup
         if let Some(node_key) = state.nodeinfo_popup {
-            let popup_area = Rect {
-                x: area.x + area.width / 2 - 60 / 2,
-                y: area.y + area.height / 2 - 20 / 2,
-                width: 60,
-                height: 20,
-            };
+            let popup_area = area.centered(Constraint::Length(60), Constraint::Length(20));
 
             Clear.render(popup_area, frame.buffer_mut());
 
@@ -181,15 +176,10 @@ impl<'a> Component for Layout<'a> {
 
         // splash logo
         if state.splash_logo {
-            let logo_width = self.logo.width() as u16;
-            let logo_height = self.logo.height() as u16;
-
-            let logo_popup_area = Rect {
-                x: area.x + area.width / 2 - logo_width / 2,
-                y: area.y + area.height / 2 - logo_height / 2,
-                width: logo_width,
-                height: logo_height,
-            };
+            let logo_popup_area = area.centered(
+                Constraint::Length(self.logo.width() as u16),
+                Constraint::Length(self.logo.height() as u16),
+            );
 
             (&self.logo).render(logo_popup_area, frame.buffer_mut());
         }
