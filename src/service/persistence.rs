@@ -20,7 +20,7 @@ pub struct PersistenceService<'a> {
     app_event_rx: broadcast::Receiver<AppEvent>,
     forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
-    file_path: PathBuf,
+    data_dir: PathBuf,
     repository: Option<Repository<'a>>,
 }
 
@@ -37,7 +37,7 @@ impl<'a> PersistenceService<'a> {
                 app_event_rx,
                 forward_state_action_tx,
                 state_action_rx,
-                file_path: data_dir.join(format!("{}.db", APP_NAME)),
+                data_dir,
                 repository: None,
             },
             state_action_tx,
@@ -67,28 +67,57 @@ impl<'a> PersistenceService<'a> {
 
         match &action {
             StateAction::NodeInit(node) => {
-                repository.nodes_upsert(node.into())?;
+                if let Err(e) = repository.nodes_upsert(node.into()) {
+                    tracing::error!("node init failed: {}", e);
+
+                    self.forward_state_action_tx
+                        .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                }
             }
             StateAction::NodeUpdate(node) => {
-                repository.nodes_upsert(node.into())?;
+                if let Err(e) = repository.nodes_upsert(node.into()) {
+                    tracing::error!("node update failed: {}", e);
+
+                    self.forward_state_action_tx
+                        .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                }
             }
             StateAction::NodeDelete(node_key) => {
-                repository.nodes_remove(*node_key)?;
+                if let Err(e) = repository.nodes_remove(*node_key) {
+                    tracing::error!("node delete failed: {}", e);
+
+                    self.forward_state_action_tx
+                        .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                }
             }
             StateAction::NodeUpdateLastHeard {
                 node_key,
                 hops,
                 snr,
                 rssi,
-            } => {
-                if let Some(mut node) = repository.nodes_find_by_key(*node_key)? {
+            } => match repository.nodes_find_by_key(*node_key) {
+                Ok(Some(mut node)) => {
                     node.hops = Some(*hops);
                     node.snr = *snr;
                     node.rssi = Some(*rssi);
 
-                    repository.nodes_upsert(node)?;
+                    if let Err(e) = repository.nodes_upsert(node) {
+                        tracing::error!("node update failed: {}", e);
+
+                        self.forward_state_action_tx
+                            .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                    }
                 }
-            }
+                Ok(None) => {
+                    tracing::debug!("node {} not found for updating last heard – skip", node_key);
+                }
+                Err(e) => {
+                    tracing::error!("node find by key failed: {}", e);
+
+                    self.forward_state_action_tx
+                        .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                }
+            },
             _ => {}
         };
 
@@ -99,12 +128,10 @@ impl<'a> PersistenceService<'a> {
 
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            Ok(AppEvent::InitializationRequested) => {
-                tracing::info!("DB initializing started. Path: {}", self.file_path.display());
+            Ok(AppEvent::DbLoadRequested(node_key)) => {
+                let db_file = self.data_dir.join(format!("{}_{}.db", APP_NAME, node_key));
 
-                self.forward_state_action_tx.send(StateAction::DbInitStart)?;
-
-                match create_repository(&self.file_path, DB_CACHE_SIZE) {
+                match create_repository(db_file, DB_CACHE_SIZE) {
                     Ok(mut repository) => match repository.check_integrity() {
                         Ok(res) => {
                             if res {
@@ -114,37 +141,31 @@ impl<'a> PersistenceService<'a> {
                             }
 
                             self.repository = Some(repository);
-                            self.forward_state_action_tx.send(StateAction::DbInitSuccess)?;
                         }
                         Err(e) => {
                             tracing::error!("DB integrity check failed: {}", e);
 
                             self.forward_state_action_tx
-                                .send(StateAction::DbInitFail(e.to_string()))?;
+                                .send(StateAction::Toast(Toast::error("DB is broken")))?;
                         }
                     },
                     Err(e) => {
                         tracing::error!("DB initialization failed: {}", e);
 
                         self.forward_state_action_tx
-                            .send(StateAction::DbInitFail(e.to_string()))?;
-
-                        self.forward_state_action_tx
                             .send(StateAction::Toast(Toast::error("DB initialization failed")))?;
                     }
                 }
-
-                tracing::info!("DB initializing finished");
 
                 self.load_data()?;
             }
             Ok(AppEvent::DbCompactRequested) => {
                 if let Some(repository) = self.repository.as_mut() {
-                    let old_size = fs::metadata(&self.file_path)?.len();
+                    let old_size = fs::metadata(repository.get_file_path())?.len();
 
                     match repository.compact() {
                         Ok(true) => {
-                            let new_size = fs::metadata(&self.file_path)?.len();
+                            let new_size = fs::metadata(repository.get_file_path())?.len();
 
                             tracing::info!(
                                 "DB compacted, old size: {}KB, new size: {}KB",
@@ -189,10 +210,6 @@ impl<'a> PersistenceService<'a> {
             return Ok(());
         };
 
-        tracing::info!("DB data load started");
-
-        self.forward_state_action_tx.send(StateAction::DbLoadStart)?;
-
         let nodes: Vec<Node> = match repository.nodes_get_all() {
             Ok(nodes) => {
                 tracing::info!("nodes loaded from DB: {}", nodes.len());
@@ -203,19 +220,13 @@ impl<'a> PersistenceService<'a> {
                 tracing::error!("nodes load failed: {}", e);
 
                 self.forward_state_action_tx
-                    .send(StateAction::DbLoadFail(e.to_string()))?;
-
-                self.forward_state_action_tx
                     .send(StateAction::Toast(Toast::error("nodes not loaded from DB")))?;
 
                 return Ok(());
             }
         };
 
-        tracing::info!("DB data load finished");
-
-        self.forward_state_action_tx
-            .send(StateAction::DbLoadSuccess { nodes })?;
+        self.forward_state_action_tx.send(StateAction::DbDataLoaded { nodes })?;
 
         self.forward_state_action_tx
             .send(StateAction::Toast(Toast::normal("DB data loaded")))?;

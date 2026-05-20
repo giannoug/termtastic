@@ -63,8 +63,8 @@ impl<'a> Component for Layout<'a> {
                     Ok(())
                 }
                 NodeInfoWidgetEvent::PublicKeyCopyRequested => {
-                    if let Some(node) = state.nodes.get(&node_key) {
-                        emit(AppEvent::CopyToClipboardRequested(node.public_key.base64_encode()))?;
+                    if let Some(user) = state.nodes.get(&node_key).and_then(|n| n.user.as_ref()) {
+                        emit(AppEvent::CopyToClipboardRequested(user.public_key.base64_encode()))?;
                     }
 
                     Ok(())

@@ -155,8 +155,8 @@ impl<'a> NodeInfoWidget<'a> {
             Line::from(hops_to_spans(node, self.is_my_node)),
             Line::default(),
             Line::from(Span::from("public key").dark_gray()),
-            Line::from(if !node.public_key.is_empty() {
-                Span::from(format!("{}-byte", node.public_key.len())).green()
+            Line::from(if let Some(user) = node.user.as_ref() {
+                Span::from(format!("{}-byte", user.public_key.len())).green()
             } else {
                 "none".to_span().red()
             }),
@@ -166,7 +166,7 @@ impl<'a> NodeInfoWidget<'a> {
         // third column
         Paragraph::new(vec![
             Line::from(Span::from("user ID").dark_gray()),
-            Line::from(node.id.to_span()),
+            Line::from(node.id().to_span()),
             Line::default(),
             Line::from(Span::from("uptime").dark_gray()),
             Line::from("no data".to_span()),

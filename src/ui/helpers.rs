@@ -276,7 +276,7 @@ pub fn short_name_to_span(node: &Node, my: bool) -> text::Span<'_> {
             Style::new().white().on_blue()
         } else if node.user.is_none() {
             Style::new().on_yellow()
-        } else if node.id == "?" {
+        } else if node.id() == "?" {
             Style::new().on_red()
         } else {
             Style::new().on_green()

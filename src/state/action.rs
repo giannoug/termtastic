@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use hostaddr::HostAddr;
-use meshtastic::protobufs::{config, module_config, routing, User};
+use meshtastic::protobufs::{config, module_config, routing};
 
 use crate::types::{
     AppConfig, Channel, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, MessageReaction, Node,
-    NodesSortBy, Toast, UiConfig,
+    NodeUser, NodesSortBy, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -20,12 +20,7 @@ pub enum StateAction {
     ConnectionStop,
     ConnectionSuccess,
     ReconnectionBackoffSet(Duration),
-    DbInitStart,
-    DbInitFail(String),
-    DbInitSuccess,
-    DbLoadStart,
-    DbLoadFail(String),
-    DbLoadSuccess {
+    DbDataLoaded {
         nodes: Vec<Node>,
     },
     DeviceActiveSet(Device),
@@ -35,7 +30,6 @@ pub enum StateAction {
     DeviceDiscoveringDone(Vec<Device>),
     DeviceConfigSet(config::PayloadVariant),
     DeviceModuleConfigSet(module_config::PayloadVariant),
-    DeviceUserSet(User),
     DevicesRemoveTcp(HostAddr<String>),
     LogRecordAdd(LogRecord),
     DirectChatStart(u32),
@@ -63,6 +57,7 @@ pub enum StateAction {
         rssi: i32,
     },
     NodeDelete(u32),
+    NodeOwnerSet(NodeUser),
     NodesSortBySet(NodesSortBy),
     NodesFilterSet(String),
     NodesOnlineSet(u16),

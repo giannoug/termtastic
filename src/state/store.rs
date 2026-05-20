@@ -1,6 +1,7 @@
 use chrono::Utc;
 use meshtastic::protobufs::{config, module_config};
 use nameof::name_of;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -11,7 +12,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::types::{ChannelRole, DbState};
+use crate::types::ChannelRole;
 use crate::{
     state::{State, StateAction},
     types::{Channel, ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
@@ -21,6 +22,16 @@ const TICK_INTERVAL_MILLIS: u64 = 33;
 const RX_TIMEOUT_MILLIS: u128 = 250;
 const TOAST_QUICK_TIMEOUT_MILLIS: u128 = 500;
 const SPLASH_LOGO_TIMEOUT_MILLIS: u128 = 1500;
+
+const NODES_VIEW_WATCHLIST: [&'static str; 4] = [
+    name_of!(my_node_key in State),
+    name_of!(nodes in State),
+    name_of!(nodes_filter in State),
+    name_of!(nodes_sort_by in State),
+];
+
+const AGGREGATED_DEVICES_WATCHLIST: [&'static str; 2] =
+    [name_of!(tcp_devices in State), name_of!(discovered_devices in State)];
 
 pub struct Store {
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
@@ -79,7 +90,7 @@ impl Store {
                     state.splash_logo = true;
                     state.splash_logo_t = Instant::now();
 
-                    changed.extend(vec![name_of!(splash_logo in State), name_of!(splash_logo_t in State)]);
+                    changed.extend([name_of!(splash_logo in State), name_of!(splash_logo_t in State)]);
                 });
             }
             StateAction::AppConfigApply(cfg) => {
@@ -92,9 +103,8 @@ impl Store {
                     state.ui_config = cfg.ui_config;
                     state.my_node_key = cfg.my_node_key;
                     state.config_loaded = true;
-                    state.update_aggregated_devices();
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(active_tab in State),
                         name_of!(active_device in State),
                         name_of!(tcp_devices in State),
@@ -103,7 +113,6 @@ impl Store {
                         name_of!(ui_config in State),
                         name_of!(my_node_key in State),
                         name_of!(config_loaded in State),
-                        name_of!(aggregated_devices in State),
                     ]);
                 });
             }
@@ -112,7 +121,7 @@ impl Store {
                     state.active_tab = state.active_tab.next();
                     state.need_clear_frame = true;
 
-                    changed.extend(vec![name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
+                    changed.extend([name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
                 });
             }
             StateAction::TabSwitchToPrevious => {
@@ -120,7 +129,7 @@ impl Store {
                     state.active_tab = state.active_tab.prev();
                     state.need_clear_frame = true;
 
-                    changed.extend(vec![name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
+                    changed.extend([name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
                 });
             }
             StateAction::DeviceActiveSet(device) => {
@@ -136,7 +145,7 @@ impl Store {
                     state.connection_attempt += 1;
                     state.reconnection_backoff = None;
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(connection_state in State),
                         name_of!(connection_attempt in State),
                         name_of!(reconnection_backoff in State),
@@ -163,7 +172,8 @@ impl Store {
                     state.connection_state = Default::default();
                     state.device_config = Default::default();
                     state.device_module_config = Default::default();
-                    state.device_user = Default::default();
+                    state.nodes_view.clear();
+                    state.nodes.clear();
                     state.online_nodes = 0;
                     state.reconnection_backoff = None;
                     state.settings_form_data = None;
@@ -171,14 +181,15 @@ impl Store {
                     state.settings_form_original_data = None;
                     state.settings_form_state = Default::default();
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(active_device in State),
                         name_of!(channels in State),
                         name_of!(connection_attempt in State),
                         name_of!(connection_state in State),
                         name_of!(device_config in State),
                         name_of!(device_module_config in State),
-                        name_of!(device_user in State),
+                        name_of!(nodes_view in State),
+                        name_of!(nodes in State),
                         name_of!(online_nodes in State),
                         name_of!(reconnection_backoff in State),
                         name_of!(settings_form_data in State),
@@ -194,54 +205,26 @@ impl Store {
                     state.connection_attempt = 0;
                     state.reconnection_backoff = None;
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(connection_state in State),
                         name_of!(connection_attempt in State),
                         name_of!(reconnection_backoff in State),
                     ]);
                 });
             }
-            StateAction::DbInitStart => {
+            StateAction::DbDataLoaded { nodes } => {
                 self.state_tx.send_modify(|state| {
-                    state.db_state = DbState::InitializingStarted;
+                    for node in nodes {
+                        if let Some(existing_node) = state.nodes.get(&node.key) {
+                            if node.last_heard > existing_node.last_heard {
+                                state.nodes.insert(node.key, node);
+                            }
+                        } else {
+                            state.nodes.insert(node.key, node);
+                        }
+                    }
 
-                    changed.push(name_of!(db_state in State));
-                });
-            }
-            StateAction::DbInitFail(e) => {
-                self.state_tx.send_modify(|state| {
-                    state.db_state = DbState::InitializingFailed(e);
-
-                    changed.push(name_of!(db_state in State));
-                });
-            }
-            StateAction::DbInitSuccess => {
-                self.state_tx.send_modify(|state| {
-                    state.db_state = DbState::InitializingDone;
-
-                    changed.push(name_of!(db_state in State));
-                });
-            }
-            StateAction::DbLoadStart => {
-                self.state_tx.send_modify(|state| {
-                    state.db_state = DbState::DataLoadingStarted;
-
-                    changed.push(name_of!(db_state in State));
-                });
-            }
-            StateAction::DbLoadFail(e) => {
-                self.state_tx.send_modify(|state| {
-                    state.db_state = DbState::DataLoadingFailed(e);
-
-                    changed.push(name_of!(db_state in State));
-                });
-            }
-            StateAction::DbLoadSuccess { nodes } => {
-                self.state_tx.send_modify(|state| {
-                    state.nodes = nodes.into_iter().map(|n| (n.key, n)).collect();
-                    state.db_state = DbState::DataLoadingDone;
-
-                    changed.extend(vec![name_of!(nodes in State), name_of!(db_state in State)]);
+                    changed.extend([name_of!(nodes in State)]);
                 });
             }
             StateAction::ReconnectionBackoffSet(duration) => {
@@ -276,12 +259,10 @@ impl Store {
                 self.state_tx.send_modify(|state| {
                     state.discovered_devices = devices;
                     state.device_discovering_state = DeviceDiscoveringState::Done;
-                    state.update_aggregated_devices();
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(discovered_devices in State),
                         name_of!(device_discovering_state in State),
-                        name_of!(aggregated_devices in State),
                     ]);
                 });
             }
@@ -292,12 +273,8 @@ impl Store {
                     }
 
                     state.tcp_devices.push(hostaddr);
-                    state.update_aggregated_devices();
 
-                    changed.extend(vec![
-                        name_of!(tcp_devices in State),
-                        name_of!(aggregated_devices in State),
-                    ]);
+                    changed.push(name_of!(tcp_devices in State));
 
                     true
                 });
@@ -393,13 +370,6 @@ impl Store {
                     changed.push(name_of!(device_module_config in State));
                 });
             }
-            StateAction::DeviceUserSet(user) => {
-                self.state_tx.send_modify(|state| {
-                    state.device_user = Some(user);
-
-                    changed.push(name_of!(device_user in State));
-                });
-            }
             StateAction::DevicesRemoveTcp(hostaddr) => {
                 self.state_tx.send_if_modified(|state| {
                     let Some(index) = state.tcp_devices.iter().position(|addr| addr == &hostaddr) else {
@@ -407,12 +377,8 @@ impl Store {
                     };
 
                     state.tcp_devices.remove(index);
-                    state.update_aggregated_devices();
 
-                    changed.extend(vec![
-                        name_of!(tcp_devices in State),
-                        name_of!(aggregated_devices in State),
-                    ]);
+                    changed.push(name_of!(tcp_devices in State));
 
                     true
                 });
@@ -465,9 +431,6 @@ impl Store {
                     existing_node.last_heard = node.last_heard;
                     existing_node.snr = node.snr;
                     existing_node.rssi = node.rssi;
-                    if existing_node.public_key.is_empty() {
-                        existing_node.public_key = node.public_key;
-                    }
                     existing_node.update_fulltext();
 
                     changed.push(name_of!(nodes in State));
@@ -520,6 +483,20 @@ impl Store {
                     true
                 });
             }
+            StateAction::NodeOwnerSet(user) => {
+                self.state_tx.send_if_modified(|state| {
+                    if let Some(node) = state.nodes.get_mut(&state.my_node_key.expect("should be Some")) {
+                        state.my_node_user_hash = calculate_hash(&user);
+                        node.user = Some(user);
+
+                        changed.extend([name_of!(my_node_user_hash in State), name_of!(nodes in State)]);
+
+                        return true;
+                    }
+
+                    false
+                });
+            }
             StateAction::ChannelSet(key, channel) => {
                 self.state_tx.send_modify(|state| {
                     state.channels.insert(key, channel);
@@ -561,7 +538,7 @@ impl Store {
                             state.channels.remove(&key);
                             state.active_channel_key = None;
 
-                            changed.extend(vec![
+                            changed.extend([
                                 name_of!(messages in State),
                                 name_of!(channels in State),
                                 name_of!(active_channel_key in State),
@@ -578,7 +555,7 @@ impl Store {
                     state.rx_t = Instant::now();
                     state.rx = true;
 
-                    changed.extend(vec![name_of!(rx in State), name_of!(rx_t in State)]);
+                    changed.extend([name_of!(rx in State), name_of!(rx_t in State)]);
                 });
             }
             StateAction::NodesSortBySet(sort_by) => {
@@ -626,10 +603,7 @@ impl Store {
                     state.active_channel_key = Some(node_key);
                     state.active_tab = Tab::Chat;
 
-                    changed.extend(vec![
-                        name_of!(active_channel_key in State),
-                        name_of!(active_tab in State),
-                    ]);
+                    changed.extend([name_of!(active_channel_key in State), name_of!(active_tab in State)]);
                 });
             }
             StateAction::MessageAdd(channel_key, message) => {
@@ -714,7 +688,7 @@ impl Store {
                     state.settings_form_is_changed = false;
                     state.settings_form_state = SettingsFormState::Loading { id };
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_original_data in State),
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
@@ -729,7 +703,7 @@ impl Store {
                     state.settings_form_is_changed = false;
                     state.settings_form_state = SettingsFormState::LoadingFailed { id, error };
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_original_data in State),
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
@@ -744,7 +718,7 @@ impl Store {
                     state.settings_form_is_changed = false;
                     state.settings_form_state = SettingsFormState::Loaded { id };
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_original_data in State),
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
@@ -773,7 +747,7 @@ impl Store {
                     state.settings_form_is_changed = false;
                     state.settings_form_state = SettingsFormState::Inactive;
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_original_data in State),
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
@@ -786,7 +760,7 @@ impl Store {
                     state.settings_form_data = state.settings_form_original_data.clone();
                     state.settings_form_is_changed = false;
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
                     ]);
@@ -810,7 +784,7 @@ impl Store {
 
                     state.settings_form_is_changed = state.settings_form_data != state.settings_form_original_data;
 
-                    changed.extend(vec![
+                    changed.extend([
                         name_of!(settings_form_data in State),
                         name_of!(settings_form_is_changed in State),
                     ]);
@@ -828,18 +802,19 @@ impl Store {
         }
 
         if !changed.is_empty() {
-            let watch_fields = [
-                name_of!(my_node_key in State),
-                name_of!(nodes in State),
-                name_of!(nodes_filter in State),
-                name_of!(nodes_sort_by in State),
-            ];
-
-            if changed.iter().any(|field| watch_fields.contains(field)) {
+            if changed.iter().any(|field| NODES_VIEW_WATCHLIST.contains(field)) {
                 self.state_tx.send_modify(|state| {
                     state.update_nodes_view();
 
                     changed.push(name_of!(nodes_view in State));
+                })
+            }
+
+            if changed.iter().any(|field| AGGREGATED_DEVICES_WATCHLIST.contains(field)) {
+                self.state_tx.send_modify(|state| {
+                    state.update_aggregated_devices();
+
+                    changed.push(name_of!(aggregated_devices in State));
                 })
             }
 
@@ -884,7 +859,7 @@ impl Store {
                 state.toast = state.toast_queue.pop_front();
                 state.toast_t = Instant::now();
 
-                changed.extend(vec![name_of!(toast in State), name_of!(toast_t in State)]);
+                changed.extend([name_of!(toast in State), name_of!(toast_t in State)]);
             }
 
             !changed.is_empty()
@@ -896,4 +871,10 @@ impl Store {
 
         Ok(())
     }
+}
+
+fn calculate_hash<T: Hash>(t: &T) -> u64 {
+    let mut s = DefaultHasher::new();
+    t.hash(&mut s);
+    s.finish()
 }

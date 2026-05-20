@@ -1,20 +1,20 @@
 use std::time::{Duration, Instant};
 
 use futures::stream::{self, StreamExt};
-use meshtastic::protobufs::from_radio::PayloadVariant;
+use meshtastic::protobufs::from_radio;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time;
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::{AppEvent, ConnectionState, DbState, Device, Toast};
+use crate::types::{AppEvent, ConnectionState, Device, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
 };
 
 const CONNECTION_CHECK_INTERVAL_MILLIS: u64 = 250;
-const RECONNECTION_BACKOFF_BASE_MILLIS: u64 = 1000;
+const RECONNECTION_BACKOFF_BASE_MILLIS: u64 = 1_000;
 const RECONNECTION_BACKOFF_MAX_MILLIS: u64 = 30_000;
 
 pub struct ConnectionService {
@@ -164,14 +164,20 @@ impl ConnectionService {
                         .send(StateAction::Toast(Toast::normal("disconnected")))?;
                 }
                 MeshtasticEvent::IncomingPacket(packet) => {
-                    match packet {
-                        PayloadVariant::ConfigCompleteId(_) => {
+                    match &packet {
+                        from_radio::PayloadVariant::MyInfo(my_info) => {
+                            self.state_action_tx
+                                .send(StateAction::MyNodeKeySet(my_info.my_node_num))?;
+
+                            self.app_event_tx.send(AppEvent::DbLoadRequested(my_info.my_node_num))?;
+                        }
+                        from_radio::PayloadVariant::ConfigCompleteId(_) => {
                             self.state_action_tx.send(StateAction::ConnectionSuccess)?;
 
                             self.state_action_tx
                                 .send(StateAction::Toast(Toast::success("connected")))?;
                         }
-                        PayloadVariant::Rebooted(true) => {
+                        from_radio::PayloadVariant::Rebooted(true) => {
                             self.state_action_tx
                                 .send(StateAction::Toast(Toast::success("device has been rebooted")))?;
                         }
@@ -180,7 +186,7 @@ impl ConnectionService {
 
                     self.state_action_tx.send(StateAction::RxTrigger)?;
 
-                    if let PayloadVariant::Packet(p) = packet {
+                    if let from_radio::PayloadVariant::Packet(p) = packet {
                         let state = &self.state_rx.borrow();
                         let from = state.nodes.get(&p.from).and_then(|n| Some(n.short_name()));
                         let to = state.nodes.get(&p.to).and_then(|n| Some(n.short_name()));
@@ -204,10 +210,10 @@ impl ConnectionService {
     fn check_connection(&self) -> anyhow::Result<()> {
         let state = &self.state_rx.borrow();
 
-        match (&state.active_device, &state.connection_state, &state.db_state) {
-            (Some(device), ConnectionState::ProblemDetected { since, .. }, DbState::DataLoadingDone) => {
+        match (&state.active_device, &state.connection_state) {
+            (Some(device), ConnectionState::ProblemDetected { since, .. }) => {
                 let backoff_duration = Duration::from_millis(
-                    (RECONNECTION_BACKOFF_BASE_MILLIS * 2_u64.pow(state.connection_attempt as u32))
+                    (RECONNECTION_BACKOFF_BASE_MILLIS * 2_u64.saturating_pow(state.connection_attempt))
                         .min(RECONNECTION_BACKOFF_MAX_MILLIS),
                 );
 
@@ -220,7 +226,7 @@ impl ConnectionService {
                     self.connect(device)?;
                 }
             }
-            (Some(device), ConnectionState::NotConnected, DbState::DataLoadingDone) => self.connect(device)?,
+            (Some(device), ConnectionState::NotConnected) => self.connect(device)?,
             _ => {}
         }
 

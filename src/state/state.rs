@@ -3,7 +3,6 @@ use crate::types::*;
 use chrono::{DateTime, Utc};
 use hostaddr::HostAddr;
 use itertools::Itertools;
-use meshtastic::protobufs::User;
 use ordermap::OrderMap;
 use std::cmp::Ordering;
 use std::{
@@ -18,18 +17,17 @@ pub struct State {
     pub active_tab: Tab,
     pub aggregated_devices: Vec<Device>,
     pub channels: OrderMap<u32, Channel>,
-    pub connection_attempt: u16,
+    pub connection_attempt: u32,
     pub connection_state: ConnectionState,
     pub config_loaded: bool,
-    pub db_state: DbState,
     pub device_config: DeviceConfig,
     pub device_discovering_state: DeviceDiscoveringState,
     pub device_module_config: DeviceModuleConfig,
-    pub device_user: Option<User>,
     pub discovered_devices: Vec<Device>,
     pub logs: Vec<LogRecord>,
     pub messages: HashMap<u32, VecDeque<Message>>,
     pub my_node_key: Option<u32>,
+    pub my_node_user_hash: u64,
     pub need_clear_frame: bool,
     pub nodeinfo_popup: Option<u32>,
     pub nodes: HashMap<u32, Node>,
@@ -64,15 +62,14 @@ impl Default for State {
             connection_attempt: 0,
             connection_state: Default::default(),
             config_loaded: false,
-            db_state: Default::default(),
             device_discovering_state: Default::default(),
             device_config: Default::default(),
             device_module_config: Default::default(),
-            device_user: None,
             discovered_devices: Vec::default(),
             logs: Vec::with_capacity(1000),
             messages: Default::default(),
             my_node_key: None,
+            my_node_user_hash: Default::default(),
             need_clear_frame: false,
             nodeinfo_popup: None,
             nodes_sort_by: Default::default(),

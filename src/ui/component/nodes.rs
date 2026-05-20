@@ -94,7 +94,7 @@ impl<'a> Nodes<'a> {
                 Span::from("show only muted nodes"),
             ]),
             Line::from(vec![
-                Span::from("$unknown  ").magenta(),
+                Span::from("$unknown    ").magenta(),
                 Span::from("show only unknown nodes"),
             ]),
         ])
@@ -476,7 +476,7 @@ impl<'a> Widget for NodeWidget<'a> {
 
         Line::from(vec![Span::from(self.node.role()).dark_gray()]).render(v1_h[1], buf);
 
-        Line::from(vec![Span::from(self.node.id.clone()).dark_gray()])
+        Line::from(vec![Span::from(self.node.id()).dark_gray()])
             .right_aligned()
             .render(v1_h[2], buf);
     }

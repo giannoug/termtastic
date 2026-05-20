@@ -172,11 +172,6 @@ impl NodesService {
                         tracing::debug!(node_key = node_info.num, "can't convert NodeInfo into Node: {}", e);
                     }
                 };
-
-                if Some(node_info.num) == self.local_my_node_num {
-                    self.state_action_tx
-                        .send(StateAction::DeviceUserSet(node_info.user.expect("should be Some")))?;
-                }
             }
             from_radio::PayloadVariant::Packet(mesh_packet) => {
                 self.state_action_tx
@@ -204,7 +199,7 @@ impl NodesService {
                         PortNum::AdminApp => match AdminMessage::decode(&*data.payload) {
                             Ok(admin_message) => match admin_message.payload_variant {
                                 Some(admin_message::PayloadVariant::SetOwner(user)) => {
-                                    self.state_action_tx.send(StateAction::DeviceUserSet(user))?;
+                                    self.state_action_tx.send(StateAction::NodeOwnerSet((&user).into()))?;
                                 }
                                 Some(admin_message::PayloadVariant::RemoveByNodenum(node_num)) => {
                                     self.state_action_tx.send(StateAction::NodeDelete(node_num))?;

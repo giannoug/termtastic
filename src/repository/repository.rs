@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use native_db::{Builder, Database, Models};
-use std::path::Path;
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 static MODELS: LazyLock<Models> = LazyLock::new(|| {
@@ -9,10 +9,12 @@ static MODELS: LazyLock<Models> = LazyLock::new(|| {
     models
 });
 
-pub fn create_repository<'a>(file: &Path, cache_size: usize) -> Result<Repository<'a>, anyhow::Error> {
-    Ok(Repository::new(
-        Builder::new().set_cache_size(cache_size).create(&MODELS, file)?,
-    ))
+pub fn create_repository<'a>(file_path: PathBuf, cache_size: usize) -> Result<Repository<'a>, anyhow::Error> {
+    let db = Builder::new()
+        .set_cache_size(cache_size)
+        .create(&MODELS, file_path.as_path())?;
+
+    Ok(Repository::new(file_path, db))
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -22,12 +24,17 @@ pub enum RepositoryError {
 }
 
 pub struct Repository<'a> {
+    file_path: PathBuf,
     db: Database<'a>,
 }
 
 impl<'a> Repository<'a> {
-    pub fn new(db: Database<'a>) -> Repository<'a> {
-        Repository { db }
+    pub fn new(file_path: PathBuf, db: Database<'a>) -> Repository<'a> {
+        Repository { file_path, db }
+    }
+
+    pub fn get_file_path(&self) -> &PathBuf {
+        &self.file_path
     }
 
     pub fn check_integrity(&mut self) -> Result<bool, RepositoryError> {

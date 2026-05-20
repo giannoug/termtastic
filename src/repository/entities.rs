@@ -12,27 +12,22 @@ pub mod v1 {
     #[native_model(id = 1, version = 1)]
     #[native_db]
     pub struct Node {
-        pub id: String,
         #[primary_key]
         pub key: u32,
-        pub user: Option<NodeUser>,
         pub hops: Option<u32>,
         pub last_heard: Option<DateTime<Utc>>,
         pub snr: f32,
         pub rssi: Option<i32>,
-        pub public_key: Vec<u8>,
         pub is_favorite: bool,
         pub is_ignored: bool,
         pub is_muted: bool,
-    }
-
-    #[derive(Serialize, Deserialize, Debug)]
-    pub struct NodeUser {
-        pub short_name: String,
-        pub long_name: String,
-        pub role: i32,
-        pub hw_model: i32,
-        pub is_licensed: bool,
-        pub is_unmessagable: Option<bool>,
+        pub user_id: String,
+        pub user_short_name: String,
+        pub user_long_name: String,
+        pub user_role: i32,
+        pub user_hw_model: i32,
+        pub user_public_key: Vec<u8>,
+        pub user_is_licensed: bool,
+        pub user_is_unmessagable: Option<bool>,
     }
 }

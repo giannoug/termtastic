@@ -9,7 +9,7 @@ use meshtastic::protobufs::module_config::{
 };
 use meshtastic::protobufs::{
     admin_message, from_radio, mesh_packet, module_config, AdminMessage, Channel as MeshtasticChannel, Config, ModuleConfig,
-    PortNum, User,
+    PortNum,
 };
 use meshtastic::Message;
 use nameof::name_of;
@@ -19,7 +19,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::serde::{from_formdata, to_formdata};
-use crate::types::{AppEvent, Channel, FormData, FormId, SettingsFormState, SettingsItem, Toast, UiConfig};
+use crate::types::{AppEvent, Channel, FormData, FormId, NodeUser, SettingsFormState, SettingsItem, Toast, UiConfig};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::{State, StateAction},
@@ -86,6 +86,15 @@ impl SettingsService {
                         .send(StateAction::Toast(Toast::success("setting saved")))?;
 
                     self.start_config_loading(&FormId::AppUi)?;
+                }
+
+                if changed.contains(&name_of!(my_node_user_hash in State))
+                    && matches!(
+                        state.settings_form_state,
+                        SettingsFormState::Loaded { id: FormId::DeviceUser }
+                    )
+                {
+                    self.start_config_loading(&FormId::DeviceUser)?;
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -289,8 +298,8 @@ impl SettingsService {
             )?,
             FormId::DeviceUser => to_formdata(
                 state
-                    .device_user
-                    .as_ref()
+                    .get_my_node()
+                    .and_then(|n| n.user.as_ref())
                     .ok_or(anyhow::anyhow!("User config not loaded"))?,
             )?,
             FormId::DevicePosition => to_formdata(
@@ -467,7 +476,7 @@ impl SettingsService {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveUser {
                     form_id: id.clone(),
                     my_node_num: state.my_node_key.expect("should be Some"),
-                    user: from_formdata::<User>(&form_data)?,
+                    user: from_formdata::<NodeUser>(&form_data)?.into(),
                 })?;
             }
             FormId::DevicePosition => {

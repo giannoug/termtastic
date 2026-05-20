@@ -54,23 +54,12 @@ pub struct UiConfig {
     pub is_right_padding_hidden: bool,
 }
 
-#[derive(Debug, Clone, Default)]
-pub enum DbState {
-    #[default]
-    NotInitialized,
-    InitializingStarted,
-    InitializingFailed(String),
-    InitializingDone,
-    DataLoadingStarted,
-    DataLoadingFailed(String),
-    DataLoadingDone,
-}
-
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     ChannelSelected(u32),
     ChannelPurgeRequested(u32),
     SwitchChannelRequested,
+    DbLoadRequested(u32),
     DbCompactRequested,
     DeviceRediscoverRequested,
     DeviceRebootRequested,
@@ -332,48 +321,71 @@ pub trait HopsSnrRssiAware {
     fn rssi(&self) -> Option<i32>;
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NodeUser {
+    pub id: String,
+    pub short_name: String,
+    pub long_name: String,
+    pub role: i32,
+    pub hw_model: i32,
+    pub public_key: Vec<u8>,
+    pub is_licensed: bool,
+    pub is_unmessagable: Option<bool>,
+}
+
+impl From<&meshtastic::protobufs::User> for NodeUser {
+    fn from(value: &meshtastic::protobufs::User) -> Self {
+        Self {
+            id: value.id.clone(),
+            short_name: value.short_name.clone(),
+            long_name: value.long_name.clone(),
+            role: value.role,
+            hw_model: value.hw_model,
+            public_key: value.public_key.clone(),
+            is_licensed: value.is_licensed,
+            is_unmessagable: value.is_unmessagable,
+        }
+    }
+}
+
+impl Into<meshtastic::protobufs::User> for NodeUser {
+    fn into(self) -> meshtastic::protobufs::User {
+        meshtastic::protobufs::User {
+            id: self.id,
+            long_name: self.long_name,
+            short_name: self.short_name,
+            #[allow(deprecated)]
+            macaddr: Vec::new(),
+            hw_model: self.hw_model,
+            is_licensed: self.is_licensed,
+            role: self.role,
+            public_key: self.public_key,
+            is_unmessagable: self.is_unmessagable,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Node {
-    pub id: String,
     pub key: u32,
     pub user: Option<NodeUser>,
     pub hops: Option<u32>,
     pub last_heard: Option<DateTime<Utc>>,
     pub snr: f32,
     pub rssi: Option<i32>,
-    pub public_key: Vec<u8>,
     pub is_favorite: bool,
     pub is_ignored: bool,
     pub is_muted: bool,
     pub fulltext: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct NodeUser {
-    pub short_name: String,
-    pub long_name: String,
-    pub role: i32,
-    pub hw_model: i32,
-    pub is_licensed: bool,
-    pub is_unmessagable: Option<bool>,
-}
-
 pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
-    id: "?".to_owned(),
     key: 0,
-    user: Some(NodeUser {
-        short_name: "?".to_owned(),
-        long_name: "Unknown".to_owned(),
-        role: -1,
-        hw_model: -1,
-        is_licensed: false,
-        is_unmessagable: None,
-    }),
+    user: None,
     hops: None,
     last_heard: None,
     snr: 0.0,
     rssi: None,
-    public_key: vec![],
     is_favorite: false,
     is_ignored: false,
     is_muted: false,
@@ -381,11 +393,17 @@ pub static UNKNOWN_NODE: LazyLock<Node> = LazyLock::new(|| Node {
 });
 
 impl Node {
+    pub fn id(&self) -> String {
+        format!("!{:x}", self.key)
+    }
+
     pub fn short_name(&self) -> String {
+        let id = self.id();
+
         self.user
             .as_ref()
             .and_then(|u| Some(u.short_name.clone()))
-            .unwrap_or_else(|| self.id[self.id.len().saturating_sub(4)..].to_string())
+            .unwrap_or_else(|| id[id.len().saturating_sub(4)..].to_string())
     }
 
     pub fn long_name(&self) -> String {
@@ -427,7 +445,7 @@ impl Node {
                 .to_lowercase(),
             self.role().to_lowercase(),
             self.hw_model().to_lowercase(),
-            self.id.clone(),
+            self.id(),
             if is_direct {
                 "$direct".to_owned()
             } else {
@@ -488,14 +506,12 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
         let last_heard = DateTime::from_timestamp(value.last_heard as i64, 0);
 
         let mut node = Self {
-            id: user.id.clone(),
             key: value.num,
             user: Some(user.into()),
             hops: value.hops_away,
             last_heard,
             snr: value.snr,
             rssi: None,
-            public_key: user.public_key.clone(),
             is_favorite: value.is_favorite,
             is_ignored: value.is_ignored,
             is_muted: value.is_muted,
@@ -510,17 +526,13 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
 
 impl From<&meshtastic::protobufs::MeshPacket> for Node {
     fn from(packet: &meshtastic::protobufs::MeshPacket) -> Self {
-        let id = format!("!{:x}", packet.from);
-
         let mut node = Self {
-            id,
             key: packet.from,
             user: None,
             hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard: DateTime::from_timestamp(packet.rx_time as i64, 0),
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
-            public_key: packet.public_key.clone(),
             is_favorite: false,
             is_ignored: false,
             is_muted: false,
@@ -542,14 +554,12 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
         let last_heard = DateTime::from_timestamp(packet.rx_time as i64, 0);
 
         let mut node = Self {
-            id: user.id.clone(),
             key: packet.from,
             user: Some(user.into()),
             hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
             last_heard,
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
-            public_key: user.public_key.clone(),
             is_favorite: false,
             is_ignored: false,
             is_muted: false,
@@ -562,26 +572,13 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
     }
 }
 
-impl From<&meshtastic::protobufs::User> for NodeUser {
-    fn from(value: &meshtastic::protobufs::User) -> Self {
-        Self {
-            short_name: value.short_name.clone(),
-            long_name: value.long_name.clone(),
-            role: value.role,
-            hw_model: value.hw_model,
-            is_licensed: value.is_licensed,
-            is_unmessagable: value.is_unmessagable,
-        }
-    }
-}
-
 impl TryInto<meshtastic::protobufs::User> for &Node {
     type Error = anyhow::Error;
 
     fn try_into(self) -> Result<meshtastic::protobufs::User, Self::Error> {
         match &self.user {
             Some(user) => Ok(meshtastic::protobufs::User {
-                id: self.id.clone(),
+                id: self.id(),
                 long_name: user.long_name.clone(),
                 short_name: user.short_name.clone(),
                 #[allow(deprecated)]
@@ -589,7 +586,7 @@ impl TryInto<meshtastic::protobufs::User> for &Node {
                 hw_model: user.hw_model,
                 is_licensed: false,
                 role: user.role,
-                public_key: self.public_key.clone(),
+                public_key: user.public_key.clone(),
                 is_unmessagable: user.is_unmessagable,
             }),
             None => Err(anyhow!("no user information")),
@@ -616,12 +613,12 @@ impl ChannelRole {
     }
 }
 
-impl From<meshtastic::protobufs::channel::Role> for ChannelRole {
-    fn from(value: meshtastic::protobufs::channel::Role) -> Self {
+impl From<channel::Role> for ChannelRole {
+    fn from(value: channel::Role) -> Self {
         match value {
-            meshtastic::protobufs::channel::Role::Disabled => ChannelRole::Disabled,
-            meshtastic::protobufs::channel::Role::Primary => ChannelRole::Primary,
-            meshtastic::protobufs::channel::Role::Secondary => ChannelRole::Secondary,
+            channel::Role::Disabled => ChannelRole::Disabled,
+            channel::Role::Primary => ChannelRole::Primary,
+            channel::Role::Secondary => ChannelRole::Secondary,
         }
     }
 }
