@@ -78,23 +78,23 @@ impl<'a> Connection<'a> {
 impl<'a> Component for Connection<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if state.active_device.is_some() {
-            return vec![Hotkey::new("esc", "disconnect")];
+            return vec![Hotkey::new("Esc", "disconnect")];
         }
 
         if self.is_tcp_form_visible {
-            return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
+            return vec![Hotkey::new("Enter", "submit"), Hotkey::new("Esc", "cancel")];
         }
 
         if self.is_discovery_popup_visible {
-            return vec![Hotkey::new("enter", "select"), Hotkey::new("esc", "close")];
+            return vec![Hotkey::new("Enter", "select"), Hotkey::new("Esc", "close")];
         }
 
         vec![
             Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("enter", "connect"),
+            Hotkey::new("Enter", "connect"),
             Hotkey::new("t", "add TCP"),
             Hotkey::new("d", "discover"),
-            Hotkey::new("del", "delete"),
+            Hotkey::new("Del", "delete"),
         ]
     }
 

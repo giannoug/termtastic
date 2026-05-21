@@ -117,19 +117,19 @@ impl<'a> Component for Nodes<'a> {
         if self.is_emoji_selector_visible {
             return vec![
                 Hotkey::new("↑↓", "scroll"),
-                Hotkey::new("enter", "insert"),
-                Hotkey::new("esc", "close"),
+                Hotkey::new("Enter", "insert"),
+                Hotkey::new("Esc", "close"),
             ];
         }
 
         if self.is_filter_help_visible {
-            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("Esc", "close")];
         }
 
         vec![
             Hotkey::new("↑↓", "scroll"),
             Hotkey::new("F1", "help"),
-            Hotkey::new("enter [F4]", "node info"),
+            Hotkey::new("Enter (F4)", "node info"),
             Hotkey::new("F2", "direct"),
             Hotkey::new("F5", "emoji"),
             Hotkey::new("F6", "sort by"),

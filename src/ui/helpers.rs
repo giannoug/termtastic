@@ -4,6 +4,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::{DecodeError, Engine};
 use chrono::{SubsecRound, TimeDelta, Utc};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
+use emoji::Emoji;
 use itertools::Itertools;
 use meshtastic::protobufs::config;
 use meshtastic::protobufs::routing;
@@ -13,9 +14,13 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Scrollbar, ScrollbarOrientation},
 };
+use ratatui_textarea::TextArea;
 use regex::{Regex, RegexBuilder};
+use std::ops::Add;
 use std::sync::LazyLock;
 use tui_widget_list::ListState;
+
+static NEWLINE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\r?\n|\r").unwrap());
 
 static LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new(r"[^:/?#\s]+://[^\s]+(?:[\s,.!?;:)\]}>]|$)")
@@ -150,6 +155,50 @@ impl StringExt for String {
     }
 }
 
+pub trait TextAreaExt {
+    fn insert_as_lines(&mut self, text: &String);
+
+    fn trimmed_lines(&self) -> Vec<String>;
+
+    fn trimmed_len(&self) -> usize;
+
+    fn get_single_emoji(&self) -> Option<&'static Emoji>;
+}
+
+impl TextAreaExt for TextArea<'_> {
+    fn insert_as_lines(&mut self, text: &String) {
+        for line in trim_lines(NEWLINE_REGEX.split(text)).into_iter() {
+            self.insert_str(line);
+            self.insert_newline();
+        }
+
+        self.delete_newline();
+    }
+
+    fn trimmed_lines(&self) -> Vec<String> {
+        trim_lines(self.lines().iter())
+    }
+
+    fn trimmed_len(&self) -> usize {
+        let trimmed = self.trimmed_lines();
+
+        trimmed
+            .iter()
+            .map(|s| s.len())
+            .sum::<usize>()
+            .add(trimmed.len())
+            .saturating_sub(1)
+    }
+
+    fn get_single_emoji(&self) -> Option<&'static Emoji> {
+        if self.lines().len() != 1 {
+            return None;
+        }
+
+        emoji::lookup_by_glyph::lookup(&self.lines()[0])
+    }
+}
+
 pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<Span<'a>> {
     let maybe_direct_node = (channel.role == ChannelRole::Direct)
         .then_some(state.nodes.get(&channel.key))
@@ -223,6 +272,20 @@ pub fn pad_center(s: &str, width: usize) -> String {
     let right = padding - left;
 
     format!("{}{}{}", " ".repeat(left), s, " ".repeat(right))
+}
+
+fn trim_lines<I, S>(lines: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut trimmed: Vec<String> = lines.into_iter().map(|s| s.as_ref().trim_end().to_string()).collect();
+
+    while matches!(trimmed.last(), Some(s) if s.is_empty()) {
+        trimmed.pop();
+    }
+
+    trimmed
 }
 
 pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
@@ -309,13 +372,21 @@ pub trait ListStateExt {
 impl ListStateExt for ListState {
     fn handle_navigation_events(&mut self, event: &Event, items_count: usize) -> bool {
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                ..
+            }) => match code {
                 KeyCode::Home => {
-                    self.select(Some(0));
+                    if items_count > 0 {
+                        self.select(Some(0));
+                    }
                     return true;
                 }
                 KeyCode::End => {
-                    self.select(Some(items_count - 1));
+                    if items_count > 0 {
+                        self.select(Some(items_count - 1));
+                    }
                     return true;
                 }
                 KeyCode::Up => {

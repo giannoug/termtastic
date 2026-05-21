@@ -64,6 +64,6 @@ impl Widget for PopupConfirmWidget {
 
         paragraph.render(v[0], buf);
 
-        HotkeysWidget::new(&vec![Hotkey::new("enter", &self.yes), Hotkey::new("esc", &self.no)]).render(v[2], buf);
+        HotkeysWidget::new(&vec![Hotkey::new("Enter", &self.yes), Hotkey::new("Esc", &self.no)]).render(v[2], buf);
     }
 }

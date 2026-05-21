@@ -1,4 +1,7 @@
-use crossterm::event::{KeyboardEnhancementFlags, PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
+use crossterm::event::{
+    DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
+};
 use crossterm::{
     event::{Event, EventStream, KeyCode, KeyModifiers},
     execute,
@@ -123,6 +126,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
     execute!(
         stdout(),
         EnterAlternateScreen,
+        EnableBracketedPaste,
         PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     )?;
 
@@ -132,7 +136,12 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
 
-    execute!(stdout(), LeaveAlternateScreen, PopKeyboardEnhancementFlags)?;
+    execute!(
+        stdout(),
+        LeaveAlternateScreen,
+        DisableBracketedPaste,
+        PopKeyboardEnhancementFlags
+    )?;
 
     Ok(())
 }

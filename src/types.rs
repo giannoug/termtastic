@@ -3,6 +3,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
+use itertools::Itertools;
 use meshtastic::protobufs::{channel, config, module_config, routing};
 use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
@@ -790,6 +791,12 @@ pub struct Message {
     pub snr: f32,
     pub rssi: i32,
     pub routing_error: Option<routing::Error>,
+}
+
+impl Message {
+    pub fn text_oneline(&self) -> String {
+        self.text.lines().into_iter().join(" ")
+    }
 }
 
 impl HopsSnrRssiAware for Message {

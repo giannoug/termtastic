@@ -25,8 +25,8 @@ impl<'a> Component for Channels {
     fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
         vec![
             Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("enter", "open"),
-            Hotkey::new("del", "purge chat"),
+            Hotkey::new("Enter", "open"),
+            Hotkey::new("Del", "purge chat"),
         ]
     }
 
@@ -209,20 +209,20 @@ impl<'a> Widget for ChannelWidget<'a> {
         // second line
         let second_line_spans = match (&self.channel.role, self.last_message_node, self.last_message) {
             (ChannelRole::Direct, _, Some(message)) => {
-                vec![Span::from(message.text.clone()).dark_gray()]
+                vec![Span::from(message.text_oneline()).dark_gray()]
             }
             (_, None, Some(message)) => {
                 vec![
                     short_name_to_span(&UNKNOWN_NODE, false),
                     Span::from(" "),
-                    Span::from(message.text.clone()).dark_gray(),
+                    Span::from(message.text_oneline()).dark_gray(),
                 ]
             }
             (_, Some(node), Some(message)) => {
                 vec![
                     short_name_to_span(node, self.is_last_message_node_my),
                     Span::from(" "),
-                    Span::from(message.text.clone()).dark_gray(),
+                    Span::from(message.text_oneline()).dark_gray(),
                 ]
             }
             (_, _, None) => {

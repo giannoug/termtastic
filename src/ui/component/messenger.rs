@@ -1,12 +1,12 @@
+use crossterm::event::KeyModifiers;
+use itertools::Itertools;
+use ordermap::OrderMap;
 use std::{
     collections::{HashMap, VecDeque},
     iter,
     ops::RangeInclusive,
     sync::LazyLock,
 };
-
-use itertools::Itertools;
-use ordermap::OrderMap;
 use tracing_unwrap::OptionExt;
 use tui_widget_list::ScrollDirection;
 
@@ -46,41 +46,54 @@ impl<'a> Messenger<'a> {
 impl<'a> Component for Messenger<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if self.is_reaction_viewer_visible {
-            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("Esc", "close")];
         }
 
         if self.is_emoji_selector_visible {
             return vec![
                 Hotkey::new("↑↓", "scroll"),
-                Hotkey::new("enter", "insert"),
-                Hotkey::new("esc", "close"),
+                Hotkey::new("Enter", "insert"),
+                Hotkey::new("Esc", "close"),
             ];
         }
 
         if state.nodeinfo_popup.is_some() {
-            return vec![Hotkey::new("esc", "close")];
+            return vec![Hotkey::new("Esc", "close")];
         }
 
         let active_channel_key = state.active_channel_key.expect_or_log("channel should be selected");
 
-        let is_input_contains_single_emoji = self
+        let input_has_single_emoji = self
             .input_widgets
             .get(&active_channel_key)
-            .and_then(|input| emoji::lookup_by_glyph::lookup(&input.lines()[0]))
+            .and_then(|input| input.get_single_emoji())
             .is_some();
 
-        let has_valid_input_value = self
+        let input_has_valid_value = self
             .input_widgets
             .get(&active_channel_key)
-            .and_then(|input| Some(VALID_INPUT_LENGTH.contains(&input.lines()[0].len())))
+            .and_then(|input| Some(VALID_INPUT_LENGTH.contains(&input.trimmed_len())))
+            .unwrap_or(false);
+
+        let input_has_something = self
+            .input_widgets
+            .get(&active_channel_key)
+            .and_then(|input| Some(!input.is_empty()))
             .unwrap_or(false);
 
         if self.replying_to.contains_key(&active_channel_key) {
             return vec![
-                is_input_contains_single_emoji.then_some(Hotkey::new("enter", "send reaction")),
-                (!is_input_contains_single_emoji && has_valid_input_value)
-                    .then_some(Hotkey::new("enter", "send reply")),
-                Some(Hotkey::new("esc", "cancel reply")),
+                input_has_something.then_some(Hotkey::new(
+                    if cfg!(target_os = "macos") {
+                        "Option+Enter"
+                    } else {
+                        "Alt+Enter"
+                    },
+                    "new line",
+                )),
+                input_has_single_emoji.then_some(Hotkey::new("Enter", "send reaction")),
+                (!input_has_single_emoji && input_has_valid_value).then_some(Hotkey::new("Enter", "send reply")),
+                Some(Hotkey::new("Esc", "cancel reply")),
             ]
             .into_iter()
             .flatten()
@@ -94,13 +107,21 @@ impl<'a> Component for Messenger<'a> {
             .unwrap_or(false);
 
         Vec::from([
-            Some(Hotkey::new("↑↓", "scroll")),
-            (is_message_selected).then_some(Hotkey::new("F2", "reply")),
-            (is_message_selected).then_some(Hotkey::new("F4", "node info")),
+            (!input_has_something).then_some(Hotkey::new("↑↓", "scroll")),
+            (is_message_selected && !input_has_something).then_some(Hotkey::new("F2", "reply")),
+            (is_message_selected && !input_has_something).then_some(Hotkey::new("F4", "node info")),
             Some(Hotkey::new("F5", "emoji")),
-            is_message_selected.then_some(Hotkey::new("F7", "reactions")),
-            has_valid_input_value.then_some(Hotkey::new("enter", "send")),
-            Some(Hotkey::new("esc", "switch channel")),
+            (is_message_selected && !input_has_something).then_some(Hotkey::new("F7", "reactions")),
+            input_has_something.then_some(Hotkey::new(
+                if cfg!(target_os = "macos") {
+                    "Option+Enter"
+                } else {
+                    "Alt+Enter"
+                },
+                "new line",
+            )),
+            input_has_valid_value.then_some(Hotkey::new("Enter", "send")),
+            Some(Hotkey::new("Esc", "switch channel")),
         ])
         .into_iter()
         .flatten()
@@ -131,8 +152,13 @@ impl<'a> Component for Messenger<'a> {
 
         if self.is_reaction_viewer_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Esc => {
                         self.is_reaction_viewer_visible = false;
                         return Ok(true);
                     }
@@ -146,15 +172,20 @@ impl<'a> Component for Messenger<'a> {
 
         if self.is_emoji_selector_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
                         if let Some(emoji) = self.emoji_selector_state.get_value() {
                             input_widget.insert_str(emoji.glyph);
                             self.is_emoji_selector_visible = false;
                             return Ok(true);
                         }
                     }
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                    KeyCode::Esc => {
                         self.is_emoji_selector_visible = false;
                         self.emoji_selector_state.reset();
                         return Ok(true);
@@ -169,25 +200,35 @@ impl<'a> Component for Messenger<'a> {
 
         if is_replying_to {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::F(5) if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::F(5) => {
                         self.is_emoji_selector_visible = true;
                         return Ok(true);
                     }
-                    KeyCode::Enter if kind == &KeyEventKind::Press => {
-                        if input_widget.lines()[0].len() <= INPUT_VALUE_MAX_LENGTH
+                    KeyCode::Enter => {
+                        if input_widget.trimmed_len() <= INPUT_VALUE_MAX_LENGTH
                             && let Some((_, message_id)) = self.replying_to.remove(&active_channel_key)
                         {
-                            if let Some(emoji) = emoji::lookup_by_glyph::lookup(&input_widget.lines()[0]) {
-                                emit(AppEvent::ChatReactionSubmitted {
-                                    emoji,
-                                    reply_message_id: Some(message_id),
-                                })?;
-                            } else {
-                                emit(AppEvent::ChatMessageSubmitted {
-                                    text: input_widget.lines()[0].clone(),
-                                    reply_message_id: Some(message_id),
-                                })?;
+                            self.follow_chat.insert(active_channel_key, true);
+
+                            match input_widget.get_single_emoji() {
+                                Some(emoji) => {
+                                    emit(AppEvent::ChatReactionSubmitted {
+                                        emoji,
+                                        reply_message_id: Some(message_id),
+                                    })?;
+                                }
+                                None => {
+                                    emit(AppEvent::ChatMessageSubmitted {
+                                        text: input_widget.trimmed_lines().join("\n"),
+                                        reply_message_id: Some(message_id),
+                                    })?;
+                                }
                             }
 
                             input_widget.clear();
@@ -195,7 +236,7 @@ impl<'a> Component for Messenger<'a> {
                             return Ok(true);
                         }
                     }
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                    KeyCode::Esc => {
                         self.replying_to.remove(&active_channel_key);
                         return Ok(true);
                     }
@@ -209,7 +250,7 @@ impl<'a> Component for Messenger<'a> {
             return Ok(true);
         }
 
-        if list_state.handle_navigation_events(event, messages.len()) {
+        if input_widget.is_empty() && list_state.handle_navigation_events(event, messages.len()) {
             if let Some(index) = list_state.selected {
                 self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
             }
@@ -218,15 +259,22 @@ impl<'a> Component for Messenger<'a> {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) => match code {
-                KeyCode::Esc if kind == &KeyEventKind::Press => {
-                    emit(AppEvent::ChannelSwitchRequested)?;
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::Enter if modifiers.contains(KeyModifiers::ALT) => {
+                    input_widget.insert_newline();
                     return Ok(true);
                 }
-                KeyCode::Enter if kind == &KeyEventKind::Press => {
-                    if input_widget.lines()[0].len() <= INPUT_VALUE_MAX_LENGTH {
+                KeyCode::Enter if modifiers.is_empty() => {
+                    if input_widget.trimmed_len() <= INPUT_VALUE_MAX_LENGTH {
+                        self.follow_chat.insert(active_channel_key, true);
+
                         emit(AppEvent::ChatMessageSubmitted {
-                            text: input_widget.lines()[0].clone(),
+                            text: input_widget.trimmed_lines().join("\n"),
                             reply_message_id: None,
                         })?;
 
@@ -235,7 +283,7 @@ impl<'a> Component for Messenger<'a> {
 
                     return Ok(true);
                 }
-                KeyCode::F(2) if kind == &KeyEventKind::Press => {
+                KeyCode::F(2) if modifiers.is_empty() => {
                     if let Some(message) = list_state.selected.and_then(|i| messages.get(i)) {
                         let node = state.nodes.get(&message.from).unwrap_or(&UNKNOWN_NODE);
                         self.replying_to.insert(active_channel_key, (node.clone(), message.id));
@@ -243,7 +291,7 @@ impl<'a> Component for Messenger<'a> {
 
                     return Ok(true);
                 }
-                KeyCode::F(4) if kind == &KeyEventKind::Press => {
+                KeyCode::F(4) if modifiers.is_empty() => {
                     if let Some(node_key) = list_state
                         .selected
                         .and_then(|i| messages.get(i))
@@ -254,11 +302,11 @@ impl<'a> Component for Messenger<'a> {
 
                     return Ok(true);
                 }
-                KeyCode::F(5) if kind == &KeyEventKind::Press => {
+                KeyCode::F(5) if modifiers.is_empty() => {
                     self.is_emoji_selector_visible = true;
                     return Ok(true);
                 }
-                KeyCode::F(7) if kind == &KeyEventKind::Press => {
+                KeyCode::F(7) if modifiers.is_empty() => {
                     if list_state.selected.and_then(|i| messages.get(i)).is_some() {
                         self.follow_chat.insert(active_channel_key, false);
                         self.is_reaction_viewer_visible = true;
@@ -266,12 +314,19 @@ impl<'a> Component for Messenger<'a> {
 
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab => {
-                    // Capture these events to prevent handling by input widget
+                KeyCode::Esc if modifiers.is_empty() => {
+                    emit(AppEvent::ChannelSwitchRequested)?;
+                    return Ok(true);
+                }
+                KeyCode::Tab | KeyCode::BackTab if modifiers.is_empty() => {
+                    // capture these events to prevent handling by input widget
                     return Ok(false);
                 }
                 _ => {}
             },
+            Event::Paste(text) => {
+                input_widget.insert_as_lines(text);
+            }
             _ => {}
         }
 
@@ -302,7 +357,11 @@ impl<'a> Component for Messenger<'a> {
             list_state.select(Some(messages.len() - 1));
         }
 
-        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).split(area);
+        let v = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Length(2 + input_widget.lines().len().min(3) as u16),
+        ])
+        .split(area);
         let is_any_popup_visible =
             state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 
@@ -413,10 +472,10 @@ impl<'a> Component for Messenger<'a> {
         channel_line.render(input_block_area_h[0], frame.buffer_mut());
         frame.render_widget(&*input_widget, input_block_area_h[2]);
 
-        let input_value_len = input_widget.lines()[0].len();
+        let input_value_len = input_widget.trimmed_len();
 
         Line::from(
-            Span::from(format!(" {}/{}", input_value_len, INPUT_VALUE_MAX_LENGTH)).style(Style::new().fg(
+            Span::from(format!("{}/{}", input_value_len, INPUT_VALUE_MAX_LENGTH)).style(Style::new().fg(
                 if input_value_len > INPUT_VALUE_MAX_LENGTH {
                     Color::Red
                 } else {
@@ -494,23 +553,7 @@ struct MessageWidget<'a> {
 impl MessageWidget<'_> {
     pub fn get_text_paragraph(&self) -> Paragraph<'_> {
         let reply_line = self.replied_message.and_then(|(_, m)| {
-            #[allow(unstable_name_collisions)]
-            let spans: Vec<Span<'_>> = m
-                .text
-                .split('\n')
-                .map(|line| Span::from(line))
-                .intersperse(Span::from(" "))
-                .collect();
-
-            Some(
-                Line::from(
-                    iter::once("“".to_span())
-                        .chain(spans)
-                        .chain(iter::once("”".to_span()))
-                        .collect::<Vec<Span<'_>>>(),
-                )
-                .magenta(),
-            )
+            Some(Line::from(vec!["“".to_span(), Span::from(m.text_oneline()), "”".to_span()]).magenta())
         });
 
         let text_lines: Vec<Line<'_>> = self.message.text.to_hyperlinked_lines();

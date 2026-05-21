@@ -27,16 +27,16 @@ impl Component for Logs {
             return vec![
                 Hotkey::new("↑↓".to_string(), "scroll".to_string()),
                 Hotkey::new("c".to_string(), "copy".to_string()),
-                Hotkey::new("esc".to_string(), "close".to_string()),
+                Hotkey::new("Esc".to_string(), "close".to_string()),
             ];
         }
 
         vec![
             Hotkey::new("↑↓".to_string(), "scroll".to_string()),
-            Hotkey::new("enter".to_string(), "expand".to_string()),
+            Hotkey::new("Enter".to_string(), "expand".to_string()),
             Hotkey::new("c".to_string(), "copy".to_string()),
-            Hotkey::new("home".to_string(), "to top".to_string()),
-            Hotkey::new("end".to_string(), "to bottom".to_string()),
+            Hotkey::new("Home".to_string(), "to top".to_string()),
+            Hotkey::new("End".to_string(), "to bottom".to_string()),
         ]
     }
 

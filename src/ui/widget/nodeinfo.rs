@@ -107,9 +107,9 @@ impl NodeInfoState {
     pub fn get_hotkeys(&self, is_my_node: bool) -> Vec<Hotkey> {
         match &self.active_tab {
             Tab::Info => vec![
-                Some(Hotkey::new("esc", "close")),
+                Some(Hotkey::new("Esc", "close")),
                 Some(Hotkey::new("k", "copy public key")),
-                is_my_node.then_some(Hotkey::new("del", "remove")),
+                is_my_node.then_some(Hotkey::new("Del", "remove")),
             ]
             .into_iter()
             .flatten()

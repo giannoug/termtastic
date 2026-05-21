@@ -185,20 +185,20 @@ impl<'a> Settings<'a> {
 impl<'a> Component for Settings<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         match &state.settings_form_state {
-            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("enter", "open"))],
-            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("esc", "cancel"))],
-            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("esc", "return"))],
+            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("Enter", "open"))],
+            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("Esc", "cancel"))],
+            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("Esc", "return"))],
             SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => {
-                vec![Some(Hotkey::new("enter", "submit")), Some(Hotkey::new("esc", "cancel"))]
+                vec![Some(Hotkey::new("Enter", "submit")), Some(Hotkey::new("Esc", "cancel"))]
             }
             SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => {
-                vec![Some(Hotkey::new("enter", "select")), Some(Hotkey::new("esc", "cancel"))]
+                vec![Some(Hotkey::new("Enter", "select")), Some(Hotkey::new("Esc", "cancel"))]
             }
             SettingsFormState::Loaded { .. } if self.popup_dropdown_bitmask_state.is_some() => {
                 vec![
-                    Some(Hotkey::new("space", "toggle")),
-                    Some(Hotkey::new("enter", "submit")),
-                    Some(Hotkey::new("esc", "cancel")),
+                    Some(Hotkey::new("Space", "toggle")),
+                    Some(Hotkey::new("Enter", "submit")),
+                    Some(Hotkey::new("Esc", "cancel")),
                 ]
             }
             SettingsFormState::Loaded { .. } => vec![
@@ -206,10 +206,10 @@ impl<'a> Component for Settings<'a> {
                 self.form_list_state
                     .selected
                     .is_some()
-                    .then_some(Hotkey::new("enter", "edit")),
+                    .then_some(Hotkey::new("Enter", "edit")),
                 state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
                 state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
-                Some(Hotkey::new("esc", "return")),
+                Some(Hotkey::new("Esc", "return")),
             ],
             SettingsFormState::Saving { .. } => vec![],
         }
