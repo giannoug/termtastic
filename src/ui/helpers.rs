@@ -140,7 +140,7 @@ impl StringExt for String {
                     spans.push(Span::raw(&line[last_end..start]).style(Style::new()));
                 }
 
-                spans.push(Span::from(&line[start..end]).underlined().magenta());
+                spans.push(Span::from(&line[start..end]).underlined().blue());
                 last_end = end;
             }
 

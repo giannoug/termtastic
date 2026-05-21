@@ -361,7 +361,7 @@ impl<'a> Component for Nodes<'a> {
 
         Line::from(vec![
             Span::from(count_filtered),
-            Span::from("/").dark_gray(),
+            Span::from("/").dim(),
             Span::from(count_total),
         ])
         .centered()
