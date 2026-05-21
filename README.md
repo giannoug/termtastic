@@ -14,20 +14,32 @@
 
 <table>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/b806aec3-a1d8-4778-ab70-cb3eae633ef9" alt="Channels"/></td>
-    <td><img src="https://github.com/user-attachments/assets/a664ee0f-d252-44ec-bfb9-e2d221ec7ef7" alt="Chat"/></td>
+    <td><img width="886" height="713" alt="messenger" src="https://github.com/user-attachments/assets/8623b06a-ff40-443d-9c94-4f89cf30aca4" /></td>
+    <td><img width="930" height="757" alt="messenger_emoji_selector" src="https://github.com/user-attachments/assets/f79e00b3-8675-4528-a8b0-3a065cdce7af" /></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/b672f1da-54d8-4b22-8342-3fa13d117037" alt="Emoji Selector"/></td>
-    <td><img src="https://github.com/user-attachments/assets/71e34cf6-f2b2-46a8-9ab8-b9fc73c86294" alt="Nodes"/></td>
+    <td><img width="930" height="757" alt="messenger_reactions_viewer" src="https://github.com/user-attachments/assets/3887d587-0b3c-4fda-b8aa-deaf85219e5e" /></td>
+    <td><img width="930" height="757" alt="messenger_multiline_message" src="https://github.com/user-attachments/assets/f3468114-0d09-438b-bbb8-f64e5fd6ee37" /></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/03da9c1e-d0b8-4b6a-ae5e-53e87e5bc064" alt="NodeInfo"/></td>
-    <td><img src="https://github.com/user-attachments/assets/3f3b464f-1dd6-432e-ae58-01a0d5f0ca10" alt="Connection"/></td>
+    <td><img width="930" height="757" alt="channels" src="https://github.com/user-attachments/assets/fb94c88d-8c55-4359-af63-7ee8ca43a80c" /></td>
+    <td><img width="930" height="757" alt="nodes" src="https://github.com/user-attachments/assets/4539b999-8f38-4fa5-9e84-740978856bad" /></td>
   </tr>
   <tr>
-    <td><img src="https://github.com/user-attachments/assets/1c0ac2f2-6559-48bd-947b-599e40e08072" alt="Settings"/></td>
-    <td><img src="https://github.com/user-attachments/assets/8b1d1111-5fe2-4a1f-95e4-2a86e3dfaec5" alt="Logs"/></td>
+    <td><img width="930" height="757" alt="nodes_help" src="https://github.com/user-attachments/assets/bd8c6e66-c46a-49df-a2e7-7aef586e9fd0" /></td>
+    <td><img width="930" height="757" alt="nodes_nodeinfo" src="https://github.com/user-attachments/assets/aaf27b86-8969-4ae7-a4e4-d02491988baa" /></td>
+  </tr>
+  <tr>
+    <td><img width="930" height="757" alt="settings" src="https://github.com/user-attachments/assets/caf9da10-9e0c-4cb0-94a6-8d8eba66e4dd" /></td>
+    <td><img width="930" height="757" alt="settings_bitmask_input" src="https://github.com/user-attachments/assets/5ac5494a-9e93-46ef-9a1d-3a4a323f7b54" /></td>
+  </tr>
+  <tr>
+    <td><img width="930" height="757" alt="connections" src="https://github.com/user-attachments/assets/c09f3001-94e6-43d5-a92f-2c23b253eed5" /></td>
+    <td><img width="930" height="757" alt="connections_discovery" src="https://github.com/user-attachments/assets/0f20de05-a1f2-4037-b179-da541f73b7b0" /></td>
+  </tr>
+  <tr>
+    <td><img width="930" height="757" alt="logs" src="https://github.com/user-attachments/assets/942eaf5e-6771-4423-aff9-4e0b8dcf11fa" /></td>
+    <td><img width="930" height="757" alt="logs_expanded_view" src="https://github.com/user-attachments/assets/f4faeb55-6b39-402b-8944-6a6f8d0b199e" /></td>
   </tr>
 </table>
 
