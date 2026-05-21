@@ -309,7 +309,14 @@ impl<'a> Component for Messenger<'a> {
         // list
         if !messages.is_empty() {
             let list_builder = ListBuilder::new(|context| {
-                let message = &messages[context.index as usize];
+                let message = &messages[context.index];
+
+                let reactions = message
+                    .reactions
+                    .iter()
+                    .filter_map(|reaction_id| state.message_reactions.get(reaction_id))
+                    .collect();
+
                 let replied_message = if message.reply_message_id > 0 {
                     messages
                         .iter()
@@ -318,13 +325,15 @@ impl<'a> Component for Messenger<'a> {
                 } else {
                     None
                 };
+
                 let node = state.nodes.get(&message.from).unwrap_or(&UNKNOWN_NODE);
 
                 let item = MessageWidget {
                     node: &node,
                     message,
+                    reactions,
                     replied_message,
-                    is_my_node: state.my_node_key == Some(node.key),
+                    is_my_node: state.is_my_node(node.key),
                     is_selected: context.is_selected,
                     is_highlighted: replying_to
                         .and_then(|(_, msg_key)| Some(message.id == *msg_key))
@@ -378,13 +387,13 @@ impl<'a> Component for Messenger<'a> {
                 let node = state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE);
 
                 vec![
-                    short_name_to_span(node, state.my_node_key == Some(node.key)),
+                    short_name_to_span(node, state.is_my_node(node.key)),
                     Span::from(" ←").dark_gray(),
                 ]
             }
             (_, Some((node, _))) => vec![
                 Span::from("reply to ").cyan(),
-                short_name_to_span(node, state.my_node_key == Some(node.key)),
+                short_name_to_span(node, state.is_my_node(node.key)),
                 Span::from(" ←").dark_gray(),
             ],
             _ => unreachable!(),
@@ -431,14 +440,18 @@ impl<'a> Component for Messenger<'a> {
             let reaction_items: Vec<ReactionViewerItem> = message
                 .reactions
                 .iter()
-                .map(|reaction| {
+                .filter_map(|reaction_id| {
+                    let Some(reaction) = state.message_reactions.get(reaction_id) else {
+                        return None;
+                    };
+
                     let node = state.nodes.get(&reaction.node_key).unwrap_or(&UNKNOWN_NODE);
 
-                    ReactionViewerItem {
+                    Some(ReactionViewerItem {
                         reaction,
                         node,
-                        is_my_node: state.my_node_key == Some(node.key),
-                    }
+                        is_my_node: state.is_my_node(node.key),
+                    })
                 })
                 .collect();
 
@@ -471,6 +484,7 @@ fn new_input_widget() -> TextArea<'static> {
 struct MessageWidget<'a> {
     pub node: &'a Node,
     pub message: &'a Message,
+    pub reactions: Vec<&'a MessageReaction>,
     pub replied_message: Option<(&'a Node, &'a Message)>,
     pub is_my_node: bool,
     pub is_selected: bool,
@@ -499,7 +513,7 @@ impl MessageWidget<'_> {
             )
         });
 
-        let text_lines: Vec<Line<'_>> = self.message.text.split('\n').map(Line::from).collect();
+        let text_lines: Vec<Line<'_>> = self.message.text.to_hyperlinked_lines();
 
         Paragraph::new(reply_line.into_iter().chain(text_lines).collect::<Vec<Line<'_>>>()).wrap(Wrap { trim: false })
     }
@@ -578,7 +592,7 @@ impl<'a> Widget for MessageWidget<'a> {
         if !self.is_my_node {
             Line::from(hops_to_spans(self.message, false)).render(v0_h[1], buf);
         } else {
-            routing_error_to_span(self.message.error).render(v0_h[1], buf);
+            routing_error_to_span(self.message.routing_error).render(v0_h[1], buf);
         }
 
         Line::from(
@@ -598,10 +612,9 @@ impl<'a> Widget for MessageWidget<'a> {
         text_paragraph.render(v[1], buf);
 
         // third line
-        if !self.message.reactions.is_empty() {
+        if !self.reactions.is_empty() {
             Line::from(
-                self.message
-                    .reactions
+                self.reactions
                     .iter()
                     .sorted_by_key(|r| r.datetime)
                     .fold(OrderMap::new(), |mut acc, r| {

@@ -64,12 +64,14 @@
 
 #### Messenger
 
+- [ ] Storing messages in local DB
 - [x] Scrollable chat screen
 - [x] Display the short and long names of node
 - [x] Display the SNR/RSSI for direct nodes
 - [x] Display the number of hops for retranslated messages
 - [x] Display the time of messages
 - [x] Display the reactions (emojis)
+- [x] Display the routing info for the retranslated messages and reactions
 - [x] Ability to see detailed info about reactions
 - [x] Ability to see node info of the selected message author
 - [x] Ability to send broadcast messages to the channels
@@ -82,6 +84,7 @@
 
 #### Nodes list
 
+- [x] Storing nodes in local DB
 - [x] Scrollable nodes list
 - [x] Ability to start direct conversation with the selected node
 - [x] Display the short and long names of node
@@ -156,6 +159,7 @@
 - [x] Device configuration loading during the connection process and storing it into state
 - [x] Storing TCP connections into a config file
 - [x] Discovering of BLE and Serial devices feature
+- [x] Discovering TCP devices through mDNS
 - [x] Reconnection feature with exponential backoff timeouts
 
 ### Logs tab
@@ -169,37 +173,37 @@
 
 - [x] RX indicator
 - [x] Online/Total nodes counter
-- [x] Storing nodes in local DB
-- [ ] Storing messages in local DB
 
 ## Stack
 
-| Feature                     | Library                                                         |
-|:----------------------------|:----------------------------------------------------------------|
-| TUI: Framework              | [Ratatui](https://ratatui.rs)                                   |
-| TUI: Backend                | [crossterm](https://github.com/crossterm-rs/crossterm)          |
-| TUI: Inputs                 | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea) |
-| TUI: Lists                  | [tui-widget-list](https://github.com/preiter93/tui-widget-list) |
-| Interaction with Meshtastic | [meshtastic](https://github.com/meshtastic/rust)                |
-| Clipboard functionality     | [arboard](https://github.com/1Password/arboard)                 |
-| Bluetooth devices discovery | [bluest](https://github.com/alexmoon/bluest/)                   |
-| Logging                     | [tracing](https://github.com/tokio-rs/tracing)                  |
-| Async/Channels              | [tokio](https://github.com/tokio-rs/tokio)                      |
-| Configuration               | [confy](https://github.com/rust-cli/confy)                      |
-| Errors                      | [anyhow](https://github.com/dtolnay/anyhow)                     |
-| Datetime                    | [chrono](https://github.com/chronotope/chrono)                  |
-| Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                    |
-| Local DB                    | [native_db](https://github.com/vincent-herlemont/native_db)     |
+| Feature                     | Library                                                                                         |
+|:----------------------------|:------------------------------------------------------------------------------------------------|
+| TUI: Framework              | [Ratatui](https://ratatui.rs)                                                                   |
+| TUI: Backend                | [crossterm](https://github.com/crossterm-rs/crossterm)                                          |
+| TUI: Inputs                 | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea)                                 |
+| TUI: Lists                  | [tui-widget-list](https://github.com/preiter93/tui-widget-list)                                 |
+| Interaction with Meshtastic | [meshtastic](https://github.com/meshtastic/rust)                                                |
+| Clipboard functionality     | [arboard](https://github.com/1Password/arboard)                                                 |
+| Bluetooth devices discovery | [bluest](https://github.com/alexmoon/bluest/)                                                   |
+| TCP devices discovery       | [mdns-sd](https://github.com/keepsimple1/mdns-sd)                                               |
+| Logging                     | [tracing](https://github.com/tokio-rs/tracing)                                                  |
+| Async/Channels              | [tokio](https://github.com/tokio-rs/tokio)                                                      |
+| Configuration               | [confy](https://github.com/rust-cli/confy), [etcetera](https://github.com/lunacookies/etcetera) |
+| Errors                      | [anyhow](https://github.com/dtolnay/anyhow), [thiserror](https://github.com/dtolnay/thiserror)  |
+| Datetime                    | [chrono](https://github.com/chronotope/chrono)                                                  |
+| Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                                                    |
+| Local DB                    | [native_db](https://github.com/vincent-herlemont/native_db)                                     |
 
 ## Compatibility
 
 ✅ – tested, 🔬 – untested, ❌ – not working
 
-| Feature                  | 🐧 Linux | 🍏 macOS | 🪟 Windows |
-|:-------------------------|:--------:|:--------:|:----------:|
-| BLE devices discovery    |    ✅     |    ✅     |     🔬     |
-| Serial devices discovery |    ✅     |    ✅     |     ✅      |
-| Copy to clipboard        |    ✅     |    ✅     |     ✅      |
+| Feature                      | 🐧 Linux | 🍏 macOS | 🪟 Windows |
+|:-----------------------------|:--------:|:--------:|:----------:|
+| BLE devices discovery        |    ✅     |    ✅     |     🔬     |
+| Serial devices discovery     |    ✅     |    ✅     |     ✅      |
+| TCP devices discovery (mDNS) |    ✅     |    ✅     |     ✅      |
+| Copy to clipboard            |    ✅     |    ✅     |     ✅      |
 
 ## Download
 

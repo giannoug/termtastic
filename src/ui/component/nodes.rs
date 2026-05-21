@@ -284,7 +284,7 @@ impl<'a> Component for Nodes<'a> {
 
                 let item = NodeWidget {
                     node,
-                    is_my_node: state.my_node_key == Some(node.key),
+                    is_my_node: state.is_my_node(node.key),
                     is_selected: context.is_selected,
                 };
 

@@ -627,22 +627,13 @@ impl Store {
                 reaction,
             } => {
                 self.state_tx.send_if_modified(|state| {
-                    if let Some(message) = state
-                        .messages
-                        .get_mut(&channel_key)
-                        .and_then(|messages| messages.iter_mut().find(|msg| msg.id == message_id))
-                    {
-                        if !message
-                            .reactions
-                            .iter()
-                            .any(|r| r.node_key == reaction.node_key && r.emoji == reaction.emoji)
-                        {
-                            message.reactions.push(reaction);
+                    if let Some(message) = state.get_mut_message_by_id(channel_key, message_id) {
+                        message.reactions.push(reaction.id);
+                        state.message_reactions.insert(reaction.id, reaction);
 
-                            changed.push(name_of!(messages in State));
+                        changed.extend([name_of!(messages in State), name_of!(message_reactions in State)]);
 
-                            return true;
-                        }
+                        return true;
                     }
 
                     false
@@ -654,18 +645,20 @@ impl Store {
                 error,
             } => {
                 self.state_tx.send_if_modified(|state| {
-                    if let Some(messages) = state.messages.get_mut(&channel_key) {
-                        if let Some(message) = messages
-                            .binary_search_by_key(&message_id, |m| m.id)
-                            .ok()
-                            .and_then(|index| messages.get_mut(index))
-                        {
-                            message.error = error;
+                    if let Some(message) = state.get_mut_message_by_id(channel_key, message_id) {
+                        message.routing_error = error;
 
-                            changed.push(name_of!(messages in State));
+                        changed.push(name_of!(messages in State));
 
-                            return true;
-                        }
+                        return true;
+                    }
+
+                    if let Some(reaction) = state.message_reactions.get_mut(&message_id) {
+                        reaction.routing_error = error;
+
+                        changed.push(name_of!(message_reactions in State));
+
+                        return true;
                     }
 
                     false

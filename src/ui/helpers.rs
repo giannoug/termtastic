@@ -115,39 +115,39 @@ impl ModemPresetExt for config::lo_ra_config::ModemPreset {
     }
 }
 
-#[allow(dead_code)]
-pub trait LinkExt {
-    fn str_to_hyperlinked_lines(value: &str) -> Vec<Line<'_>>;
+pub trait StringExt {
+    fn to_hyperlinked_lines(&self) -> Vec<Line<'_>>;
 }
 
-#[allow(dead_code)]
-pub fn str_to_hyperlinked_lines(value: &str) -> Vec<Line<'_>> {
-    let mut result = Vec::new();
+impl StringExt for String {
+    fn to_hyperlinked_lines(&self) -> Vec<Line<'_>> {
+        let mut result = Vec::new();
 
-    for line in value.split('\n') {
-        let mut spans = Vec::new();
-        let mut last_end = 0;
+        for line in self.split('\n') {
+            let mut spans = Vec::new();
+            let mut last_end = 0;
 
-        for mat in LINK_REGEX.find_iter(line) {
-            let start = mat.start();
-            let end = mat.end();
+            for mat in LINK_REGEX.find_iter(line) {
+                let start = mat.start();
+                let end = mat.end();
 
-            if start > last_end {
-                spans.push(Span::raw(&line[last_end..start]).style(Style::new()));
+                if start > last_end {
+                    spans.push(Span::raw(&line[last_end..start]).style(Style::new()));
+                }
+
+                spans.push(Span::from(&line[start..end]).underlined().magenta());
+                last_end = end;
             }
 
-            spans.push(Span::from(&line[start..end]).underlined().magenta());
-            last_end = end;
+            if last_end < line.len() {
+                spans.push(Span::from(&line[last_end..]));
+            }
+
+            result.push(Line::from(spans));
         }
 
-        if last_end < line.len() {
-            spans.push(Span::from(&line[last_end..]));
-        }
-
-        result.push(Line::from(spans));
+        result
     }
-
-    result
 }
 
 pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<Span<'a>> {
@@ -187,7 +187,7 @@ pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<
         ],
         (ChannelRole::Direct, Some(node)) => {
             vec![
-                short_name_to_span(node, state.my_node_key == Some(node.key)),
+                short_name_to_span(node, state.is_my_node(node.key)),
                 Span::from(" "),
                 Span::from(node.long_name()),
             ]

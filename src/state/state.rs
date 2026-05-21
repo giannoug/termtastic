@@ -25,6 +25,7 @@ pub struct State {
     pub devices: BTreeSet<Device>,
     pub logs: Vec<LogRecord>,
     pub messages: HashMap<u32, VecDeque<Message>>,
+    pub message_reactions: HashMap<u32, MessageReaction>,
     pub my_node_key: Option<u32>,
     pub my_node_user_hash: u64,
     pub need_clear_frame: bool,
@@ -66,6 +67,7 @@ impl Default for State {
             devices: Default::default(),
             logs: Vec::with_capacity(1000),
             messages: Default::default(),
+            message_reactions: Default::default(),
             my_node_key: None,
             my_node_user_hash: Default::default(),
             need_clear_frame: false,
@@ -93,12 +95,27 @@ impl Default for State {
 }
 
 impl State {
+    pub fn is_my_node(&self, node_key: u32) -> bool {
+        self.my_node_key == Some(node_key)
+    }
+
     pub fn get_my_node(&self) -> Option<&Node> {
         self.my_node_key.and_then(|key| self.nodes.get(&key))
     }
 
     pub fn get_active_channel(&self) -> Option<&Channel> {
         self.active_channel_key.and_then(|key| self.channels.get(&key))
+    }
+
+    pub fn get_mut_message_by_id(&mut self, channel_key: u32, id: u32) -> Option<&mut Message> {
+        let Some(messages) = self.messages.get_mut(&channel_key) else {
+            return None;
+        };
+
+        messages
+            .binary_search_by_key(&id, |m| m.id)
+            .ok()
+            .and_then(|index| messages.get_mut(index))
     }
 
     pub fn update_nodes_view(&mut self) {

@@ -5,6 +5,7 @@ version = "0.0.0"
 edition = "2024"
 authors = ["acelot <provaleriy@gmail.com>"]
 description = "Feature-rich Meshtastic® console client"
+publish = false
 license-file = "LICENSE"
 repository = "https://github.com/acelot/termtastic"
 readme = "README.md"

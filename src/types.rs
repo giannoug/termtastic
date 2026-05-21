@@ -785,11 +785,11 @@ pub struct Message {
     pub from: u32,
     pub datetime: DateTime<Utc>,
     pub text: String,
-    pub reactions: Vec<MessageReaction>,
+    pub reactions: Vec<u32>,
     pub hops: u32,
     pub snr: f32,
     pub rssi: i32,
-    pub error: Option<routing::Error>,
+    pub routing_error: Option<routing::Error>,
 }
 
 impl HopsSnrRssiAware for Message {
@@ -829,7 +829,7 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
             hops: packet.hop_start.saturating_sub(packet.hop_limit),
             snr: packet.rx_snr,
             rssi: packet.rx_rssi,
-            error: None,
+            routing_error: None,
         })
     }
 }

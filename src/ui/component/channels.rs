@@ -120,7 +120,7 @@ impl<'a> Component for Channels {
                     last_message,
                     last_message_node,
                     is_last_message_node_my: last_message_node
-                        .and_then(|node| Some(state.my_node_key == Some(node.key)))
+                        .and_then(|node| Some(state.is_my_node(node.key)))
                         .unwrap_or(false),
                     is_selected: context.is_selected,
                 };
