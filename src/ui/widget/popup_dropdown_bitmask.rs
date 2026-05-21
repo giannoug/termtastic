@@ -7,6 +7,7 @@ use ratatui::{
 };
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
+use crate::ui::helpers::ListStateExt;
 use crate::{types::FormBitMaskVariant, ui::helpers::default_scrollbar};
 
 const MAX_VISIBLE_DROPDOWN_ITEMS: usize = 8;
@@ -33,16 +34,17 @@ impl<'a> PopupDropdownBitmaskState<'a> {
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
+        if self.list_state.handle_navigation_events(&event, self.variants.len()) {
+            return Ok(true);
+        }
+
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) if modifiers.is_empty() => match code {
                 KeyCode::Char(' ') if let Some(index) = self.list_state.selected => {
                     let variant = self.variants.iter().nth(index).unwrap();
                     let is_checked = self.selected & variant.value > 0;

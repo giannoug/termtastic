@@ -1,11 +1,11 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
+use crossterm::event::Event;
 use ratatui::prelude::*;
 use ratatui::text::ToSpan;
 use ratatui::widgets::{Block, BorderType, Padding, StatefulWidget, Widget};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 use crate::types::{MessageReaction, Node};
-use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span};
+use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span, ListStateExt};
 use crate::ui::prelude::{Borders, Constraint, Layout, PlaceholderWidget};
 
 pub struct ReactionViewerState {
@@ -19,31 +19,9 @@ impl ReactionViewerState {
         }
     }
 
-    pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
-        match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            _ => {}
+    pub fn handle_event(&mut self, event: &Event, reactions_count: usize) -> anyhow::Result<bool> {
+        if self.list_state.handle_navigation_events(&event, reactions_count) {
+            return Ok(true);
         }
 
         Ok(false)

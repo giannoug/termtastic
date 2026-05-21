@@ -375,8 +375,9 @@ impl ListStateExt for ListState {
             Event::Key(KeyEvent {
                 code,
                 kind: KeyEventKind::Press,
+                modifiers,
                 ..
-            }) => match code {
+            }) if modifiers.is_empty() => match code {
                 KeyCode::Home => {
                     if items_count > 0 {
                         self.select(Some(0));

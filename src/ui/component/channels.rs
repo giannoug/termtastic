@@ -25,8 +25,8 @@ impl<'a> Component for Channels {
     fn get_hotkeys(&self, _state: &State) -> Vec<Hotkey> {
         vec![
             Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("Enter", "open"),
-            Hotkey::new("Del", "purge chat"),
+            Hotkey::new("enter", "open"),
+            Hotkey::new("delete", "purge chat"),
         ]
     }
 
@@ -38,23 +38,25 @@ impl<'a> Component for Channels {
     ) -> anyhow::Result<bool> {
         if let Some(channel_key) = &self.channel_purge_key {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => {
                         emit(AppEvent::ChannelPurgeRequested(*channel_key))?;
                         self.channel_purge_key = None;
-
-                        return Ok(true);
                     }
                     KeyCode::Esc => {
                         self.channel_purge_key = None;
-                        return Ok(true);
                     }
                     _ => {}
                 },
                 _ => {}
             }
 
-            return Ok(false);
+            return Ok(true);
         }
 
         if self
@@ -65,15 +67,20 @@ impl<'a> Component for Channels {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Enter => {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::Enter if modifiers.is_empty() => {
                     if let Some(channel) = self.list_state.selected.and_then(|i| self.channels(state).nth(i)) {
                         emit(AppEvent::ChannelSelected(channel.key))?;
                     }
 
                     return Ok(true);
                 }
-                KeyCode::Delete | KeyCode::Backspace => {
+                KeyCode::Delete | KeyCode::Backspace if modifiers.is_empty() => {
                     if let Some(channel) = self.list_state.selected.and_then(|i| self.channels(state).nth(i)) {
                         self.channel_purge_key = Some(channel.key);
                     }

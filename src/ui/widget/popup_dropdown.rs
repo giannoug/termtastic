@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
+use crossterm::event::Event;
 use ratatui::{
     prelude::*,
     widgets::{Block, BorderType, Clear, Padding, StatefulWidget, Widget},
 };
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
+use crate::ui::helpers::ListStateExt;
 use crate::{
     types::{FormEnumVariant, FormValue},
     ui::helpers::default_scrollbar,
@@ -40,19 +41,8 @@ impl<'a> PopupDropdownState<'a> {
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
-        match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            _ => {}
+        if self.list_state.handle_navigation_events(&event, self.variants.len()) {
+            return Ok(true);
         }
 
         Ok(false)

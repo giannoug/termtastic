@@ -97,8 +97,13 @@ impl<'a> Component for Layout<'a> {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Tab => {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::Tab if modifiers.is_empty() => {
                     emit(AppEvent::TabNextRequested)?;
                     return Ok(true);
                 }
@@ -106,7 +111,7 @@ impl<'a> Component for Layout<'a> {
                     emit(AppEvent::TabPreviousRequested)?;
                     return Ok(true);
                 }
-                KeyCode::F(12) => {
+                KeyCode::F(12) if modifiers.is_empty() => {
                     emit(AppEvent::SplashLogoRequested)?;
                     return Ok(true);
                 }

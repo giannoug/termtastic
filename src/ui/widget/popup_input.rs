@@ -43,6 +43,10 @@ impl<'a> PopupInputState<'a> {
         self.textarea.lines()[0].clone()
     }
 
+    pub fn insert_str(&mut self, text: &str) {
+        self.textarea.insert_str(text);
+    }
+
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
         if self.textarea.input(event) {
             self.error = None;

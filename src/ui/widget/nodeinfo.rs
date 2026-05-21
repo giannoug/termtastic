@@ -65,9 +65,37 @@ impl NodeInfoState {
         event: Event,
         emit: &mut impl FnMut(NodeInfoWidgetEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if self.is_delete_node_popup_visible {
+            match event {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
+                        emit(NodeInfoWidgetEvent::NodeDeleteRequested)?;
+                        self.is_delete_node_popup_visible = false;
+                    }
+                    KeyCode::Esc => {
+                        self.is_delete_node_popup_visible = false;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+
+            return Ok(true);
+        }
+
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match (self.active_tab, code) {
-                (_, KeyCode::Tab) => {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match (self.active_tab, code) {
+                (_, KeyCode::Tab) if modifiers.is_empty() => {
                     self.active_tab = self.active_tab.next();
                     return Ok(true);
                 }
@@ -75,24 +103,15 @@ impl NodeInfoState {
                     self.active_tab = self.active_tab.prev();
                     return Ok(true);
                 }
-                (Tab::Info, KeyCode::Char('k')) => {
+                (Tab::Info, KeyCode::Char('k')) if modifiers.is_empty() => {
                     emit(NodeInfoWidgetEvent::PublicKeyCopyRequested)?;
                     return Ok(true);
                 }
-                (Tab::Info, KeyCode::Delete | KeyCode::Backspace) => {
+                (Tab::Info, KeyCode::Delete | KeyCode::Backspace) if modifiers.is_empty() => {
                     self.is_delete_node_popup_visible = true;
                     return Ok(true);
                 }
-                (Tab::Info, KeyCode::Esc) if self.is_delete_node_popup_visible => {
-                    self.is_delete_node_popup_visible = false;
-                    return Ok(true);
-                }
-                (Tab::Info, KeyCode::Enter) if self.is_delete_node_popup_visible => {
-                    emit(NodeInfoWidgetEvent::NodeDeleteRequested)?;
-                    self.is_delete_node_popup_visible = false;
-                    return Ok(true);
-                }
-                (_, KeyCode::Esc) => {
+                (_, KeyCode::Esc) if modifiers.is_empty() => {
                     emit(NodeInfoWidgetEvent::PopupCloseRequested)?;
                     return Ok(true);
                 }
@@ -107,9 +126,9 @@ impl NodeInfoState {
     pub fn get_hotkeys(&self, is_my_node: bool) -> Vec<Hotkey> {
         match &self.active_tab {
             Tab::Info => vec![
-                Some(Hotkey::new("Esc", "close")),
+                Some(Hotkey::new("esc", "close")),
                 Some(Hotkey::new("k", "copy public key")),
-                is_my_node.then_some(Hotkey::new("Del", "remove")),
+                (!is_my_node).then_some(Hotkey::new("delete", "remove")),
             ]
             .into_iter()
             .flatten()

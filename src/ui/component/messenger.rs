@@ -46,19 +46,19 @@ impl<'a> Messenger<'a> {
 impl<'a> Component for Messenger<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if self.is_reaction_viewer_visible {
-            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("Esc", "close")];
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
 
         if self.is_emoji_selector_visible {
             return vec![
                 Hotkey::new("↑↓", "scroll"),
-                Hotkey::new("Enter", "insert"),
-                Hotkey::new("Esc", "close"),
+                Hotkey::new("enter", "insert"),
+                Hotkey::new("esc", "close"),
             ];
         }
 
         if state.nodeinfo_popup.is_some() {
-            return vec![Hotkey::new("Esc", "close")];
+            return vec![Hotkey::new("esc", "close")];
         }
 
         let active_channel_key = state.active_channel_key.expect_or_log("channel should be selected");
@@ -85,15 +85,16 @@ impl<'a> Component for Messenger<'a> {
             return vec![
                 input_has_something.then_some(Hotkey::new(
                     if cfg!(target_os = "macos") {
-                        "Option+Enter"
+                        "⌥ enter"
                     } else {
-                        "Alt+Enter"
+                        "alt+enter"
                     },
                     "new line",
                 )),
-                input_has_single_emoji.then_some(Hotkey::new("Enter", "send reaction")),
-                (!input_has_single_emoji && input_has_valid_value).then_some(Hotkey::new("Enter", "send reply")),
-                Some(Hotkey::new("Esc", "cancel reply")),
+                Some(Hotkey::new("F5", "emoji")),
+                input_has_single_emoji.then_some(Hotkey::new("enter", "send reaction")),
+                (!input_has_single_emoji && input_has_valid_value).then_some(Hotkey::new("enter", "send reply")),
+                Some(Hotkey::new("esc", "cancel reply")),
             ]
             .into_iter()
             .flatten()
@@ -107,21 +108,21 @@ impl<'a> Component for Messenger<'a> {
             .unwrap_or(false);
 
         Vec::from([
+            input_has_something.then_some(Hotkey::new(
+                if cfg!(target_os = "macos") {
+                    "⌥ enter"
+                } else {
+                    "alt+enter"
+                },
+                "new line",
+            )),
             (!input_has_something).then_some(Hotkey::new("↑↓", "scroll")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F2", "reply")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F4", "node info")),
             Some(Hotkey::new("F5", "emoji")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F7", "reactions")),
-            input_has_something.then_some(Hotkey::new(
-                if cfg!(target_os = "macos") {
-                    "Option+Enter"
-                } else {
-                    "Alt+Enter"
-                },
-                "new line",
-            )),
-            input_has_valid_value.then_some(Hotkey::new("Enter", "send")),
-            Some(Hotkey::new("Esc", "switch channel")),
+            input_has_valid_value.then_some(Hotkey::new("enter", "send")),
+            Some(Hotkey::new("esc", "switch channel")),
         ])
         .into_iter()
         .flatten()
@@ -167,7 +168,21 @@ impl<'a> Component for Messenger<'a> {
                 _ => {}
             };
 
-            return self.reactions_viewer_state.handle_event(event.clone());
+            let reactions_count = list_state
+                .selected
+                .and_then(|i| messages.get(i))
+                .and_then(|m| {
+                    Some(m.reactions.iter().fold(0, |mut counter, reaction_id| {
+                        if state.message_reactions.contains_key(reaction_id) {
+                            counter += 1;
+                        };
+
+                        counter
+                    }))
+                })
+                .unwrap_or(0);
+
+            return self.reactions_viewer_state.handle_event(event, reactions_count);
         }
 
         if self.is_emoji_selector_visible {
@@ -285,8 +300,9 @@ impl<'a> Component for Messenger<'a> {
                 }
                 KeyCode::F(2) if modifiers.is_empty() => {
                     if let Some(message) = list_state.selected.and_then(|i| messages.get(i)) {
-                        let node = state.nodes.get(&message.from).unwrap_or(&UNKNOWN_NODE);
-                        self.replying_to.insert(active_channel_key, (node.clone(), message.id));
+                        if let Some(node) = state.nodes.get(&message.from) {
+                            self.replying_to.insert(active_channel_key, (node.clone(), message.id));
+                        }
                     }
 
                     return Ok(true);
@@ -388,7 +404,7 @@ impl<'a> Component for Messenger<'a> {
                 let node = state.nodes.get(&message.from).unwrap_or(&UNKNOWN_NODE);
 
                 let item = MessageWidget {
-                    node: &node,
+                    node,
                     message,
                     reactions,
                     replied_message,

@@ -78,23 +78,23 @@ impl<'a> Connection<'a> {
 impl<'a> Component for Connection<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         if state.active_device.is_some() {
-            return vec![Hotkey::new("Esc", "disconnect")];
+            return vec![Hotkey::new("esc", "disconnect")];
         }
 
         if self.is_tcp_form_visible {
-            return vec![Hotkey::new("Enter", "submit"), Hotkey::new("Esc", "cancel")];
+            return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
         }
 
         if self.is_discovery_popup_visible {
-            return vec![Hotkey::new("Enter", "select"), Hotkey::new("Esc", "close")];
+            return vec![Hotkey::new("enter", "select"), Hotkey::new("esc", "close")];
         }
 
         vec![
             Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("Enter", "connect"),
+            Hotkey::new("enter", "connect"),
             Hotkey::new("t", "add TCP"),
             Hotkey::new("d", "discover"),
-            Hotkey::new("Del", "delete"),
+            Hotkey::new("delete", "remove"),
         ]
     }
 
@@ -106,23 +106,25 @@ impl<'a> Component for Connection<'a> {
     ) -> anyhow::Result<bool> {
         if let Some(removing_device) = self.removing_device.as_ref() {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => {
                         emit(AppEvent::DeviceRemoveRequested(removing_device.clone()))?;
                         self.removing_device = None;
-
-                        return Ok(true);
                     }
                     KeyCode::Esc => {
                         self.removing_device = None;
-                        return Ok(true);
                     }
                     _ => {}
                 },
                 _ => {}
             }
 
-            return Ok(false);
+            return Ok(true);
         }
 
         if self.is_discovery_popup_visible {
@@ -134,7 +136,12 @@ impl<'a> Component for Connection<'a> {
             }
 
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => {
                         if let Some(device) = self
                             .discovery_list_state
@@ -162,36 +169,46 @@ impl<'a> Component for Connection<'a> {
 
         if self.is_tcp_form_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                    KeyCode::Enter => {
-                        match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
-                            Ok(addr) => {
-                                emit(AppEvent::DeviceSubmitted(Device::Tcp(addr)))?;
-                                self.is_tcp_form_visible = false;
-                            }
-                            Err(e) => {
-                                self.popup_input_state.set_error(format!("invalid address: {}", e));
-                            }
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
+                        Ok(addr) => {
+                            emit(AppEvent::DeviceSubmitted(Device::Tcp(addr)))?;
+                            self.is_tcp_form_visible = false;
                         }
-
-                        return Ok(true);
-                    }
+                        Err(e) => {
+                            self.popup_input_state.set_error(format!("invalid address: {}", e));
+                        }
+                    },
                     KeyCode::Esc => {
                         self.is_tcp_form_visible = false;
-                        return Ok(true);
                     }
                     _ => {}
                 },
+                Event::Paste(text) => {
+                    self.popup_input_state.insert_str(text);
+                }
                 _ => {}
             }
 
-            return self.popup_input_state.handle_event(event.clone());
+            let _ = self.popup_input_state.handle_event(event.clone());
+
+            return Ok(true);
         }
 
         if state.active_device.is_some() {
             match event {
-                Event::Key(KeyEvent { code, .. }) => match code {
-                    KeyCode::Esc => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) => match code {
+                    KeyCode::Esc if modifiers.is_empty() => {
                         emit(AppEvent::DisconnectionRequested)?;
                         return Ok(true);
                     }
@@ -211,26 +228,31 @@ impl<'a> Component for Connection<'a> {
         }
 
         match event {
-            Event::Key(KeyEvent { code, .. }) => match code {
-                KeyCode::Char('d') => {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::Char('d') if modifiers.is_empty() => {
                     self.is_discovery_popup_visible = true;
                     emit(AppEvent::DeviceRediscoverRequested)?;
 
                     return Ok(true);
                 }
-                KeyCode::Char('t') => {
+                KeyCode::Char('t') if modifiers.is_empty() => {
                     self.popup_input_state.reset();
                     self.is_tcp_form_visible = true;
 
                     return Ok(true);
                 }
-                KeyCode::Enter => {
+                KeyCode::Enter if modifiers.is_empty() => {
                     if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
                         emit(AppEvent::DeviceSelected(device.clone()))?
                     }
                     return Ok(true);
                 }
-                KeyCode::Delete | KeyCode::Backspace => {
+                KeyCode::Delete | KeyCode::Backspace if modifiers.is_empty() => {
                     if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
                         self.removing_device = Some(device.clone());
                     }

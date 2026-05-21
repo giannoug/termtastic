@@ -27,16 +27,16 @@ impl Component for Logs {
             return vec![
                 Hotkey::new("↑↓".to_string(), "scroll".to_string()),
                 Hotkey::new("c".to_string(), "copy".to_string()),
-                Hotkey::new("Esc".to_string(), "close".to_string()),
+                Hotkey::new("esc".to_string(), "close".to_string()),
             ];
         }
 
         vec![
             Hotkey::new("↑↓".to_string(), "scroll".to_string()),
-            Hotkey::new("Enter".to_string(), "expand".to_string()),
+            Hotkey::new("enter".to_string(), "expand".to_string()),
             Hotkey::new("c".to_string(), "copy".to_string()),
-            Hotkey::new("Home".to_string(), "to top".to_string()),
-            Hotkey::new("End".to_string(), "to bottom".to_string()),
+            Hotkey::new("home".to_string(), "to top".to_string()),
+            Hotkey::new("end".to_string(), "to bottom".to_string()),
         ]
     }
 
@@ -48,7 +48,12 @@ impl Component for Logs {
     ) -> anyhow::Result<bool> {
         if self.popup_record.is_some() {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Up => {
                         self.popup_scroll_state.prev();
                         return Ok(true);
@@ -93,8 +98,13 @@ impl Component for Logs {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::Enter => {
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::Enter if modifiers.is_empty() => {
                     if let Some(i) = self.list_state.selected {
                         self.popup_record = Some(state.logs[i].clone());
                         self.popup_scroll_state.first();
@@ -102,11 +112,14 @@ impl Component for Logs {
 
                     return Ok(true);
                 }
-                KeyCode::Char('c') if let Some(i) = self.list_state.selected => {
+                KeyCode::Char('c')
+                    if modifiers.is_empty()
+                        && let Some(i) = self.list_state.selected =>
+                {
                     emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab => {
+                KeyCode::Tab | KeyCode::BackTab if modifiers.is_empty() => {
                     return Ok(false);
                 }
                 _ => {}

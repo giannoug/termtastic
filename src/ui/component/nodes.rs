@@ -117,19 +117,19 @@ impl<'a> Component for Nodes<'a> {
         if self.is_emoji_selector_visible {
             return vec![
                 Hotkey::new("↑↓", "scroll"),
-                Hotkey::new("Enter", "insert"),
-                Hotkey::new("Esc", "close"),
+                Hotkey::new("enter", "insert"),
+                Hotkey::new("esc", "close"),
             ];
         }
 
         if self.is_filter_help_visible {
-            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("Esc", "close")];
+            return vec![Hotkey::new("↑↓", "scroll"), Hotkey::new("esc", "close")];
         }
 
         vec![
             Hotkey::new("↑↓", "scroll"),
             Hotkey::new("F1", "help"),
-            Hotkey::new("Enter (F4)", "node info"),
+            Hotkey::new("enter (F4)", "node info"),
             Hotkey::new("F2", "direct"),
             Hotkey::new("F5", "emoji"),
             Hotkey::new("F6", "sort by"),
@@ -144,7 +144,12 @@ impl<'a> Component for Nodes<'a> {
     ) -> anyhow::Result<bool> {
         if self.is_emoji_selector_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => {
                         if let Some(emoji) = self.emoji_selector_state.get_value() {
                             self.filter_input.insert_str(emoji.glyph);
@@ -169,7 +174,12 @@ impl<'a> Component for Nodes<'a> {
 
         if self.is_filter_help_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Esc => {
                         self.is_filter_help_visible = false;
                         return Ok(true);
@@ -207,19 +217,22 @@ impl<'a> Component for Nodes<'a> {
 
         match event {
             Event::Key(KeyEvent {
-                code, kind, modifiers, ..
-            }) if kind == &KeyEventKind::Press => match code {
-                KeyCode::F(1) => {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match code {
+                KeyCode::F(1) if modifiers.is_empty() => {
                     self.is_filter_help_visible = true;
                     return Ok(true);
                 }
-                KeyCode::F(4) | KeyCode::Enter => {
+                KeyCode::F(4) | KeyCode::Enter if modifiers.is_empty() => {
                     if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
                         emit(AppEvent::NodeInfoPopupRequested(*node_key))?;
                     }
                     return Ok(true);
                 }
-                KeyCode::F(5) => {
+                KeyCode::F(5) if modifiers.is_empty() => {
                     self.is_emoji_selector_visible = true;
                     return Ok(true);
                 }
@@ -227,11 +240,11 @@ impl<'a> Component for Nodes<'a> {
                     emit(AppEvent::NodesSortByPrevRequested)?;
                     return Ok(true);
                 }
-                KeyCode::F(6) => {
+                KeyCode::F(6) if modifiers.is_empty() => {
                     emit(AppEvent::NodesSortByNextRequested)?;
                     return Ok(true);
                 }
-                KeyCode::F(2) => {
+                KeyCode::F(2) if modifiers.is_empty() => {
                     if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
                         emit(AppEvent::DirectChatRequested(*node_key))?;
                     }
@@ -243,6 +256,9 @@ impl<'a> Component for Nodes<'a> {
                 }
                 _ => {}
             },
+            Event::Paste(text) => {
+                self.filter_input.insert_str(text);
+            }
             _ => {}
         }
 

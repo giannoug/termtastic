@@ -185,20 +185,20 @@ impl<'a> Settings<'a> {
 impl<'a> Component for Settings<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
         match &state.settings_form_state {
-            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("Enter", "open"))],
-            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("Esc", "cancel"))],
-            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("Esc", "return"))],
+            SettingsFormState::Inactive => vec![Some(Hotkey::new("↑↓", "scroll")), Some(Hotkey::new("enter", "open"))],
+            SettingsFormState::Loading { .. } => vec![Some(Hotkey::new("esc", "cancel"))],
+            SettingsFormState::LoadingFailed { .. } => vec![Some(Hotkey::new("esc", "return"))],
             SettingsFormState::Loaded { .. } if self.popup_input_state.is_some() => {
-                vec![Some(Hotkey::new("Enter", "submit")), Some(Hotkey::new("Esc", "cancel"))]
+                vec![Some(Hotkey::new("enter", "submit")), Some(Hotkey::new("esc", "cancel"))]
             }
             SettingsFormState::Loaded { .. } if self.popup_dropdown_state.is_some() => {
-                vec![Some(Hotkey::new("Enter", "select")), Some(Hotkey::new("Esc", "cancel"))]
+                vec![Some(Hotkey::new("enter", "select")), Some(Hotkey::new("esc", "cancel"))]
             }
             SettingsFormState::Loaded { .. } if self.popup_dropdown_bitmask_state.is_some() => {
                 vec![
-                    Some(Hotkey::new("Space", "toggle")),
-                    Some(Hotkey::new("Enter", "submit")),
-                    Some(Hotkey::new("Esc", "cancel")),
+                    Some(Hotkey::new("space", "toggle")),
+                    Some(Hotkey::new("enter", "submit")),
+                    Some(Hotkey::new("esc", "cancel")),
                 ]
             }
             SettingsFormState::Loaded { .. } => vec![
@@ -206,10 +206,10 @@ impl<'a> Component for Settings<'a> {
                 self.form_list_state
                     .selected
                     .is_some()
-                    .then_some(Hotkey::new("Enter", "edit")),
+                    .then_some(Hotkey::new("enter", "edit")),
                 state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
                 state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
-                Some(Hotkey::new("Esc", "return")),
+                Some(Hotkey::new("esc", "return")),
             ],
             SettingsFormState::Saving { .. } => vec![],
         }
@@ -227,7 +227,12 @@ impl<'a> Component for Settings<'a> {
         // confirm popup
         if self.is_exit_confirm_visible {
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => match code {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => {
                         emit(AppEvent::SettingsFormCancelRequested)?;
                         self.is_exit_confirm_visible = false;
@@ -248,8 +253,13 @@ impl<'a> Component for Settings<'a> {
             let form_item = self.active_form_item.expect("should be Some");
 
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
                         match handle_popup_input_submit(form_item, popup_input_state) {
                             Ok(value) => {
                                 emit(AppEvent::SettingsFormItemSubmitted(form_item, value))?;
@@ -263,7 +273,7 @@ impl<'a> Component for Settings<'a> {
 
                         return Ok(true);
                     }
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                    KeyCode::Esc => {
                         self.active_form_item = None;
                         self.popup_input_state = None;
 
@@ -271,10 +281,15 @@ impl<'a> Component for Settings<'a> {
                     }
                     _ => {}
                 },
+                Event::Paste(text) => {
+                    popup_input_state.insert_str(text);
+                }
                 _ => {}
             }
 
-            return popup_input_state.handle_event(event.clone());
+            let _ = popup_input_state.handle_event(event.clone());
+
+            return Ok(true);
         }
 
         // dropdown popup
@@ -284,8 +299,13 @@ impl<'a> Component for Settings<'a> {
             let form_item = self.active_form_item.expect("should be Some");
 
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
                         emit(AppEvent::SettingsFormItemSubmitted(form_item, value.clone()))?;
 
                         self.active_form_item = None;
@@ -293,7 +313,7 @@ impl<'a> Component for Settings<'a> {
 
                         return Ok(true);
                     }
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                    KeyCode::Esc => {
                         self.active_form_item = None;
                         self.popup_dropdown_state = None;
 
@@ -304,7 +324,9 @@ impl<'a> Component for Settings<'a> {
                 _ => {}
             }
 
-            return popup_dropdown_state.handle_event(event.clone());
+            let _ = popup_dropdown_state.handle_event(event.clone());
+
+            return Ok(true);
         }
 
         // bitmask dropdown popup
@@ -312,8 +334,13 @@ impl<'a> Component for Settings<'a> {
             let form_item = self.active_form_item.expect("should be Some");
 
             match event {
-                Event::Key(KeyEvent { code, kind, .. }) => match code {
-                    KeyCode::Enter if kind == &KeyEventKind::Press => {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
                         emit(AppEvent::SettingsFormItemSubmitted(
                             form_item,
                             FormValue::UnsignedInt32(popup_dropdown_bitmask_state.get_value()),
@@ -324,7 +351,7 @@ impl<'a> Component for Settings<'a> {
 
                         return Ok(true);
                     }
-                    KeyCode::Esc if kind == &KeyEventKind::Press => {
+                    KeyCode::Esc => {
                         self.active_form_item = None;
                         self.popup_dropdown_bitmask_state = None;
 
@@ -335,7 +362,9 @@ impl<'a> Component for Settings<'a> {
                 _ => {}
             }
 
-            return popup_dropdown_bitmask_state.handle_event(event.clone());
+            let _ = popup_dropdown_bitmask_state.handle_event(event.clone());
+
+            return Ok(true);
         }
 
         // default
@@ -352,61 +381,70 @@ impl<'a> Component for Settings<'a> {
         }
 
         match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == &KeyEventKind::Press => {
-                match (code, &state.settings_form_state) {
-                    (KeyCode::Enter, SettingsFormState::Inactive) => {
-                        if let Some(index) = self.settings_list_state.selected
-                            && let Some(SettingsItem::Form { id, .. }) = SETTINGS.get(index)
-                        {
-                            emit(AppEvent::SettingsFormSelected(id.clone()))?;
-                        }
+            Event::Key(KeyEvent {
+                code,
+                kind: KeyEventKind::Press,
+                modifiers,
+                ..
+            }) => match (code, &state.settings_form_state) {
+                (KeyCode::Enter, SettingsFormState::Inactive) if modifiers.is_empty() => {
+                    if let Some(index) = self.settings_list_state.selected
+                        && let Some(SettingsItem::Form { id, .. }) = SETTINGS.get(index)
+                    {
+                        emit(AppEvent::SettingsFormSelected(id.clone()))?;
                     }
-                    (KeyCode::Esc, SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. }) => {
-                        emit(AppEvent::SettingsFormCancelRequested)?;
-                    }
-                    (KeyCode::Enter, SettingsFormState::Loaded { id }) => {
-                        if self.is_exit_confirm_visible {
-                            emit(AppEvent::SettingsFormCancelRequested)?;
-                            self.is_exit_confirm_visible = false;
-
-                            return Ok(true);
-                        }
-
-                        let index = self.form_list_state.selected.expect("should be Some");
-                        let data = state.settings_form_data.as_ref().expect("should be Some");
-                        let form_item = &FORMS[id][index];
-
-                        let value = match form_item.key {
-                            FormItemKey::Simple(k) => data
-                                .get(k)
-                                .cloned()
-                                .expect_or_log(format!("form data field not exists: {}", k).as_str()),
-                            FormItemKey::Custom { getter, .. } => getter(data),
-                            FormItemKey::None => FormValue::Option(None),
-                        };
-
-                        self.handle_form_item_edit(form_item, &value, emit)?;
-                    }
-                    (KeyCode::Esc, SettingsFormState::Loaded { .. }) => {
-                        if state.settings_form_is_changed {
-                            self.is_exit_confirm_visible = true;
-                        } else {
-                            emit(AppEvent::SettingsFormCancelRequested)?;
-                            self.form_list_state = ListState::default();
-                        }
-                    }
-                    (KeyCode::Char('r'), SettingsFormState::Loaded { .. }) if state.settings_form_is_changed => {
-                        emit(AppEvent::SettingsFormResetRequested)?;
-                    }
-                    (KeyCode::Char('s'), SettingsFormState::Loaded { id }) if state.settings_form_is_changed => {
-                        emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
-                    }
-                    (KeyCode::Tab | KeyCode::BackTab, _) => {
-                        return Ok(false);
-                    }
-                    _ => {}
                 }
-            }
+                (KeyCode::Esc, SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. })
+                    if modifiers.is_empty() =>
+                {
+                    emit(AppEvent::SettingsFormCancelRequested)?;
+                }
+                (KeyCode::Enter, SettingsFormState::Loaded { id }) if modifiers.is_empty() => {
+                    if self.is_exit_confirm_visible {
+                        emit(AppEvent::SettingsFormCancelRequested)?;
+                        self.is_exit_confirm_visible = false;
+
+                        return Ok(true);
+                    }
+
+                    let index = self.form_list_state.selected.expect("should be Some");
+                    let data = state.settings_form_data.as_ref().expect("should be Some");
+                    let form_item = &FORMS[id][index];
+
+                    let value = match form_item.key {
+                        FormItemKey::Simple(k) => data
+                            .get(k)
+                            .cloned()
+                            .expect_or_log(format!("form data field not exists: {}", k).as_str()),
+                        FormItemKey::Custom { getter, .. } => getter(data),
+                        FormItemKey::None => FormValue::Option(None),
+                    };
+
+                    self.handle_form_item_edit(form_item, &value, emit)?;
+                }
+                (KeyCode::Esc, SettingsFormState::Loaded { .. }) if modifiers.is_empty() => {
+                    if state.settings_form_is_changed {
+                        self.is_exit_confirm_visible = true;
+                    } else {
+                        emit(AppEvent::SettingsFormCancelRequested)?;
+                        self.form_list_state = ListState::default();
+                    }
+                }
+                (KeyCode::Char('r'), SettingsFormState::Loaded { .. })
+                    if modifiers.is_empty() && state.settings_form_is_changed =>
+                {
+                    emit(AppEvent::SettingsFormResetRequested)?;
+                }
+                (KeyCode::Char('s'), SettingsFormState::Loaded { id })
+                    if modifiers.is_empty() && state.settings_form_is_changed =>
+                {
+                    emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
+                }
+                (KeyCode::Tab | KeyCode::BackTab, _) => {
+                    return Ok(false);
+                }
+                _ => {}
+            },
             _ => {}
         }
 

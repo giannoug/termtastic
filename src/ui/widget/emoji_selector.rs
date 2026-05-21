@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, MouseEvent, MouseEventKind};
+use crossterm::event::Event;
 use emoji::Emoji;
 use ratatui::{
     prelude::*,
@@ -9,7 +9,7 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
-use crate::ui::helpers::default_scrollbar;
+use crate::ui::helpers::{default_scrollbar, ListStateExt};
 
 pub struct EmojiSelectorState<'a> {
     input_widget: TextArea<'a>,
@@ -41,30 +41,8 @@ impl<'a> EmojiSelectorState<'a> {
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
-        match event {
-            Event::Key(KeyEvent { code, kind, .. }) if kind == KeyEventKind::Press => match code {
-                KeyCode::Up => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                KeyCode::Down => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            Event::Mouse(MouseEvent { kind, .. }) => match kind {
-                MouseEventKind::ScrollUp => {
-                    self.list_state.previous();
-                    return Ok(true);
-                }
-                MouseEventKind::ScrollDown => {
-                    self.list_state.next();
-                    return Ok(true);
-                }
-                _ => {}
-            },
-            _ => {}
+        if self.list_state.handle_navigation_events(&event, self.emojis.len()) {
+            return Ok(true);
         }
 
         self.input_widget.input(event);
