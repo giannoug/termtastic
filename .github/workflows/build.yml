@@ -51,11 +51,6 @@ jobs:
             archive_ext: .tar.gz
             binary_name: termtastic
 
-          - target: aarch64-unknown-linux-musl
-            os: ubuntu-24.04-arm
-            archive_ext: .tar.gz
-            binary_name: termtastic
-
           - target: x86_64-apple-darwin
             os: macos-latest
             archive_ext: .tar.gz
@@ -75,16 +70,6 @@ jobs:
         with:
           toolchain: stable
           target: ${{ matrix.target }}
-
-      - name: Install system dependencies for Linux
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && \
-          sudo apt-get install -y \
-            pkg-config \
-            libdbus-1-dev \
-            libssl-dev \
-            musl-tools
 
       - name: Cache cargo registry
         uses: actions/cache@v5

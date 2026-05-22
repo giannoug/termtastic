@@ -21,6 +21,9 @@ opt-level = "z"
 lto = true
 strip = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libdbus-sys = { version = "0.2", features = ["vendored"] }
+
 [dependencies]
 ansi-to-tui = { version = "8.0.1" }
 anyhow = { version = "1.0.102" }
