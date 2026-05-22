@@ -76,16 +76,6 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
-      - name: Install system dependencies for Linux
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update && \
-          sudo apt-get install -y \
-            pkg-config \
-            libdbus-1-dev \
-            libssl-dev \
-            musl-tools
-
       - name: Cache cargo registry
         uses: actions/cache@v5
         with:
@@ -98,8 +88,11 @@ jobs:
             ${{ runner.os }}-cargo-${{ matrix.target }}-
             ${{ runner.os }}-cargo-
 
+      - name: Install cross
+        run: cargo install cross --locked
+
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Prepare binary (Windows)
         if: matrix.os == 'windows-latest'
