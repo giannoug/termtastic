@@ -161,6 +161,7 @@ impl Store {
             StateAction::ConnectionStop => {
                 self.state_tx.send_modify(|state| {
                     state.active_device = None;
+                    state.chats.clear();
                     state.channels.clear();
                     state.connection_attempt = 0;
                     state.connection_state = Default::default();
@@ -177,6 +178,7 @@ impl Store {
 
                     changed.extend([
                         name_of!(active_device in State),
+                        name_of!(chats in State),
                         name_of!(channels in State),
                         name_of!(connection_attempt in State),
                         name_of!(connection_state in State),

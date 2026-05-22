@@ -399,29 +399,28 @@ impl<'a> Widget for DeviceWidget<'a> {
     where
         Self: Sized,
     {
+        let modifier = if self.is_selected {
+            Modifier::REVERSED
+        } else {
+            Modifier::empty()
+        };
+
         let spans = match self.device {
-            Device::Ble(address) => vec![
+            Device::Ble(address, name) => vec![
                 Span::from(" BLE ").black().on_blue(),
-                Span::from(" "),
-                Span::from(address),
+                Span::from(format!(" {} ", name.clone().unwrap_or(address.to_string()))).add_modifier(modifier),
             ],
             Device::Tcp(address) => vec![
                 Span::from(" TCP ").black().on_green(),
-                Span::from(" "),
-                Span::from(address.to_string()),
+                Span::from(format!(" {} ", address)).add_modifier(modifier),
             ],
             Device::Serial(address) => vec![
                 Span::from(" COM ").black().on_magenta(),
-                Span::from(" "),
-                Span::from(address),
+                Span::from(format!(" {} ", address)).add_modifier(modifier),
             ],
         };
 
         let mut line = Line::from(spans);
-
-        if self.is_selected {
-            line = line.reversed();
-        }
 
         if self.centered {
             line = line.centered();

@@ -1,11 +1,10 @@
 use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
-use futures::stream::{self, StreamExt};
 use hostaddr::HostAddr;
 use meshtastic::protobufs::from_radio;
 use tokio::sync::{broadcast, mpsc, watch};
-use tokio::time;
+use tokio::{join, time};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
@@ -18,6 +17,8 @@ use crate::{
 const CONNECTION_CHECK_INTERVAL_MILLIS: u64 = 250;
 const RECONNECTION_BACKOFF_BASE_MILLIS: u64 = 1_000;
 const RECONNECTION_BACKOFF_MAX_MILLIS: u64 = 30_000;
+const BLE_DISCOVERY_TIMEOUT_SECS: u64 = 5;
+const MDNS_DISCOVERY_TIMEOUT_SECS: u64 = 3;
 const MDNS_MESHTASTIC_DOMAIN: &'static str = "_meshtastic._tcp.local.";
 
 pub struct ConnectionService {
@@ -254,9 +255,9 @@ impl ConnectionService {
             Device::Tcp(address) => self
                 .meshtastic_command_tx
                 .send(CommandToMeshtastic::ConnectViaTcp(address.clone()))?,
-            Device::Ble(address) => self
+            Device::Ble(address, _) => self
                 .meshtastic_command_tx
-                .send(CommandToMeshtastic::ConnectViaBle(address.to_owned()))?,
+                .send(CommandToMeshtastic::ConnectViaBle(address.clone()))?,
             Device::Serial(address) => self
                 .meshtastic_command_tx
                 .send(CommandToMeshtastic::ConnectViaSerial(address.to_owned()))?,
@@ -266,46 +267,6 @@ impl ConnectionService {
     }
 
     async fn discover_devices(&self) -> anyhow::Result<()> {
-        // BLE
-        if let Some(adapter) = bluest::Adapter::default().await {
-            match adapter.wait_available().await {
-                Ok(()) => {
-                    let ble_devices: Vec<Device> = stream::iter(adapter.connected_devices().await?)
-                        .filter_map(|d| async move {
-                            match d.is_paired().await {
-                                Ok(false) => {
-                                    return None;
-                                }
-                                Err(e) => {
-                                    tracing::error!("can't obtain BLE device pair status for {}: {}", d.id(), e);
-                                    return None;
-                                }
-                                _ => {}
-                            }
-
-                            if !d.is_connected().await {
-                                return None;
-                            }
-
-                            Some(Device::Ble(d.id().to_string()))
-                        })
-                        .collect()
-                        .await;
-
-                    for device in ble_devices.into_iter() {
-                        self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(device))?;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("can't fetch BLE devices: {}", e);
-                }
-            }
-        } else {
-            tracing::warn!(
-                "can't fetch BLE devices, possible reasons: no Bluetooth adapter, Bluetooth is turned off, permission denied"
-            );
-        }
-
         // Serial
         match meshtastic::utils::stream::available_serial_ports() {
             Ok(ports) => {
@@ -320,7 +281,31 @@ impl ConnectionService {
             }
         };
 
-        // mDNS
+        let _ = join!(self.discover_ble_devices(), self.discover_tcp_devices());
+
+        Ok(())
+    }
+
+    async fn discover_ble_devices(&self) -> anyhow::Result<()> {
+        match meshtastic::utils::stream::available_ble_devices(Duration::from_secs(BLE_DISCOVERY_TIMEOUT_SECS)).await {
+            Ok(devices) => {
+                let ble_devices = devices
+                    .iter()
+                    .map(|device| Device::Ble(device.mac_address, device.name.clone()));
+
+                for device in ble_devices.into_iter() {
+                    self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(device))?;
+                }
+            }
+            Err(e) => {
+                tracing::error!("can't fetch BLE devices: {}", e);
+            }
+        };
+
+        Ok(())
+    }
+
+    async fn discover_tcp_devices(&self) -> anyhow::Result<()> {
         if let Some(mdns_daemon) = &self.mdns_daemon {
             match mdns_daemon.browse(MDNS_MESHTASTIC_DOMAIN) {
                 Ok(receiver) => {
@@ -346,7 +331,7 @@ impl ConnectionService {
                                 }
                             }
                             _ => {
-                                if now.elapsed().as_secs() > 2 {
+                                if now.elapsed().as_secs() > MDNS_DISCOVERY_TIMEOUT_SECS {
                                     tracing::debug!("mDNS timeout, stopping discovery");
                                     break;
                                 }

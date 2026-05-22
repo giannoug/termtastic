@@ -1,9 +1,9 @@
-use std::time::Duration;
-
+use btleplug::api::BDAddr;
 use hostaddr::HostAddr;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::FromRadio;
 use meshtastic::utils;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 const MESHTASTIC_DEFAULT_TCP_PORT: u16 = 4403;
@@ -27,10 +27,10 @@ pub async fn connect_via_tcp(
 }
 
 pub async fn connect_via_ble(
-    address: String,
+    address: BDAddr,
 ) -> anyhow::Result<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)> {
     let stream_handle =
-        utils::stream::build_ble_stream(&utils::stream::BleId::from_name(&address), Duration::from_secs(5)).await?;
+        utils::stream::build_ble_stream(utils::stream::BleId::MacAddress(address), Duration::from_secs(5)).await?;
 
     let stream_api = StreamApi::new();
     let (from_radio_receiver, connected_stream_api) = stream_api.connect(stream_handle).await;

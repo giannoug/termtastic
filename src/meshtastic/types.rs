@@ -1,4 +1,5 @@
 use crate::types::FormId;
+use btleplug::api::BDAddr;
 use emoji::Emoji;
 use hostaddr::HostAddr;
 use meshtastic::protobufs::{config, from_radio, module_config};
@@ -33,7 +34,7 @@ pub enum TextMessage {
 #[derive(Debug, Clone)]
 pub enum CommandToMeshtastic {
     ConnectViaTcp(HostAddr<String>),
-    ConnectViaBle(String),
+    ConnectViaBle(BDAddr),
     ConnectViaSerial(String),
     Disconnect,
     Reboot {

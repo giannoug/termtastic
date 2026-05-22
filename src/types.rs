@@ -1,5 +1,6 @@
 use crate::state::State;
 use anyhow::anyhow;
+use btleplug::api::BDAddr;
 use chrono::{DateTime, TimeZone, Utc};
 use emoji::Emoji;
 use hostaddr::HostAddr;
@@ -104,7 +105,7 @@ pub enum AppEvent {
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
 pub enum Device {
-    Ble(String),
+    Ble(BDAddr, Option<String>),
     Tcp(HostAddr<String>),
     Serial(String),
 }
@@ -118,7 +119,7 @@ impl Ord for Device {
 
             (Device::Ble { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Ble { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (Device::Ble(address), Device::Ble(other_address)) => address.cmp(other_address),
+            (Device::Ble(address, _), Device::Ble(other_address, _)) => address.cmp(other_address),
 
             (Device::Serial { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Serial { .. }, Device::Ble { .. }) => std::cmp::Ordering::Greater,
