@@ -387,6 +387,13 @@ impl Store {
                     changed.push(name_of!(device_module_config in State));
                 });
             }
+            StateAction::DeviceCannedMessagesSet(messages) => {
+                self.state_tx.send_modify(|state| {
+                    state.device_canned_messages = Some(messages);
+
+                    changed.push(name_of!(device_canned_messages in State));
+                });
+            }
             StateAction::NodeInit(node) => {
                 self.state_tx.send_modify(|state| {
                     state.nodes.insert(node.key, node);

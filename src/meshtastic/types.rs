@@ -84,4 +84,11 @@ pub enum CommandToMeshtastic {
         node_num: u32,
         my_node_num: u32,
     },
+    LoadCannedMessages {
+        my_node_num: u32,
+    },
+    SaveCannedMessages {
+        messages: String,
+        my_node_num: u32,
+    },
 }

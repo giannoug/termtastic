@@ -2643,6 +2643,19 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
                 |v| v.to_string(),
                 |_| Ok(()),
             ),
+            FormItem::new(
+                FormItemKey::Simple("messages"),
+                "Messages",
+                None,
+                FormItemKind::InputOfString,
+                |v| v.to_string(),
+                |v| {
+                    (0..=200)
+                        .contains(&v.as_string().len())
+                        .then_some(())
+                        .ok_or(anyhow::anyhow!("Max length is 200"))
+                },
+            ),
         ]),
     );
 

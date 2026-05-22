@@ -19,7 +19,9 @@ use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::serde::{from_formdata, to_formdata};
-use crate::types::{AppEvent, Channel, FormData, FormId, NodeUser, SettingsFormState, SettingsItem, Toast, UiConfig};
+use crate::types::{
+    AppEvent, Channel, FormData, FormId, FormValue, NodeUser, SettingsFormState, SettingsItem, Toast, UiConfig,
+};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::{State, StateAction},
@@ -95,6 +97,17 @@ impl SettingsService {
                     )
                 {
                     self.start_config_loading(&FormId::DeviceUser)?;
+                }
+
+                if changed.contains(&name_of!(device_canned_messages in State))
+                    && matches!(
+                        state.settings_form_state,
+                        SettingsFormState::Loaded {
+                            id: FormId::ModuleCannedMessage
+                        }
+                    )
+                {
+                    self.start_config_loading(&FormId::ModuleCannedMessage)?;
                 }
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -222,6 +235,10 @@ impl SettingsService {
                                     "device will be rebooted in {} secs...",
                                     secs
                                 ))))?;
+                            }
+                            Some(admin_message::PayloadVariant::GetCannedMessageModuleMessagesResponse(messages)) => {
+                                self.state_action_tx
+                                    .send(StateAction::DeviceCannedMessagesSet(messages))?;
                             }
                             _ => {}
                         },
@@ -380,13 +397,22 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Telemetry config not loaded"))?,
             )?,
-            FormId::ModuleCannedMessage => to_formdata(
-                state
-                    .device_module_config
-                    .canned_message
-                    .as_ref()
-                    .ok_or(anyhow::anyhow!("Canned Message config not loaded"))?,
-            )?,
+            FormId::ModuleCannedMessage => {
+                let mut form_data = to_formdata(
+                    state
+                        .device_module_config
+                        .canned_message
+                        .as_ref()
+                        .ok_or(anyhow::anyhow!("Canned Message config not loaded"))?,
+                )?;
+
+                form_data.insert(
+                    "messages".to_owned(),
+                    FormValue::String(state.device_canned_messages.as_ref().unwrap_or(&String::new()).clone()),
+                );
+
+                form_data
+            }
             FormId::ModuleNeighborInfo => to_formdata(
                 state
                     .device_module_config
@@ -562,13 +588,26 @@ impl SettingsService {
                 })?;
             }
             FormId::ModuleCannedMessage => {
+                let mut cloned_form_data = form_data.clone();
+                let messages = cloned_form_data
+                    .remove("messages")
+                    .expect("should be Some")
+                    .as_string()
+                    .clone();
+
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {
                     form_id: id.clone(),
                     my_node_num: state.my_node_key.expect("should be Some"),
                     config: module_config::PayloadVariant::CannedMessage(from_formdata::<CannedMessageConfig>(
-                        &form_data,
+                        &cloned_form_data,
                     )?),
                 })?;
+
+                self.meshtastic_command_tx
+                    .send(CommandToMeshtastic::SaveCannedMessages {
+                        my_node_num: state.my_node_key.expect("should be Some"),
+                        messages,
+                    })?;
             }
             FormId::ModuleNeighborInfo => {
                 self.meshtastic_command_tx.send(CommandToMeshtastic::SaveModuleConfig {

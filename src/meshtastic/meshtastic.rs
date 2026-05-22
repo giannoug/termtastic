@@ -171,6 +171,20 @@ impl MeshtasticService {
                 self.send_admin_message(my_node_num, admin_message::PayloadVariant::ShutdownSeconds(secs))
                     .await?;
             }
+            CommandToMeshtastic::LoadCannedMessages { my_node_num } => {
+                self.send_admin_message(
+                    my_node_num,
+                    admin_message::PayloadVariant::GetCannedMessageModuleMessagesRequest(true),
+                )
+                .await?;
+            }
+            CommandToMeshtastic::SaveCannedMessages { messages, my_node_num } => {
+                self.send_admin_message(
+                    my_node_num,
+                    admin_message::PayloadVariant::SetCannedMessageModuleMessages(messages),
+                )
+                .await?;
+            }
             CommandToMeshtastic::SendBroadcastTextMessage {
                 channel_id,
                 reply_message_id,
@@ -492,7 +506,7 @@ impl MeshtasticService {
         payload: admin_message::PayloadVariant,
     ) -> anyhow::Result<()> {
         let mut packet_router = RetransmitPacketRouter {
-            my_node_num: my_node_num,
+            my_node_num,
             event_tx: &self.event_tx,
         };
 
@@ -510,8 +524,8 @@ impl MeshtasticService {
                 PortNum::AdminApp,
                 PacketDestination::Local,
                 MeshChannel::new(0)?,
-                true,  // want_ack
-                false, // want_response
+                false, // want_ack
+                true,  // want_response
                 true,  // echo_response
                 None,  // reply_id
                 None,  // emoji

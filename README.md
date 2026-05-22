@@ -246,3 +246,10 @@ If you are using `foot` terminal try to add these lines into your `foot.ini` con
 [tweak]
 grapheme-width-method=wcswidth
 ```
+
+The same named option exists in other terminals too. Check your terminal docs.
+
+### Why do some emoji appear as squares in Windows Terminal??
+
+Unfortunately, Windows Terminal cannot display some compound emoji such as 1️⃣, 2️⃣, 3️⃣, etc.
+There is an issue in Github: https://github.com/microsoft/terminal/issues/9708
