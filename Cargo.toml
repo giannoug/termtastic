@@ -21,12 +21,6 @@ opt-level = "z"
 lto = true
 strip = true
 
-[target.x86_64-unknown-linux-musl]
-linker = "musl-gcc"
-
-[target.aarch64-unknown-linux-musl]
-linker = "musl-gcc"
-
 [dependencies]
 ansi-to-tui = { version = "8.0.1" }
 anyhow = { version = "1.0.102" }
