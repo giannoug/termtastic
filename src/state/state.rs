@@ -11,10 +11,11 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub struct State {
-    pub active_channel_key: Option<u32>,
+    pub active_chat: Option<Chat>,
     pub active_device: Option<Device>,
     pub active_tab: Tab,
     pub channels: OrderMap<u32, Channel>,
+    pub chats: OrderMap<Chat, Vec<u32>>,
     pub connection_attempt: u32,
     pub connection_state: ConnectionState,
     pub config_loaded: bool,
@@ -25,8 +26,7 @@ pub struct State {
     pub devices_discovered: BTreeSet<Device>,
     pub devices: BTreeSet<Device>,
     pub logs: Vec<LogRecord>,
-    pub messages: HashMap<u32, VecDeque<Message>>,
-    pub message_reactions: HashMap<u32, MessageReaction>,
+    pub messages: HashMap<u32, Message>,
     pub my_node_key: Option<u32>,
     pub my_node_user_hash: u64,
     pub need_clear_frame: bool,
@@ -54,10 +54,11 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            active_channel_key: None,
+            active_chat: None,
             active_device: None,
             active_tab: Default::default(),
-            channels: OrderMap::with_capacity(10),
+            channels: OrderMap::with_capacity(8),
+            chats: Default::default(),
             connection_attempt: 0,
             connection_state: Default::default(),
             config_loaded: false,
@@ -69,15 +70,14 @@ impl Default for State {
             devices: Default::default(),
             logs: Vec::with_capacity(1000),
             messages: Default::default(),
-            message_reactions: Default::default(),
             my_node_key: None,
             my_node_user_hash: Default::default(),
             need_clear_frame: false,
             nodeinfo_popup: None,
             nodes_sort_by: Default::default(),
             nodes_filter: Default::default(),
-            nodes_view: Vec::with_capacity(200),
-            nodes: HashMap::with_capacity(200),
+            nodes_view: Vec::with_capacity(1000),
+            nodes: HashMap::with_capacity(1000),
             online_nodes: 0,
             reconnection_backoff: None,
             rx_t: Instant::now(),
@@ -103,21 +103,6 @@ impl State {
 
     pub fn get_my_node(&self) -> Option<&Node> {
         self.my_node_key.and_then(|key| self.nodes.get(&key))
-    }
-
-    pub fn get_active_channel(&self) -> Option<&Channel> {
-        self.active_channel_key.and_then(|key| self.channels.get(&key))
-    }
-
-    pub fn get_mut_message_by_id(&mut self, channel_key: u32, id: u32) -> Option<&mut Message> {
-        let Some(messages) = self.messages.get_mut(&channel_key) else {
-            return None;
-        };
-
-        messages
-            .binary_search_by_key(&id, |m| m.id)
-            .ok()
-            .and_then(|index| messages.get_mut(index))
     }
 
     pub fn update_nodes_view(&mut self) {

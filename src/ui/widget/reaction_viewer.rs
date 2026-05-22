@@ -1,12 +1,12 @@
 use crossterm::event::Event;
 use ratatui::prelude::*;
 use ratatui::text::ToSpan;
-use ratatui::widgets::{Block, BorderType, Padding, StatefulWidget, Widget};
+use ratatui::widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widget};
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
-use crate::types::{MessageReaction, Node};
+use crate::types::{Message, Node};
 use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span, ListStateExt};
-use crate::ui::prelude::{Borders, Constraint, Layout, PlaceholderWidget};
+use crate::ui::widget::PlaceholderWidget;
 
 pub struct ReactionViewerState {
     list_state: ListState,
@@ -29,7 +29,7 @@ impl ReactionViewerState {
 }
 
 pub struct ReactionViewerItem<'a> {
-    pub reaction: &'a MessageReaction,
+    pub reaction: &'a Message,
     pub node: &'a Node,
     pub is_my_node: bool,
 }
@@ -130,7 +130,7 @@ impl<'a> Widget for ReactionWidget<'a> {
         ])
         .render(v0_h[0], buf);
 
-        Span::from(&self.item.reaction.emoji).render(v0_h[2], buf);
+        Span::from(&self.item.reaction.text).render(v0_h[2], buf);
 
         // second line
         Line::from(if self.item.is_my_node {

@@ -1,12 +1,8 @@
 use crossterm::event::KeyModifiers;
 use itertools::Itertools;
 use ordermap::OrderMap;
-use std::{
-    collections::{HashMap, VecDeque},
-    iter,
-    ops::RangeInclusive,
-    sync::LazyLock,
-};
+use std::sync::LazyLock;
+use std::{collections::HashMap, iter, ops::RangeInclusive};
 use tracing_unwrap::OptionExt;
 use tui_widget_list::ScrollDirection;
 
@@ -15,13 +11,13 @@ use crate::ui::prelude::*;
 const INPUT_VALUE_MAX_LENGTH: usize = 200;
 const VALID_INPUT_LENGTH: RangeInclusive<usize> = 1..=INPUT_VALUE_MAX_LENGTH;
 
-static EMPTY_MESSAGES_VEC: LazyLock<VecDeque<Message>> = LazyLock::new(|| VecDeque::default());
+static EMPTY_MESSAGES_VEC: LazyLock<Vec<u32>> = LazyLock::new(|| Vec::default());
 
 pub struct Messenger<'a> {
-    list_states: HashMap<u32, ListState>,
-    input_widgets: HashMap<u32, TextArea<'a>>,
-    follow_chat: HashMap<u32, bool>,
-    replying_to: HashMap<u32, (Node, u32)>,
+    list_states: HashMap<Chat, ListState>,
+    input_widgets: HashMap<Chat, TextArea<'a>>,
+    follow_chat: HashMap<Chat, bool>,
+    replying_to: HashMap<Chat, (Node, u32)>,
     is_emoji_selector_visible: bool,
     emoji_selector_state: EmojiSelectorState<'a>,
     is_reaction_viewer_visible: bool,
@@ -61,27 +57,27 @@ impl<'a> Component for Messenger<'a> {
             return vec![Hotkey::new("esc", "close")];
         }
 
-        let active_channel_key = state.active_channel_key.expect_or_log("channel should be selected");
+        let active_chat = state.active_chat.as_ref().expect_or_log("channel should be selected");
 
         let input_has_single_emoji = self
             .input_widgets
-            .get(&active_channel_key)
+            .get(active_chat)
             .and_then(|input| input.get_single_emoji())
             .is_some();
 
         let input_has_valid_value = self
             .input_widgets
-            .get(&active_channel_key)
+            .get(active_chat)
             .and_then(|input| Some(VALID_INPUT_LENGTH.contains(&input.trimmed_len())))
             .unwrap_or(false);
 
         let input_has_something = self
             .input_widgets
-            .get(&active_channel_key)
+            .get(active_chat)
             .and_then(|input| Some(!input.is_empty()))
             .unwrap_or(false);
 
-        if self.replying_to.contains_key(&active_channel_key) {
+        if self.replying_to.contains_key(active_chat) {
             return vec![
                 input_has_something.then_some(Hotkey::new(
                     if cfg!(target_os = "macos") {
@@ -103,7 +99,7 @@ impl<'a> Component for Messenger<'a> {
 
         let is_message_selected = self
             .list_states
-            .get(&active_channel_key)
+            .get(active_chat)
             .and_then(|s| Some(s.selected.is_some()))
             .unwrap_or(false);
 
@@ -135,21 +131,25 @@ impl<'a> Component for Messenger<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
-        let active_channel_key = state.active_channel_key.expect_or_log("channel should be selected");
+        let active_chat = state.active_chat.as_ref().expect_or_log("channel should be selected");
 
         let list_state = self
             .list_states
-            .entry(active_channel_key)
+            .entry(active_chat.clone())
             .or_insert_with(|| ListState::default());
 
         let input_widget = self
             .input_widgets
-            .entry(active_channel_key)
+            .entry(active_chat.clone())
             .or_insert_with(|| new_input_widget());
 
-        let is_replying_to = self.replying_to.contains_key(&active_channel_key);
+        let is_replying_to = self.replying_to.contains_key(active_chat);
 
-        let messages = state.messages.get(&active_channel_key).unwrap_or(&EMPTY_MESSAGES_VEC);
+        let messages: Vec<&Message> = state
+            .chats
+            .get(active_chat)
+            .and_then(|ids| Some(ids.iter().filter_map(|id| state.messages.get(id)).collect()))
+            .unwrap_or_else(Vec::new);
 
         if self.is_reaction_viewer_visible {
             match event {
@@ -172,8 +172,8 @@ impl<'a> Component for Messenger<'a> {
                 .selected
                 .and_then(|i| messages.get(i))
                 .and_then(|m| {
-                    Some(m.reactions.iter().fold(0, |mut counter, reaction_id| {
-                        if state.message_reactions.contains_key(reaction_id) {
+                    Some(m.reactions.iter().fold(0, |mut counter, message_id| {
+                        if state.messages.contains_key(message_id) {
                             counter += 1;
                         };
 
@@ -227,9 +227,9 @@ impl<'a> Component for Messenger<'a> {
                     }
                     KeyCode::Enter => {
                         if input_widget.trimmed_len() <= INPUT_VALUE_MAX_LENGTH
-                            && let Some((_, message_id)) = self.replying_to.remove(&active_channel_key)
+                            && let Some((_, message_id)) = self.replying_to.remove(active_chat)
                         {
-                            self.follow_chat.insert(active_channel_key, true);
+                            self.follow_chat.insert(active_chat.clone(), true);
 
                             match input_widget.get_single_emoji() {
                                 Some(emoji) => {
@@ -252,7 +252,7 @@ impl<'a> Component for Messenger<'a> {
                         }
                     }
                     KeyCode::Esc => {
-                        self.replying_to.remove(&active_channel_key);
+                        self.replying_to.remove(&active_chat);
                         return Ok(true);
                     }
                     _ => {}
@@ -267,7 +267,8 @@ impl<'a> Component for Messenger<'a> {
 
         if input_widget.is_empty() && list_state.handle_navigation_events(event, messages.len()) {
             if let Some(index) = list_state.selected {
-                self.follow_chat.insert(active_channel_key, index == messages.len() - 1);
+                self.follow_chat
+                    .insert(active_chat.clone(), index == messages.len() - 1);
             }
 
             return Ok(true);
@@ -286,7 +287,7 @@ impl<'a> Component for Messenger<'a> {
                 }
                 KeyCode::Enter if modifiers.is_empty() => {
                     if input_widget.trimmed_len() <= INPUT_VALUE_MAX_LENGTH {
-                        self.follow_chat.insert(active_channel_key, true);
+                        self.follow_chat.insert(active_chat.clone(), true);
 
                         emit(AppEvent::ChatMessageSubmitted {
                             text: input_widget.trimmed_lines().join("\n"),
@@ -301,7 +302,7 @@ impl<'a> Component for Messenger<'a> {
                 KeyCode::F(2) if modifiers.is_empty() => {
                     if let Some(message) = list_state.selected.and_then(|i| messages.get(i)) {
                         if let Some(node) = state.nodes.get(&message.from) {
-                            self.replying_to.insert(active_channel_key, (node.clone(), message.id));
+                            self.replying_to.insert(active_chat.clone(), (node.clone(), message.id));
                         }
                     }
 
@@ -324,14 +325,14 @@ impl<'a> Component for Messenger<'a> {
                 }
                 KeyCode::F(7) if modifiers.is_empty() => {
                     if list_state.selected.and_then(|i| messages.get(i)).is_some() {
-                        self.follow_chat.insert(active_channel_key, false);
+                        self.follow_chat.insert(active_chat.clone(), false);
                         self.is_reaction_viewer_visible = true;
                     }
 
                     return Ok(true);
                 }
                 KeyCode::Esc if modifiers.is_empty() => {
-                    emit(AppEvent::ChannelSwitchRequested)?;
+                    emit(AppEvent::ChatSwitchRequested)?;
                     return Ok(true);
                 }
                 KeyCode::Tab | KeyCode::BackTab if modifiers.is_empty() => {
@@ -352,25 +353,28 @@ impl<'a> Component for Messenger<'a> {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let active_channel = state.get_active_channel().expect_or_log("channel should be selected");
+        let active_chat = state.active_chat.as_ref().expect_or_log("channel should be selected");
 
-        let list_state = self
-            .list_states
-            .entry(active_channel.key)
-            .or_insert_with(|| ListState::default());
+        if !self.list_states.contains_key(active_chat) {
+            self.list_states.insert(active_chat.clone(), ListState::default());
+        }
 
-        let input_widget = self
-            .input_widgets
-            .entry(active_channel.key)
-            .or_insert_with(|| new_input_widget());
+        if !self.input_widgets.contains_key(active_chat) {
+            self.input_widgets.insert(active_chat.clone(), new_input_widget());
+        }
 
-        let replying_to = self.replying_to.get(&active_channel.key);
+        if !self.follow_chat.contains_key(active_chat) {
+            self.follow_chat.insert(active_chat.clone(), false);
+        }
 
-        let messages = state.messages.get(&active_channel.key).unwrap_or(&EMPTY_MESSAGES_VEC);
+        let list_state = self.list_states.get_mut(active_chat).unwrap();
+        let input_widget = self.input_widgets.get_mut(active_chat).unwrap();
+        let follow_chat = self.follow_chat.get(active_chat).unwrap();
+        let replying_to = self.replying_to.get(active_chat);
+        let message_ids = state.chats.get(active_chat).unwrap_or_else(|| &EMPTY_MESSAGES_VEC);
 
-        let follow_chat = self.follow_chat.entry(active_channel.key).or_insert(true);
-        if *follow_chat && !messages.is_empty() {
-            list_state.select(Some(messages.len() - 1));
+        if *follow_chat && !message_ids.is_empty() {
+            list_state.select(Some(message_ids.len() - 1));
         }
 
         let v = Layout::vertical([
@@ -383,20 +387,23 @@ impl<'a> Component for Messenger<'a> {
             state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 
         // list
-        if !messages.is_empty() {
+        if !message_ids.is_empty() {
             let list_builder = ListBuilder::new(|context| {
-                let message = &messages[context.index];
+                let message = message_ids
+                    .get(context.index)
+                    .and_then(|id| state.messages.get(id))
+                    .expect_or_log("message should exist");
 
                 let reactions = message
                     .reactions
                     .iter()
-                    .filter_map(|reaction_id| state.message_reactions.get(reaction_id))
+                    .filter_map(|message_id| state.messages.get(message_id))
                     .collect();
 
                 let replied_message = if message.reply_message_id > 0 {
-                    messages
-                        .iter()
-                        .find(|m| m.id == message.reply_message_id)
+                    state
+                        .messages
+                        .get(&message.reply_message_id)
                         .and_then(|m| Some((state.nodes.get(&m.from).unwrap_or(&UNKNOWN_NODE), m)))
                 } else {
                     None
@@ -418,14 +425,14 @@ impl<'a> Component for Messenger<'a> {
 
                 let mut height = item.height(area.width);
 
-                if context.index < messages.len() - 1 {
+                if context.index < message_ids.len() - 1 {
                     height += 1;
                 }
 
                 (item, height)
             });
 
-            let list = ListView::new(list_builder, messages.len())
+            let list = ListView::new(list_builder, message_ids.len())
                 .infinite_scrolling(false)
                 .scroll_direction(ScrollDirection::Backward)
                 .scrollbar(default_scrollbar())
@@ -453,14 +460,14 @@ impl<'a> Component for Messenger<'a> {
 
         let input_block_area = input_block.inner(v[1]);
 
-        let channel_name_spans = match (&active_channel.role, replying_to) {
-            (ChannelRole::Primary | ChannelRole::Secondary, None) => channel_name_to_spans(active_channel, state)
+        let channel_name_spans = match (active_chat, replying_to) {
+            (Chat::Channel(_), None) => chat_to_spans(active_chat, state)
                 .iter()
                 .chain(iter::once(&Span::from(" ←").dark_gray()))
                 .cloned()
                 .collect(),
-            (ChannelRole::Direct, None) => {
-                let node = state.nodes.get(&active_channel.key).unwrap_or(&UNKNOWN_NODE);
+            (Chat::Direct(node_key), None) => {
+                let node = state.nodes.get(node_key).unwrap_or(&UNKNOWN_NODE);
 
                 vec![
                     short_name_to_span(node, state.is_my_node(node.key)),
@@ -472,7 +479,6 @@ impl<'a> Component for Messenger<'a> {
                 short_name_to_span(node, state.is_my_node(node.key)),
                 Span::from(" ←").dark_gray(),
             ],
-            _ => unreachable!(),
         };
 
         let channel_line = Line::from(channel_name_spans);
@@ -505,7 +511,10 @@ impl<'a> Component for Messenger<'a> {
 
         // reaction viewer
         if self.is_reaction_viewer_visible
-            && let Some(message) = list_state.selected.and_then(|i| messages.get(i))
+            && let Some(message) = list_state
+                .selected
+                .and_then(|i| message_ids.get(i))
+                .and_then(|id| state.messages.get(id))
         {
             let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(15));
 
@@ -516,12 +525,12 @@ impl<'a> Component for Messenger<'a> {
             let reaction_items: Vec<ReactionViewerItem> = message
                 .reactions
                 .iter()
-                .filter_map(|reaction_id| {
-                    let Some(reaction) = state.message_reactions.get(reaction_id) else {
+                .filter_map(|message_id| {
+                    let Some(reaction) = state.messages.get(message_id) else {
                         return None;
                     };
 
-                    let node = state.nodes.get(&reaction.node_key).unwrap_or(&UNKNOWN_NODE);
+                    let node = state.nodes.get(&reaction.from).unwrap_or(&UNKNOWN_NODE);
 
                     Some(ReactionViewerItem {
                         reaction,
@@ -560,7 +569,7 @@ fn new_input_widget() -> TextArea<'static> {
 struct MessageWidget<'a> {
     pub node: &'a Node,
     pub message: &'a Message,
-    pub reactions: Vec<&'a MessageReaction>,
+    pub reactions: Vec<&'a Message>,
     pub replied_message: Option<(&'a Node, &'a Message)>,
     pub is_my_node: bool,
     pub is_selected: bool,
@@ -678,7 +687,7 @@ impl<'a> Widget for MessageWidget<'a> {
                     .iter()
                     .sorted_by_key(|r| r.datetime)
                     .fold(OrderMap::new(), |mut acc, r| {
-                        *acc.entry(&r.emoji).or_insert(0) += 1;
+                        *acc.entry(&r.text).or_insert(0) += 1;
                         acc
                     })
                     .iter()

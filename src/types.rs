@@ -61,9 +61,9 @@ pub struct UiConfig {
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
-    ChannelPurgeRequested(u32),
-    ChannelSelected(u32),
-    ChannelSwitchRequested,
+    ChatPurgeRequested(Chat),
+    ChatSelected(Chat),
+    ChatSwitchRequested,
     ChatMessageSubmitted {
         text: String,
         reply_message_id: Option<u32>,
@@ -600,16 +600,11 @@ pub enum ChannelRole {
     Disabled = 0,
     Primary = 1,
     Secondary = 2,
-    Direct = 3,
 }
 
 impl ChannelRole {
     pub fn is_disabled(&self) -> bool {
         self == &Self::Disabled
-    }
-
-    pub fn is_direct(&self) -> bool {
-        self == &Self::Direct
     }
 }
 
@@ -619,6 +614,35 @@ impl From<channel::Role> for ChannelRole {
             channel::Role::Disabled => ChannelRole::Disabled,
             channel::Role::Primary => ChannelRole::Primary,
             channel::Role::Secondary => ChannelRole::Secondary,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash)]
+pub enum Chat {
+    Channel(u32),
+    Direct(u32),
+}
+
+impl Ord for Chat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self, other) {
+            (Chat::Channel(key), Chat::Channel(other_key)) => key.cmp(&other_key),
+            (Chat::Channel(_), Chat::Direct(_)) => std::cmp::Ordering::Less,
+            (Chat::Direct(_), Chat::Channel(_)) => std::cmp::Ordering::Greater,
+            (Chat::Direct(key), Chat::Direct(other_key)) => key.cmp(&other_key),
+        }
+    }
+}
+
+impl From<(&Message, u32)> for Chat {
+    fn from((message, my_node_key): (&Message, u32)) -> Self {
+        if message.to == 0 || message.to == u32::MAX {
+            Chat::Channel(message.channel)
+        } else if my_node_key == message.to {
+            Chat::Direct(message.from)
+        } else {
+            Chat::Direct(message.to)
         }
     }
 }
@@ -643,21 +667,6 @@ impl Channel {
             key: index,
             id: 0,
             role: ChannelRole::Disabled,
-            name: String::default(),
-            psk: Vec::default(),
-            uplink_enabled: false,
-            downlink_enabled: false,
-            position_precision: 0,
-            is_muted: false,
-            is_enabled: false,
-        }
-    }
-
-    pub fn direct(node_key: u32) -> Self {
-        Self {
-            key: node_key,
-            id: 0,
-            role: ChannelRole::Direct,
             name: String::default(),
             psk: Vec::default(),
             uplink_enabled: false,
@@ -727,65 +736,15 @@ impl Into<meshtastic::protobufs::Channel> for &Channel {
 }
 
 #[derive(Debug, Clone)]
-pub struct MessageReaction {
-    #[allow(unused)]
-    pub id: u32,
-    pub node_key: u32,
-    pub emoji: String,
-    pub datetime: DateTime<Utc>,
-    pub hops: u32,
-    pub snr: f32,
-    pub rssi: i32,
-    pub routing_error: Option<routing::Error>,
-}
-
-impl HopsSnrRssiAware for MessageReaction {
-    fn hops(&self) -> Option<u32> {
-        Some(self.hops)
-    }
-
-    fn snr(&self) -> f32 {
-        self.snr
-    }
-
-    fn rssi(&self) -> Option<i32> {
-        Some(self.rssi)
-    }
-}
-
-impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)> for MessageReaction {
-    type Error = anyhow::Error;
-
-    fn try_from(
-        (packet, data): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data),
-    ) -> Result<Self, Self::Error> {
-        if data.payload.is_empty() {
-            return Err(anyhow!("payload is empty"));
-        }
-
-        Ok(Self {
-            id: packet.id,
-            node_key: packet.from,
-            datetime: Utc
-                .timestamp_opt(packet.rx_time as i64, 0)
-                .single()
-                .unwrap_or(Utc::now()),
-            emoji: String::from_utf8(data.payload.clone())?,
-            hops: packet.hop_start.saturating_sub(packet.hop_limit),
-            snr: packet.rx_snr,
-            rssi: packet.rx_rssi,
-            routing_error: None,
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Message {
     pub id: u32,
     pub reply_message_id: u32,
     pub from: u32,
+    pub to: u32,
+    pub channel: u32,
     pub datetime: DateTime<Utc>,
     pub text: String,
+    pub is_emoji: bool,
     pub reactions: Vec<u32>,
     pub hops: u32,
     pub snr: f32,
@@ -827,11 +786,14 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
             id: packet.id,
             reply_message_id: data.reply_id,
             from: packet.from,
+            to: packet.to,
+            channel: packet.channel,
             datetime: Utc
                 .timestamp_opt(packet.rx_time as i64, 0)
                 .single()
                 .unwrap_or(Utc::now()),
             text: String::from_utf8(data.payload.clone())?,
+            is_emoji: data.emoji > 0,
             reactions: Vec::default(),
             hops: packet.hop_start.saturating_sub(packet.hop_limit),
             snr: packet.rx_snr,

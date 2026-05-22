@@ -2,20 +2,17 @@ use chrono::Utc;
 use meshtastic::protobufs::{config, module_config};
 use nameof::name_of;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::{
-    collections::VecDeque,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use tokio::{
     sync::{broadcast, mpsc, watch},
     time,
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::types::ChannelRole;
+use crate::types::Chat;
 use crate::{
     state::{State, StateAction},
-    types::{Channel, ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
+    types::{ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
 };
 
 const TICK_INTERVAL_MILLIS: u64 = 33;
@@ -510,55 +507,71 @@ impl Store {
             }
             StateAction::ChannelSet(key, channel) => {
                 self.state_tx.send_modify(|state| {
-                    state.channels.insert(key, channel);
-                    state.channels.sort_keys();
+                    if !channel.role.is_disabled() {
+                        let chat = Chat::Channel(key);
+
+                        if !state.chats.contains_key(&chat) {
+                            state.chats.insert_sorted(chat, Vec::new());
+                            changed.push(name_of!(chats in State));
+                        }
+                    }
+
+                    state.channels.insert_sorted(key, channel);
 
                     changed.push(name_of!(channels in State));
                 });
             }
-            StateAction::ChannelActiveSet(key) => {
+            StateAction::ActiveChatSet(chat) => {
                 self.state_tx.send_modify(|state| {
-                    state.active_channel_key = Some(key);
+                    state.active_chat = Some(chat);
 
-                    changed.push(name_of!(active_channel_key in State));
+                    changed.push(name_of!(active_chat in State));
                 });
             }
-            StateAction::ChannelActiveUnset => {
+            StateAction::ActiveChatUnset => {
                 self.state_tx.send_modify(|state| {
-                    state.active_channel_key = None;
+                    state.active_chat = None;
 
-                    changed.push(name_of!(active_channel_key in State));
+                    changed.push(name_of!(active_chat in State));
                 });
             }
-            StateAction::ChannelPurge(key) => {
+            StateAction::ChatPurge(chat) => {
                 self.state_tx.send_if_modified(|state| {
-                    let Some(channel) = state.channels.get(&key) else {
-                        return false;
+                    let message_ids: Vec<u32> = match chat {
+                        Chat::Channel(channel_key) => state
+                            .messages
+                            .iter()
+                            .filter_map(|(id, message)| (message.channel == channel_key).then_some(*id))
+                            .collect(),
+                        Chat::Direct(node_key) => {
+                            let my_node_key = state.my_node_key.expect("should be Some");
+
+                            state
+                                .messages
+                                .iter()
+                                .filter_map(|(id, message)| {
+                                    ((message.from == my_node_key && message.to == node_key)
+                                        || (message.to == my_node_key && message.from == node_key))
+                                        .then_some(*id)
+                                })
+                                .collect()
+                        }
                     };
 
-                    match &channel.role {
-                        ChannelRole::Primary | ChannelRole::Secondary => {
-                            state.messages.get_mut(&key).map(|messages| messages.clear());
-
-                            changed.push(name_of!(messages in State));
-
-                            true
-                        }
-                        ChannelRole::Direct => {
-                            state.messages.get_mut(&key).map(|messages| messages.clear());
-                            state.channels.remove(&key);
-                            state.active_channel_key = None;
-
-                            changed.extend([
-                                name_of!(messages in State),
-                                name_of!(channels in State),
-                                name_of!(active_channel_key in State),
-                            ]);
-
-                            true
-                        }
-                        _ => false,
+                    for id in message_ids {
+                        state.messages.remove(&id);
                     }
+
+                    match chat {
+                        Chat::Channel(_) => {
+                            state.chats.get_mut(&chat).map(|messages| messages.clear());
+                        }
+                        Chat::Direct(_) => {
+                            state.chats.remove(&chat);
+                        }
+                    };
+
+                    true
                 });
             }
             StateAction::RxTrigger => {
@@ -605,65 +618,52 @@ impl Store {
             }
             StateAction::DirectChatStart(node_key) => {
                 self.state_tx.send_modify(|state| {
-                    state.channels.entry(node_key).or_insert_with(|| {
-                        changed.push(name_of!(channels in State));
+                    let chat = Chat::Direct(node_key);
 
-                        Channel::direct(node_key)
-                    });
+                    if !state.chats.contains_key(&chat) {
+                        state.chats.insert_sorted(chat.clone(), Vec::new());
+                        changed.push(name_of!(chats in State));
+                    }
 
-                    state.active_channel_key = Some(node_key);
+                    state.active_chat = Some(chat);
                     state.active_tab = Tab::Chat;
 
-                    changed.extend([name_of!(active_channel_key in State), name_of!(active_tab in State)]);
+                    changed.extend([name_of!(active_chat in State), name_of!(active_tab in State)]);
                 });
             }
-            StateAction::MessageAdd(channel_key, message) => {
+            StateAction::MessageAdd(message) => {
                 self.state_tx.send_modify(|state| {
-                    if let Some(messages_vec) = state.messages.get_mut(&channel_key) {
-                        messages_vec.push_back(message);
-                    } else {
-                        state.messages.insert(channel_key, VecDeque::from(vec![message]));
-                    }
+                    if message.is_emoji {
+                        if let Some(reply_message) = state.messages.get_mut(&message.reply_message_id) {
+                            reply_message.reactions.push(message.id);
+                        }
 
-                    changed.push(name_of!(messages in State));
-                });
-            }
-            StateAction::MessageReactionAdd {
-                channel_key,
-                message_id,
-                reaction,
-            } => {
-                self.state_tx.send_if_modified(|state| {
-                    if let Some(message) = state.get_mut_message_by_id(channel_key, message_id) {
-                        message.reactions.push(reaction.id);
-                        state.message_reactions.insert(reaction.id, reaction);
-
-                        changed.extend([name_of!(messages in State), name_of!(message_reactions in State)]);
-
-                        return true;
-                    }
-
-                    false
-                });
-            }
-            StateAction::MessageErrorSet {
-                channel_key,
-                message_id,
-                error,
-            } => {
-                self.state_tx.send_if_modified(|state| {
-                    if let Some(message) = state.get_mut_message_by_id(channel_key, message_id) {
-                        message.routing_error = error;
+                        state.messages.insert(message.id, message);
 
                         changed.push(name_of!(messages in State));
 
-                        return true;
+                        return;
                     }
 
-                    if let Some(reaction) = state.message_reactions.get_mut(&message_id) {
-                        reaction.routing_error = error;
+                    let chat = Chat::from((&message, state.my_node_key.expect("should be Some")));
 
-                        changed.push(name_of!(message_reactions in State));
+                    if let Some(chat_messages) = state.chats.get_mut(&chat) {
+                        chat_messages.push(message.id);
+                    } else {
+                        state.chats.insert_sorted(chat, vec![message.id]);
+                    }
+
+                    state.messages.insert(message.id, message);
+
+                    changed.extend([name_of!(chats in State), name_of!(messages in State)]);
+                });
+            }
+            StateAction::MessageErrorSet { message_id, error } => {
+                self.state_tx.send_if_modified(|state| {
+                    if let Some(message) = state.messages.get_mut(&message_id) {
+                        message.routing_error = error;
+
+                        changed.push(name_of!(messages in State));
 
                         return true;
                     }

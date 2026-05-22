@@ -238,6 +238,12 @@ To run an unsigned application on macOS, you need to dequarantine it using the c
 xattr -d com.apple.quarantine ./path/to/termtastic
 ```
 
+### Application doesn't discover BLE devices on macOS
+
+To use Bluetooth on macOS Big Sur (11) or later, you need to enable the Bluetooth permission for your terminal. You can
+do it by going to **System Preferences** → **Security & Privacy** → **Privacy** → **Bluetooth**, clicking the '+'
+button, and selecting `Terminal` (or `iTerm` or whichever terminal application you use).
+
 ### Why emojis are glitching/tearing on my terminal?
 
 If you are using `foot` terminal try to add these lines into your `foot.ini` config:

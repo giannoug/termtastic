@@ -182,7 +182,7 @@ impl SettingsService {
                     self.start_config_loading(&form_id)?;
                 }
                 MeshtasticEvent::ChannelsSaved(form_id) => {
-                    self.state_action_tx.send(StateAction::ChannelActiveUnset)?;
+                    self.state_action_tx.send(StateAction::ActiveChatUnset)?;
 
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::success("channels saved")))?;
@@ -286,19 +286,7 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Lora config not loaded"))?,
             )?,
-            FormId::RadioChannels => {
-                let channels = state
-                    .channels
-                    .iter()
-                    .filter(|(_, ch)| ch.role.is_direct() == false)
-                    .collect::<OrderMap<_, _>>();
-
-                if channels.is_empty() {
-                    return Err(anyhow::anyhow!("Channels data not loaded"));
-                }
-
-                to_formdata(&channels)?
-            }
+            FormId::RadioChannels => to_formdata(&state.channels)?,
             FormId::RadioSecurity => to_formdata(
                 state
                     .device_config

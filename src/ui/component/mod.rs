@@ -1,4 +1,3 @@
-mod channels;
 mod chat;
 mod component;
 mod connection;
@@ -9,7 +8,6 @@ mod messenger;
 mod nodes;
 mod settings;
 
-pub use channels::*;
 pub use chat::*;
 pub use component::*;
 pub use connection::*;

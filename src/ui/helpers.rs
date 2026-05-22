@@ -1,5 +1,5 @@
 use crate::state::State;
-use crate::types::{Channel, ChannelRole, HopsSnrRssiAware, Node};
+use crate::types::{ChannelRole, Chat, HopsSnrRssiAware, Node};
 use base64::prelude::BASE64_STANDARD;
 use base64::{DecodeError, Engine};
 use chrono::{SubsecRound, TimeDelta, Utc};
@@ -8,6 +8,7 @@ use emoji::Emoji;
 use itertools::Itertools;
 use meshtastic::protobufs::config;
 use meshtastic::protobufs::routing;
+use ratatui::style::Modifier;
 use ratatui::{
     style::{Color, Style, Stylize},
     symbols::scrollbar::Set as ScrollbarSet,
@@ -199,53 +200,65 @@ impl TextAreaExt for TextArea<'_> {
     }
 }
 
-pub fn channel_name_to_spans<'a>(channel: &'a Channel, state: &'a State) -> Vec<Span<'a>> {
-    let maybe_direct_node = (channel.role == ChannelRole::Direct)
-        .then_some(state.nodes.get(&channel.key))
-        .unwrap_or(None);
+pub fn chat_to_spans<'a>(chat: &'a Chat, state: &'a State) -> Vec<Span<'a>> {
+    match chat {
+        Chat::Channel(channel_key) => {
+            let radio_preset_name = state
+                .device_config
+                .lora
+                .as_ref()
+                .and_then(|lora| config::lo_ra_config::ModemPreset::try_from(lora.modem_preset).ok())
+                .and_then(|preset| Some(preset.as_channel_name()));
 
-    let radio_preset_name = state
-        .device_config
-        .lora
-        .as_ref()
-        .and_then(|lora| config::lo_ra_config::ModemPreset::try_from(lora.modem_preset).ok())
-        .and_then(|preset| Some(preset.as_channel_name()));
+            let channel = state.channels.get(channel_key).expect("should be Some");
 
-    match (&channel.role, &maybe_direct_node) {
-        (ChannelRole::Primary, _) => vec![
-            Span::from(format!("#{}", &channel.key)).dark_gray(),
-            Span::from(" "),
-            Span::from(if !channel.name.is_empty() {
-                channel.name.clone()
-            } else if let Some(preset_name) = radio_preset_name {
-                preset_name.clone()
-            } else {
-                "Primary".to_owned()
-            })
-            .fg(channel.psk.len().psk_len_to_color()),
-        ],
-        (ChannelRole::Secondary, _) => vec![
-            Span::from(format!("#{}", channel.key)).dark_gray(),
-            Span::from(" "),
-            Span::from(if !channel.name.is_empty() {
-                &channel.name
-            } else {
-                "Secondary"
-            })
-            .fg(channel.psk.len().psk_len_to_color()),
-        ],
-        (ChannelRole::Direct, Some(node)) => {
-            vec![
-                short_name_to_span(node, state.is_my_node(node.key)),
-                Span::from(" "),
-                Span::from(node.long_name()),
-            ]
+            match &channel.role {
+                ChannelRole::Primary => vec![
+                    Span::from(format!("#{}", &channel.key)).dark_gray(),
+                    Span::from(" "),
+                    Span::from(if !channel.name.is_empty() {
+                        channel.name.clone()
+                    } else if let Some(preset_name) = radio_preset_name {
+                        preset_name.clone()
+                    } else {
+                        "Primary".to_owned()
+                    })
+                    .fg(channel.psk.len().psk_len_to_color()),
+                ],
+                ChannelRole::Secondary => vec![
+                    Span::from(format!("#{}", channel.key)).dark_gray(),
+                    Span::from(" "),
+                    Span::from(if !channel.name.is_empty() {
+                        &channel.name
+                    } else {
+                        "Secondary"
+                    })
+                    .fg(channel.psk.len().psk_len_to_color()),
+                ],
+                ChannelRole::Disabled => {
+                    vec![
+                        Span::from(format!("#{}", channel.key)).dark_gray(),
+                        Span::from(" "),
+                        Span::from("Channel").dark_gray().add_modifier(Modifier::CROSSED_OUT),
+                    ]
+                }
+            }
         }
-        (ChannelRole::Direct, None) => {
-            vec![Span::from(format!("!{:x}", channel.key))]
-        }
-        (ChannelRole::Disabled, _) => {
-            vec![Span::from("Disabled")]
+        Chat::Direct(node_key) => {
+            let node = state.nodes.get(node_key);
+
+            match node {
+                Some(node) => {
+                    vec![
+                        short_name_to_span(node, state.is_my_node(node.key)),
+                        Span::from(" "),
+                        Span::from(node.long_name()),
+                    ]
+                }
+                None => {
+                    vec![Span::from(format!("!{:x}", node_key))]
+                }
+            }
         }
     }
 }

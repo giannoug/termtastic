@@ -9,7 +9,7 @@ use tokio::time;
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::{AppEvent, ConnectionState, Device, Toast};
+use crate::types::{AppEvent, Channel, ConnectionState, Device, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
@@ -173,6 +173,10 @@ impl ConnectionService {
                                 .send(StateAction::MyNodeKeySet(my_info.my_node_num))?;
 
                             self.app_event_tx.send(AppEvent::DbLoadRequested(my_info.my_node_num))?;
+                        }
+                        from_radio::PayloadVariant::Channel(ch) => {
+                            self.state_action_tx
+                                .send(StateAction::ChannelSet(ch.index as u32, Channel::from(ch)))?;
                         }
                         from_radio::PayloadVariant::ConfigCompleteId(_) => {
                             let state = &self.state_rx.borrow();
