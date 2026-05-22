@@ -375,9 +375,10 @@ impl<'a> Component for Messenger<'a> {
 
         let v = Layout::vertical([
             Constraint::Fill(1),
-            Constraint::Length(2 + input_widget.lines().len().min(3) as u16),
+            Constraint::Length(2 + input_widget.lines().len().min(5) as u16),
         ])
         .split(area);
+
         let is_any_popup_visible =
             state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 

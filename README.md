@@ -58,6 +58,7 @@
 - Minimum use of emoji/non-ascii characters in UI
 - Small memory footprint (~20KB)
 - Supports multiple connection protocols (TCP, BLE, Serial)
+- Could discover devices automatically: BLE paired devices, TCP devices via mDNS, Serial devices
 - Uses standard system directories for storing configuration, database and logs
 
 ## Features

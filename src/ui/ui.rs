@@ -123,12 +123,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 
     enable_raw_mode()?;
 
-    execute!(
-        stdout(),
-        EnterAlternateScreen,
-        EnableBracketedPaste,
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
-    )?;
+    execute!(stdout(), EnterAlternateScreen, EnableBracketedPaste,)?;
 
     Terminal::new(CrosstermBackend::new(stdout()))
 }
@@ -136,12 +131,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
 
-    execute!(
-        stdout(),
-        LeaveAlternateScreen,
-        DisableBracketedPaste,
-        PopKeyboardEnhancementFlags
-    )?;
+    execute!(stdout(), LeaveAlternateScreen, DisableBracketedPaste,)?;
 
     Ok(())
 }
