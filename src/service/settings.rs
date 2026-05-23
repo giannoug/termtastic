@@ -236,6 +236,12 @@ impl SettingsService {
                                     secs
                                 ))))?;
                             }
+                            Some(admin_message::PayloadVariant::ShutdownSeconds(secs)) => {
+                                self.state_action_tx.send(StateAction::Toast(Toast::warning(format!(
+                                    "device will shutdown in {} secs...",
+                                    secs
+                                ))))?;
+                            }
                             Some(admin_message::PayloadVariant::GetCannedMessageModuleMessagesResponse(messages)) => {
                                 self.state_action_tx
                                     .send(StateAction::DeviceCannedMessagesSet(messages))?;

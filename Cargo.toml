@@ -29,7 +29,7 @@ ansi-to-tui = { version = "8.0.1" }
 anyhow = { version = "1.0.102" }
 arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 base64 = { version = "0.22.1" }
-btleplug = { version = "0.11.8" }
+btleplug = { version = "0.12.0" }
 chrono = { version = "0.4.44", features = ["serde"] }
 confy = { version = "2.0.0", default-features = false, features = [
     "ron_conf",
@@ -42,7 +42,7 @@ futures = { version = "0.3.32" }
 hostaddr = { version = "0.2.4", features = ["serde"] }
 itertools = { version = "0.14.0" }
 mdns-sd = { version = "0.19.2" }
-meshtastic = { git = "https://github.com/meshtastic/rust", branch = "main", features = [
+meshtastic = { git = "https://github.com/acelot/rust-meshtastic", rev = "90e70c3", features = [
     "bluetooth-le",
 ] }
 nameof = { version = "1.3.0" }

@@ -1172,4 +1172,5 @@ pub struct DeviceModuleConfig {
     pub store_forward: Option<module_config::StoreForwardConfig>,
     pub telemetry: Option<module_config::TelemetryConfig>,
     pub traffic_management: Option<module_config::TrafficManagementConfig>,
+    pub tak: Option<module_config::TakConfig>,
 }

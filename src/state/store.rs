@@ -382,6 +382,9 @@ impl Store {
                         module_config::PayloadVariant::TrafficManagement(cfg) => {
                             state.device_module_config.traffic_management = Some(cfg);
                         }
+                        module_config::PayloadVariant::Tak(cfg) => {
+                            state.device_module_config.tak = Some(cfg);
+                        }
                     }
 
                     changed.push(name_of!(device_module_config in State));
