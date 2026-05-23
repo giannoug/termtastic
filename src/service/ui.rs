@@ -25,7 +25,7 @@ impl UiService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event, subsys)?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     break;
@@ -36,7 +36,11 @@ impl UiService {
         Ok(())
     }
 
-    fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
+    fn handle_app_event(
+        &mut self,
+        event: Result<AppEvent, broadcast::error::RecvError>,
+        subsys: &mut SubsystemHandle,
+    ) -> anyhow::Result<()> {
         match event {
             Ok(app_event) => match app_event {
                 AppEvent::InitializationRequested | AppEvent::SplashLogoRequested => {
@@ -57,6 +61,13 @@ impl UiService {
                         tracing::error!("copy failed: {:?}", e);
                     }
                 },
+                AppEvent::TryingToQuit => {
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::normal("press Esc twice quickly to quit")))?;
+                }
+                AppEvent::QuitRequested => {
+                    subsys.request_shutdown();
+                }
                 _ => {}
             },
             Err(broadcast::error::RecvError::Lagged(n)) => {

@@ -1,6 +1,9 @@
+use crate::state::{State, StateAction};
+use crate::types::AppEvent;
+use crate::ui::component::{Component, Layout};
 use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
 use crossterm::{
-    event::{Event, EventStream, KeyCode, KeyModifiers},
+    event::{Event, EventStream},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -13,28 +16,24 @@ use std::{
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::state::{State, StateAction};
-use crate::types::AppEvent;
-use crate::ui::component::{Component, Layout};
-
 pub struct Ui<'a> {
+    app_event_tx: broadcast::Sender<AppEvent>,
     state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
-    event_tx: broadcast::Sender<AppEvent>,
     crossterm_events: EventStream,
     layout: Layout<'a>,
 }
 
 impl<'a> Ui<'a> {
     pub fn new(
+        app_event_tx: broadcast::Sender<AppEvent>,
         state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
-        event_tx: broadcast::Sender<AppEvent>,
     ) -> Self {
         Self {
+            app_event_tx,
             state_rx,
             state_action_tx,
-            event_tx,
             crossterm_events: EventStream::new(),
             layout: Layout::new(),
         }
@@ -73,15 +72,8 @@ impl<'a> Ui<'a> {
     ) -> anyhow::Result<()> {
         match maybe_event {
             Some(Ok(event)) => {
-                if let Event::Key(key_event) = event
-                    && key_event.code == KeyCode::Char('c')
-                    && key_event.modifiers.contains(KeyModifiers::CONTROL)
-                {
-                    subsys.request_shutdown();
-                }
-
                 self.layout.handle_event(&self.state_rx.borrow(), &event, &|ev| {
-                    self.event_tx.send(ev)?;
+                    self.app_event_tx.send(ev)?;
                     Ok(())
                 })?;
 

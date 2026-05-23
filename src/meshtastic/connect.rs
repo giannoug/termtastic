@@ -28,9 +28,14 @@ pub async fn connect_via_tcp(
 
 pub async fn connect_via_ble(
     address: BDAddr,
+    name: Option<String>,
 ) -> anyhow::Result<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)> {
-    let stream_handle =
-        utils::stream::build_ble_stream(utils::stream::BleId::MacAddress(address), Duration::from_secs(5)).await?;
+    let ble_id = match name {
+        Some(n) => utils::stream::BleId::Name(n),
+        None => utils::stream::BleId::MacAddress(address),
+    };
+
+    let stream_handle = utils::stream::build_ble_stream(ble_id, Duration::from_secs(5)).await?;
 
     let stream_api = StreamApi::new();
     let (from_radio_receiver, connected_stream_api) = stream_api.connect(stream_handle).await;

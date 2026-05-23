@@ -175,7 +175,7 @@ impl NodesService {
             }
             from_radio::PayloadVariant::Packet(mesh_packet) => {
                 self.state_action_tx
-                    .send(StateAction::NodeInitUnknown((&mesh_packet).into()))?;
+                    .send(StateAction::NodeInit((&mesh_packet).into()))?;
 
                 match &mesh_packet.payload_variant {
                     Some(mesh_packet::PayloadVariant::Decoded(data)) => match data.portnum() {

@@ -17,7 +17,7 @@ use crate::{
 const CONNECTION_CHECK_INTERVAL_MILLIS: u64 = 250;
 const RECONNECTION_BACKOFF_BASE_MILLIS: u64 = 1_000;
 const RECONNECTION_BACKOFF_MAX_MILLIS: u64 = 30_000;
-const BLE_DISCOVERY_TIMEOUT_SECS: u64 = 5;
+const BLE_DISCOVERY_TIMEOUT_SECS: u64 = 3;
 const MDNS_DISCOVERY_TIMEOUT_SECS: u64 = 3;
 const MDNS_MESHTASTIC_DOMAIN: &'static str = "_meshtastic._tcp.local.";
 
@@ -255,9 +255,9 @@ impl ConnectionService {
             Device::Tcp(address) => self
                 .meshtastic_command_tx
                 .send(CommandToMeshtastic::ConnectViaTcp(address.clone()))?,
-            Device::Ble(address, _) => self
+            Device::Ble(address, name) => self
                 .meshtastic_command_tx
-                .send(CommandToMeshtastic::ConnectViaBle(address.clone()))?,
+                .send(CommandToMeshtastic::ConnectViaBle(address.clone(), name.clone()))?,
             Device::Serial(address) => self
                 .meshtastic_command_tx
                 .send(CommandToMeshtastic::ConnectViaSerial(address.to_owned()))?,
@@ -318,12 +318,18 @@ impl ConnectionService {
                                     match addr {
                                         mdns_sd::ScopedIp::V4(ipv4) => {
                                             self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(
-                                                Device::Tcp(HostAddr::from_ip_addr(IpAddr::from(*ipv4.addr()))),
+                                                Device::Tcp(
+                                                    HostAddr::from_ip_addr(IpAddr::from(*ipv4.addr()))
+                                                        .with_port(info.port),
+                                                ),
                                             ))?;
                                         }
                                         mdns_sd::ScopedIp::V6(ipv6) => {
                                             self.state_action_tx.send(StateAction::DevicesDiscoveredAdd(
-                                                Device::Tcp(HostAddr::from_ip_addr(IpAddr::from(*ipv6.addr()))),
+                                                Device::Tcp(
+                                                    HostAddr::from_ip_addr(IpAddr::from(*ipv6.addr()))
+                                                        .with_port(info.port),
+                                                ),
                                             ))?;
                                         }
                                         _ => {}

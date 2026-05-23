@@ -1,6 +1,7 @@
 use chrono::Utc;
 use meshtastic::protobufs::{config, module_config};
 use nameof::name_of;
+use std::collections::hash_map::Entry;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::{Duration, Instant};
 use tokio::{
@@ -394,26 +395,25 @@ impl Store {
                 });
             }
             StateAction::NodeInit(node) => {
-                self.state_tx.send_modify(|state| {
-                    state.nodes.insert(node.key, node);
-
-                    changed.push(name_of!(nodes in State));
-                });
-            }
-            StateAction::NodeInitUnknown(node) => {
                 self.state_tx.send_if_modified(|state| {
-                    let mut inserted = false;
+                    if node.user.is_some() {
+                        state.nodes.insert(node.key, node);
 
-                    state.nodes.entry(node.key).or_insert_with(|| {
-                        inserted = true;
-                        node
-                    });
-
-                    if inserted {
                         changed.push(name_of!(nodes in State));
+
+                        return true;
                     }
 
-                    inserted
+                    match state.nodes.entry(node.key) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(node);
+
+                            changed.push(name_of!(nodes in State));
+
+                            true
+                        }
+                        Entry::Occupied(_) => false,
+                    }
                 });
             }
             StateAction::NodeInfoPopupSetKey(node_key) => {

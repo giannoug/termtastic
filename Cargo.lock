@@ -1594,7 +1594,7 @@ dependencies = [
 [[package]]
 name = "meshtastic"
 version = "0.1.8"
-source = "git+https://github.com/meshtastic/rust?branch=abort-task#b04517ba9f502ae4b36c1d8b4a6c70be9273e6cf"
+source = "git+https://github.com/meshtastic/rust?branch=main#6225d7b903864f20a700bf00a3ed180bd3be37c0"
 dependencies = [
  "btleplug",
  "futures",

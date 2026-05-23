@@ -66,7 +66,7 @@ impl<'a> PersistenceService<'a> {
         };
 
         match &action {
-            StateAction::NodeInit(node) => {
+            StateAction::NodeInit(node) if node.user.is_some() => {
                 if let Err(e) = repository.nodes_upsert(node.into()) {
                     tracing::error!("node init failed: {}", e);
 

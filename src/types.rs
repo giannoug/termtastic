@@ -101,6 +101,8 @@ pub enum AppEvent {
     SplashLogoRequested,
     TabNextRequested,
     TabPreviousRequested,
+    TryingToQuit,
+    QuitRequested,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
@@ -119,7 +121,9 @@ impl Ord for Device {
 
             (Device::Ble { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Ble { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (Device::Ble(address, _), Device::Ble(other_address, _)) => address.cmp(other_address),
+            (Device::Ble(address, name), Device::Ble(other_address, other_name)) => {
+                address.cmp(other_address).then(name.cmp(other_name))
+            }
 
             (Device::Serial { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Serial { .. }, Device::Ble { .. }) => std::cmp::Ordering::Greater,
@@ -503,12 +507,11 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
     type Error = anyhow::Error;
 
     fn try_from(value: &meshtastic::protobufs::NodeInfo) -> Result<Self, Self::Error> {
-        let user = value.user.as_ref().ok_or(anyhow!("no user information"))?;
         let last_heard = DateTime::from_timestamp(value.last_heard as i64, 0);
 
         let mut node = Self {
             key: value.num,
-            user: Some(user.into()),
+            user: value.user.as_ref().map(|u| u.into()),
             hops: value.hops_away,
             last_heard,
             snr: value.snr,

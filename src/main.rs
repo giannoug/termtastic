@@ -108,10 +108,10 @@ async fn main() {
         meshtastic_event_rx.resubscribe(),
     );
 
-    let event_tx_clone = app_event_tx.clone();
+    let app_event_tx_clone = app_event_tx.clone();
     let persisted_state_action_tx_clone = persisted_state_action_tx.clone();
 
-    event_tx_clone
+    app_event_tx_clone
         .send(AppEvent::InitializationRequested)
         .expect_or_log("InitializationRequested event should be sent");
 
@@ -161,7 +161,7 @@ async fn main() {
         ));
 
         s.start(SubsystemBuilder::new("UI", async |subsys: &mut SubsystemHandle| {
-            Ui::new(state_rx, persisted_state_action_tx_clone, event_tx_clone)
+            Ui::new(app_event_tx_clone, state_rx, persisted_state_action_tx_clone)
                 .run(subsys)
                 .await
         }));

@@ -117,8 +117,13 @@ impl MeshtasticService {
                     }
                 };
             }
-            CommandToMeshtastic::ConnectViaBle(address) => {
-                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_ble(address)).await {
+            CommandToMeshtastic::ConnectViaBle(address, name) => {
+                match timeout(
+                    Duration::from_secs(CONNECTION_TIMEOUT_SECS),
+                    connect_via_ble(address, name),
+                )
+                .await
+                {
                     Ok(Ok((radio_rx, stream_api))) => {
                         self.handle_connection(radio_rx, stream_api, subsys);
 

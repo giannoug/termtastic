@@ -34,7 +34,7 @@ pub enum TextMessage {
 #[derive(Debug, Clone)]
 pub enum CommandToMeshtastic {
     ConnectViaTcp(HostAddr<String>),
-    ConnectViaBle(BDAddr),
+    ConnectViaBle(BDAddr, Option<String>),
     ConnectViaSerial(String),
     Disconnect,
     Reboot {

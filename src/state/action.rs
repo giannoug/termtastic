@@ -41,7 +41,6 @@ pub enum StateAction {
     },
     MyNodeKeySet(u32),
     NodeInit(Node),
-    NodeInitUnknown(Node),
     NodeInfoPopupSetKey(u32),
     NodeInfoPopupUnsetKey,
     NodeUpdate(Node),

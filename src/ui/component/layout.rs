@@ -3,7 +3,10 @@ use crate::ui::{
     logo::APP_LOGO_TEXT,
     prelude::*,
 };
+use crossterm::event::KeyModifiers;
 use ratatui::layout::Layout as RatatuiLayout;
+use std::ops::Sub;
+use std::time::{Duration, Instant};
 use strum::IntoEnumIterator;
 
 const MIN_TERMINAL_SIZE: (u16, u16) = (80, 24);
@@ -17,6 +20,7 @@ pub struct Layout<'a> {
     logs_component: Logs,
     logo: Text<'static>,
     nodeinfo_state: NodeInfoState,
+    last_esc_t: Instant,
 }
 
 impl<'a> Layout<'a> {
@@ -30,6 +34,7 @@ impl<'a> Layout<'a> {
             logs_component: Logs::new(),
             logo: APP_LOGO_TEXT.clone(),
             nodeinfo_state: NodeInfoState::default(),
+            last_esc_t: Instant::now().sub(Duration::from_secs(1)),
         }
     }
 }
@@ -114,6 +119,18 @@ impl<'a> Component for Layout<'a> {
                 KeyCode::F(12) if modifiers.is_empty() => {
                     emit(AppEvent::SplashLogoRequested)?;
                     return Ok(true);
+                }
+                KeyCode::Esc if modifiers.is_empty() => {
+                    if self.last_esc_t.elapsed() < Duration::from_millis(300) {
+                        emit(AppEvent::QuitRequested)?;
+                    } else {
+                        emit(AppEvent::TryingToQuit)?;
+                    }
+
+                    self.last_esc_t = Instant::now();
+                }
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    emit(AppEvent::QuitRequested)?;
                 }
                 _ => {}
             },
