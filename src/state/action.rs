@@ -31,6 +31,7 @@ pub enum StateAction {
     DeviceDiscoveringDone,
     DeviceConfigSet(config::PayloadVariant),
     DeviceModuleConfigSet(module_config::PayloadVariant),
+    DeviceMetadataSet(meshtastic::protobufs::DeviceMetadata),
     DeviceCannedMessagesSet(String),
     LogRecordAdd(LogRecord),
     DirectChatStart(u32),

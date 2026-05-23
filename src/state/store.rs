@@ -390,6 +390,13 @@ impl Store {
                     changed.push(name_of!(device_module_config in State));
                 });
             }
+            StateAction::DeviceMetadataSet(metadata) => {
+                self.state_tx.send_modify(|state| {
+                    state.device_metadata = Some(metadata);
+
+                    changed.push(name_of!(device_metadata in State));
+                });
+            }
             StateAction::DeviceCannedMessagesSet(messages) => {
                 self.state_tx.send_modify(|state| {
                     state.device_canned_messages = Some(messages);

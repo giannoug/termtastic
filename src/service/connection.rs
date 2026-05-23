@@ -175,6 +175,10 @@ impl ConnectionService {
 
                             self.app_event_tx.send(AppEvent::DbLoadRequested(my_info.my_node_num))?;
                         }
+                        from_radio::PayloadVariant::Metadata(metadata) => {
+                            self.state_action_tx
+                                .send(StateAction::DeviceMetadataSet(metadata.clone()))?;
+                        }
                         from_radio::PayloadVariant::Channel(ch) => {
                             self.state_action_tx
                                 .send(StateAction::ChannelSet(ch.index as u32, Channel::from(ch)))?;

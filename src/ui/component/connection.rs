@@ -1,5 +1,6 @@
 use crate::ui::prelude::*;
 use hostaddr::HostAddr;
+use meshtastic::protobufs::HardwareModel;
 
 pub struct Connection<'a> {
     list_state: ListState,
@@ -356,9 +357,27 @@ impl<'a> Component for Connection<'a> {
                 ConnectionState::Connecting => {
                     vec![Line::from(Span::from("connecting...").yellow())]
                 }
-                ConnectionState::Connected => {
-                    vec![Line::from(Span::from("connected").green())]
-                }
+                ConnectionState::Connected => vec![
+                    Some(Line::from(Span::from("connected").green())),
+                    state.device_metadata.as_ref().and_then(|_| Some(Line::from(""))),
+                    state.device_metadata.as_ref().and_then(|metadata| {
+                        Some(Line::from(vec![
+                            Span::from(
+                                HardwareModel::try_from(metadata.hw_model)
+                                    .ok()
+                                    .and_then(|h| Some(h.as_str_name()))
+                                    .unwrap_or("UNKNOWN"),
+                            )
+                            .magenta(),
+                            Span::from(" (").dark_gray(),
+                            Span::from(&metadata.firmware_version).blue(),
+                            Span::from(")").dark_gray(),
+                        ]))
+                    }),
+                ]
+                .into_iter()
+                .flatten()
+                .collect(),
             };
 
             let block_v = Layout::vertical([

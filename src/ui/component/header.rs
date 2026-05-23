@@ -1,4 +1,5 @@
 use crate::ui::prelude::*;
+use meshtastic::protobufs::HardwareModel;
 
 pub struct Header {}
 
@@ -36,11 +37,22 @@ impl Component for Header {
             v[0],
         );
 
+        let hw_model = state.device_metadata.as_ref().and_then(|metadata| {
+            HardwareModel::try_from(metadata.hw_model)
+                .ok()
+                .and_then(|h| Some(h.as_str_name()))
+        });
+
         let my_node_info = if let Some(my_node) = state.get_my_node()
             && !matches!(state.connection_state, ConnectionState::NotConnected)
         {
             vec![
-                Span::from("node ").dark_gray(),
+                if let Some(hw) = hw_model {
+                    Span::from(hw).magenta()
+                } else {
+                    Span::from("node").dark_gray()
+                },
+                Span::from("  "),
                 short_name_to_span(my_node, true),
                 Span::from("  "),
             ]
