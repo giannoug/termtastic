@@ -174,6 +174,7 @@
 - [x] Discovering of BLE and Serial devices feature
 - [x] Discovering TCP devices through mDNS
 - [x] Reconnection feature with exponential backoff timeouts
+- [x] Ability to set a name for the device
 
 ### Logs tab
 

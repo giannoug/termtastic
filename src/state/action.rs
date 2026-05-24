@@ -27,7 +27,6 @@ pub enum StateAction {
     DevicesRemove(Device),
     DevicesDiscoveredAdd(Device),
     DeviceDiscoveringStart,
-    DeviceDiscoveringFail(String),
     DeviceDiscoveringDone,
     DeviceConfigSet(config::PayloadVariant),
     DeviceModuleConfigSet(module_config::PayloadVariant),

@@ -1,11 +1,13 @@
 use crate::ui::prelude::*;
 use hostaddr::HostAddr;
+use itertools::Itertools;
 use meshtastic::protobufs::HardwareModel;
 
 pub struct Connection<'a> {
     list_state: ListState,
     discovery_list_state: ListState,
     popup_input_state: PopupInputState<'a>,
+    renaming_device: Option<Device>,
     removing_device: Option<Device>,
     is_discovery_popup_visible: bool,
     is_tcp_form_visible: bool,
@@ -16,7 +18,8 @@ impl<'a> Connection<'a> {
         Self {
             list_state: ListState::default(),
             discovery_list_state: ListState::default(),
-            popup_input_state: PopupInputState::new(Some("new TCP device"), Some("host[:port=4403]"), ""),
+            popup_input_state: PopupInputState::default(),
+            renaming_device: None,
             removing_device: None,
             is_discovery_popup_visible: false,
             is_tcp_form_visible: false,
@@ -29,19 +32,18 @@ impl<'a> Connection<'a> {
             .padding(Padding::new(1, 1, 1, 0))
             .title(Line::from(vec![
                 Span::from(" device discovery "),
-                Span::from("[").dark_gray(),
+                Span::from("(").dark_gray(),
                 match state.device_discovering_state {
                     DeviceDiscoveringState::NotStarted => Span::from("not started"),
-                    DeviceDiscoveringState::Discovering => Span::from("discovering...").yellow(),
-                    DeviceDiscoveringState::Failed(_) => Span::from("failed").red(),
-                    DeviceDiscoveringState::Done => Span::from("done").green(),
+                    DeviceDiscoveringState::Scanning => Span::from("scanning...").yellow(),
+                    DeviceDiscoveringState::Finished => Span::from("finished").green(),
                 },
-                Span::from("] ").dark_gray(),
+                Span::from(") ").dark_gray(),
             ]));
 
         let block_area = block.inner(area);
 
-        Clear.render(block_area, buf);
+        Clear.render(area, buf);
         block.render(area, buf);
 
         self.discovery_list_state.fix_selection(state.devices_discovered.len());
@@ -65,12 +67,11 @@ impl<'a> Connection<'a> {
 
             list.render(block_area, buf, &mut self.discovery_list_state);
         } else {
-            PlaceholderWidget::dark_gray(match &state.device_discovering_state {
-                DeviceDiscoveringState::NotStarted => "nothing to show",
-                DeviceDiscoveringState::Discovering => "discovering...",
-                DeviceDiscoveringState::Failed(e) => e.as_str(),
-                DeviceDiscoveringState::Done => "devices not found",
-            })
+            match &state.device_discovering_state {
+                DeviceDiscoveringState::NotStarted => PlaceholderWidget::dark_gray("nothing to show"),
+                DeviceDiscoveringState::Scanning => PlaceholderWidget::yellow("scanning..."),
+                DeviceDiscoveringState::Finished => PlaceholderWidget::dark_gray("devices not found"),
+            }
             .render(block_area, buf);
         }
     }
@@ -86,17 +87,27 @@ impl<'a> Component for Connection<'a> {
             return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
         }
 
+        if self.renaming_device.is_some() {
+            return vec![Hotkey::new("enter", "submit"), Hotkey::new("esc", "cancel")];
+        }
+
         if self.is_discovery_popup_visible {
             return vec![Hotkey::new("enter", "select"), Hotkey::new("esc", "close")];
         }
 
+        let is_list_selected = self.list_state.selected.is_some();
+
         vec![
-            Hotkey::new("↑↓", "scroll"),
-            Hotkey::new("enter", "connect"),
-            Hotkey::new("t", "add TCP"),
-            Hotkey::new("d", "discover"),
-            Hotkey::new("delete", "remove"),
+            Some(Hotkey::new("↑↓", "scroll")),
+            Some(Hotkey::new("enter", "connect")),
+            Some(Hotkey::new("t", "add TCP")),
+            Some(Hotkey::new("d", "discover")),
+            is_list_selected.then_some(Hotkey::new("r", "rename")),
+            is_list_selected.then_some(Hotkey::new("delete", "remove")),
         ]
+        .into_iter()
+        .flatten()
+        .collect()
     }
 
     fn handle_event(
@@ -177,8 +188,8 @@ impl<'a> Component for Connection<'a> {
                     ..
                 }) if modifiers.is_empty() => match code {
                     KeyCode::Enter => match self.popup_input_state.get_value().parse::<HostAddr<String>>() {
-                        Ok(addr) => {
-                            emit(AppEvent::DeviceSubmitted(Device::Tcp(addr)))?;
+                        Ok(address) => {
+                            emit(AppEvent::DeviceSubmitted(Device::Tcp { address, name: None }))?;
                             self.is_tcp_form_visible = false;
                         }
                         Err(e) => {
@@ -187,6 +198,46 @@ impl<'a> Component for Connection<'a> {
                     },
                     KeyCode::Esc => {
                         self.is_tcp_form_visible = false;
+                    }
+                    _ => {}
+                },
+                Event::Paste(text) => {
+                    self.popup_input_state.insert_str(text);
+                }
+                _ => {}
+            }
+
+            let _ = self.popup_input_state.handle_event(event.clone());
+
+            return Ok(true);
+        }
+
+        if let Some(device) = self.renaming_device.as_ref() {
+            match event {
+                Event::Key(KeyEvent {
+                    code,
+                    kind: KeyEventKind::Press,
+                    modifiers,
+                    ..
+                }) if modifiers.is_empty() => match code {
+                    KeyCode::Enter => {
+                        let value = self.popup_input_state.get_value().trim().to_owned();
+
+                        if value.len() > 32 {
+                            self.popup_input_state.set_error("max length is 32");
+                            return Ok(true);
+                        }
+
+                        if value.is_empty() {
+                            emit(AppEvent::DeviceSubmitted(device.without_name()))?;
+                        } else {
+                            emit(AppEvent::DeviceSubmitted(device.with_name(value.to_owned())))?;
+                        }
+
+                        self.renaming_device = None;
+                    }
+                    KeyCode::Esc => {
+                        self.renaming_device = None;
                     }
                     _ => {}
                 },
@@ -242,9 +293,23 @@ impl<'a> Component for Connection<'a> {
                     return Ok(true);
                 }
                 KeyCode::Char('t') if modifiers.is_empty() => {
+                    self.popup_input_state.set_title(Some(" new TCP device "));
+                    self.popup_input_state.set_placeholder("host[:port=4403]");
                     self.popup_input_state.reset();
+
                     self.is_tcp_form_visible = true;
 
+                    return Ok(true);
+                }
+                KeyCode::Char('r') if modifiers.is_empty() => {
+                    if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
+                        self.popup_input_state.set_title(Some(" rename device "));
+                        self.popup_input_state.set_placeholder("type new name...");
+                        self.popup_input_state.reset();
+                        self.popup_input_state.insert_str(device.name().unwrap_or(""));
+
+                        self.renaming_device = Some(device.clone());
+                    }
                     return Ok(true);
                 }
                 KeyCode::Enter if modifiers.is_empty() => {
@@ -303,13 +368,13 @@ impl<'a> Component for Connection<'a> {
 
         if self.is_discovery_popup_visible {
             self.render_discovery_popup(
-                area.centered(Constraint::Length(50), Constraint::Length(20)),
+                area.centered(Constraint::Length(44), Constraint::Length(12)),
                 frame.buffer_mut(),
                 state,
             );
         }
 
-        if self.is_tcp_form_visible {
+        if self.is_tcp_form_visible || self.renaming_device.is_some() {
             PopupInputWidget::new(36).render(area, frame.buffer_mut(), &mut self.popup_input_state);
         }
 
@@ -420,17 +485,29 @@ impl<'a> Widget for DeviceWidget<'a> {
         };
 
         let spans = match self.device {
-            Device::Ble(address, name) => vec![
+            Device::Ble { name, address, id } => vec![
                 Span::from(" BLE ").black().on_blue(),
-                Span::from(format!(" {} ", name.clone().unwrap_or(address.to_string()))).add_modifier(modifier),
+                Span::from(format!(
+                    " {} ",
+                    [name, id, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                ))
+                .add_modifier(modifier),
             ],
-            Device::Tcp(address) => vec![
+            Device::Tcp { name, address } => vec![
                 Span::from(" TCP ").black().on_green(),
-                Span::from(format!(" {} ", address)).add_modifier(modifier),
+                Span::from(format!(
+                    " {} ",
+                    [name, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                ))
+                .add_modifier(modifier),
             ],
-            Device::Serial(address) => vec![
+            Device::Serial { name, address } => vec![
                 Span::from(" COM ").black().on_magenta(),
-                Span::from(format!(" {} ", address)).add_modifier(modifier),
+                Span::from(format!(
+                    " {} ",
+                    [name, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                ))
+                .add_modifier(modifier),
             ],
         };
 

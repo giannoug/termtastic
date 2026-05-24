@@ -13,6 +13,16 @@ pub struct PopupInputState<'a> {
     error: Option<String>,
 }
 
+impl Default for PopupInputState<'_> {
+    fn default() -> Self {
+        Self {
+            title: None,
+            textarea: TextArea::new(vec![]),
+            error: None,
+        }
+    }
+}
+
 impl<'a> PopupInputState<'a> {
     pub fn new<S: Into<String>>(title: Option<&'a str>, placeholder: Option<&'a str>, value: S) -> Self {
         let mut textarea = TextArea::new(vec![value.into()]);
@@ -30,21 +40,29 @@ impl<'a> PopupInputState<'a> {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.error = None;
-        self.textarea.clear();
+    pub fn get_value(&self) -> String {
+        self.textarea.lines().get(0).unwrap_or(&String::new()).to_owned()
+    }
+
+    pub fn set_title(&mut self, title: Option<&'a str>) {
+        self.title = title;
+    }
+
+    pub fn set_placeholder<S: Into<String>>(&mut self, placeholder: S) {
+        self.textarea.set_placeholder_text(placeholder);
     }
 
     pub fn set_error<S: Into<String>>(&mut self, text: S) {
         self.error = Some(text.into());
     }
 
-    pub fn get_value(&self) -> String {
-        self.textarea.lines()[0].clone()
-    }
-
     pub fn insert_str(&mut self, text: &str) {
         self.textarea.insert_str(text);
+    }
+
+    pub fn reset(&mut self) {
+        self.error = None;
+        self.textarea.clear();
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {

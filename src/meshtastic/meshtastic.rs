@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use meshtastic::{
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
@@ -7,12 +5,11 @@ use meshtastic::{
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
     Message,
 };
+use std::time::Duration;
+use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{
-    sync::{
-        broadcast::{self, error::SendError},
-        mpsc,
-    },
+    sync::{broadcast, mpsc},
     time::timeout,
 };
 use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, SubsystemHandle};
@@ -23,7 +20,7 @@ use crate::meshtastic::{
     RadioService,
 };
 
-const CONNECTION_TIMEOUT_SECS: u64 = 2;
+const CONNECTION_TIMEOUT_SECS: u64 = 3;
 const SAVE_CONFIG_TIMEOUT_SECS: u64 = 5;
 const SAVE_CONFIG_AFTER_PAUSE_MILLIS: u64 = 100;
 const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 80;
@@ -34,6 +31,9 @@ pub struct MeshtasticService {
     event_rx: broadcast::Receiver<MeshtasticEvent>,
     stream_api: Option<ConnectedStreamApi>,
     radio_subsys: Option<NestedSubsystem>,
+    connection_join_handle: Option<JoinHandle<anyhow::Result<()>>>,
+    connection_tx: mpsc::Sender<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)>,
+    connection_rx: mpsc::Receiver<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)>,
 }
 
 impl MeshtasticService {
@@ -44,6 +44,7 @@ impl MeshtasticService {
     ) {
         let (command_tx, command_rx) = mpsc::unbounded_channel::<CommandToMeshtastic>();
         let (event_tx, event_rx) = broadcast::channel::<MeshtasticEvent>(1024);
+        let (connection_tx, connection_rx) = mpsc::channel(1);
 
         (
             Self {
@@ -52,6 +53,9 @@ impl MeshtasticService {
                 event_rx: event_rx.resubscribe(),
                 stream_api: None,
                 radio_subsys: None,
+                connection_join_handle: None,
+                connection_tx,
+                connection_rx,
             },
             command_tx.clone(),
             event_rx,
@@ -62,7 +66,10 @@ impl MeshtasticService {
         loop {
             tokio::select! {
                 event = self.event_rx.recv() => self.handle_meshtastic_event(event).await?,
-                Some(cmd) = self.command_rx.recv() => self.handle_command(cmd, subsys).await?,
+                Some((radio_rx, stream_api)) = self.connection_rx.recv() => {
+                    self.handle_connection_event(radio_rx, stream_api, subsys)?;
+                },
+                Some(cmd) = self.command_rx.recv() => self.handle_command(cmd).await?,
                 _ = subsys.on_shutdown_requested() => {
                     tracing::info!("shutdown");
                     self.disconnect().await?;
@@ -97,72 +104,71 @@ impl MeshtasticService {
         Ok(())
     }
 
-    async fn handle_command(&mut self, cmd: CommandToMeshtastic, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
+    async fn handle_command(&mut self, cmd: CommandToMeshtastic) -> anyhow::Result<()> {
+        let connection_tx_clone = self.connection_tx.clone();
+        let event_tx_clone = self.event_tx.clone();
+
         match cmd {
-            CommandToMeshtastic::ConnectViaTcp(addess) => {
-                match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(addess)).await {
-                    Ok(Ok((radio_rx, stream_api))) => {
-                        self.handle_connection(radio_rx, stream_api, subsys);
-                        self.event_tx.send(MeshtasticEvent::Connected)?;
+            CommandToMeshtastic::ConnectViaTcp(address) => {
+                self.connection_join_handle = Some(tokio::spawn(async move {
+                    match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(address)).await {
+                        Ok(Ok(conn)) => {
+                            connection_tx_clone.send(conn).await?;
+                        }
+                        Ok(Err(e)) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
+                        Err(e) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
                     }
-                    Ok(Err(e)) => {
-                        tracing::error!("can't connect via TCP: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("connection timeout: {:?}", e);
-
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                };
+                    Ok(())
+                }));
             }
             CommandToMeshtastic::ConnectViaBle(address, name) => {
-                match timeout(
-                    Duration::from_secs(CONNECTION_TIMEOUT_SECS),
-                    connect_via_ble(address, name),
-                )
-                .await
-                {
-                    Ok(Ok((radio_rx, stream_api))) => {
-                        self.handle_connection(radio_rx, stream_api, subsys);
-
-                        self.event_tx.send(MeshtasticEvent::Connected)?;
+                self.connection_join_handle = Some(tokio::spawn(async move {
+                    match timeout(
+                        Duration::from_secs(CONNECTION_TIMEOUT_SECS),
+                        connect_via_ble(address, name),
+                    )
+                    .await
+                    {
+                        Ok(Ok(conn)) => {
+                            connection_tx_clone.send(conn).await?;
+                        }
+                        Ok(Err(e)) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
+                        Err(e) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
                     }
-                    Ok(Err(e)) => {
-                        tracing::error!("can't connect via BLE: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("connection timeout: {:?}", e);
-
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                };
+                    Ok(())
+                }));
             }
             CommandToMeshtastic::ConnectViaSerial(address) => {
-                match timeout(
-                    Duration::from_secs(CONNECTION_TIMEOUT_SECS),
-                    connect_via_serial(address),
-                )
-                .await
-                {
-                    Ok(Ok((radio_rx, stream_api))) => {
-                        self.handle_connection(radio_rx, stream_api, subsys);
-                        self.event_tx.send(MeshtasticEvent::Connected)?;
+                self.connection_join_handle = Some(tokio::spawn(async move {
+                    match timeout(
+                        Duration::from_secs(CONNECTION_TIMEOUT_SECS),
+                        connect_via_serial(address),
+                    )
+                    .await
+                    {
+                        Ok(Ok(conn)) => {
+                            connection_tx_clone.send(conn).await?;
+                        }
+                        Ok(Err(e)) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
+                        Err(e) => {
+                            event_tx_clone.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
+                        }
                     }
-                    Ok(Err(e)) => {
-                        tracing::error!("can't connect via serial: {:?}", e);
 
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("connection timeout: {:?}", e);
-
-                        self.event_tx.send(MeshtasticEvent::ConnectionError(e.to_string()))?;
-                    }
-                };
+                    Ok(())
+                }));
             }
             CommandToMeshtastic::Disconnect => {
                 self.disconnect().await?;
@@ -467,7 +473,35 @@ impl MeshtasticService {
         Ok(())
     }
 
+    fn handle_connection_event(
+        &mut self,
+        radio_rx: mpsc::UnboundedReceiver<FromRadio>,
+        stream_api: ConnectedStreamApi,
+        subsys: &mut SubsystemHandle,
+    ) -> anyhow::Result<()> {
+        self.stream_api = Some(stream_api);
+
+        let event_tx_clone = self.event_tx.clone();
+
+        self.radio_subsys = Some(
+            subsys.start(
+                SubsystemBuilder::new("RadioService", async |nested_subsys: &mut SubsystemHandle| {
+                    RadioService::new(event_tx_clone).run(radio_rx, nested_subsys).await
+                })
+                .on_failure(ErrorAction::CatchAndLocalShutdown),
+            ),
+        );
+
+        self.event_tx.send(MeshtasticEvent::Connected)?;
+
+        Ok(())
+    }
+
     async fn disconnect(&mut self) -> anyhow::Result<()> {
+        if let Some(handle) = self.connection_join_handle.take() {
+            handle.abort();
+        }
+
         if let Some(subsys) = self.radio_subsys.take() {
             if !subsys.is_finished() {
                 subsys.initiate_shutdown();
@@ -483,26 +517,6 @@ impl MeshtasticService {
         }
 
         Ok(())
-    }
-
-    fn handle_connection(
-        &mut self,
-        radio_rx: mpsc::UnboundedReceiver<FromRadio>,
-        stream_api: ConnectedStreamApi,
-        subsys: &mut SubsystemHandle,
-    ) {
-        self.stream_api = Some(stream_api);
-
-        let event_tx = self.event_tx.clone();
-
-        let subsys = subsys.start(
-            SubsystemBuilder::new("RadioService", async |nested_subsys: &mut SubsystemHandle| {
-                RadioService::new(event_tx).run(radio_rx, nested_subsys).await
-            })
-            .on_failure(ErrorAction::CatchAndLocalShutdown),
-        );
-
-        self.radio_subsys = Some(subsys);
     }
 
     async fn send_admin_message(
@@ -568,7 +582,7 @@ struct RetransmitPacketRouter<'a> {
 #[derive(thiserror::Error, Debug)]
 enum RetransmitPacketRouterErr {
     #[error("event send error: {0}")]
-    EventSendError(#[from] SendError<MeshtasticEvent>),
+    EventSendError(#[from] broadcast::error::SendError<MeshtasticEvent>),
 }
 
 impl<'a> PacketRouter<(), RetransmitPacketRouterErr> for RetransmitPacketRouter<'a> {

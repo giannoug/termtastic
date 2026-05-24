@@ -60,6 +60,17 @@ impl<'a> Component for Layout<'a> {
         event: &Event,
         emit: &impl Fn(AppEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
+        if let Event::Key(KeyEvent {
+            code: KeyCode::Char('c'),
+            modifiers,
+            ..
+        }) = event
+            && modifiers.contains(KeyModifiers::CONTROL)
+        {
+            emit(AppEvent::QuitRequested)?;
+            return Ok(true);
+        }
+
         if let Some(node_key) = state.nodeinfo_popup {
             if self.nodeinfo_state.handle_event(event.clone(), &mut |ev| match ev {
                 NodeInfoWidgetEvent::PopupCloseRequested => {
@@ -128,9 +139,6 @@ impl<'a> Component for Layout<'a> {
                     }
 
                     self.last_esc_t = Instant::now();
-                }
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    emit(AppEvent::QuitRequested)?;
                 }
                 _ => {}
             },

@@ -239,19 +239,15 @@ impl Store {
                 });
             }
             StateAction::DevicesDiscoveredAdd(device) => {
-                self.state_tx.send_if_modified(|state| {
-                    if state.devices_discovered.insert(device) {
-                        changed.push(name_of!(devices_discovered in State));
+                self.state_tx.send_modify(|state| {
+                    state.devices_discovered.replace(device);
 
-                        return true;
-                    }
-
-                    false
+                    changed.push(name_of!(devices_discovered in State));
                 });
             }
             StateAction::DeviceDiscoveringStart => {
                 self.state_tx.send_modify(|state| {
-                    state.device_discovering_state = DeviceDiscoveringState::Discovering;
+                    state.device_discovering_state = DeviceDiscoveringState::Scanning;
                     state.devices_discovered.clear();
 
                     changed.extend([
@@ -260,29 +256,18 @@ impl Store {
                     ]);
                 });
             }
-            StateAction::DeviceDiscoveringFail(error) => {
-                self.state_tx.send_modify(|state| {
-                    state.device_discovering_state = DeviceDiscoveringState::Failed(error);
-
-                    changed.push(name_of!(device_discovering_state in State));
-                });
-            }
             StateAction::DeviceDiscoveringDone => {
                 self.state_tx.send_modify(|state| {
-                    state.device_discovering_state = DeviceDiscoveringState::Done;
+                    state.device_discovering_state = DeviceDiscoveringState::Finished;
 
                     changed.push(name_of!(device_discovering_state in State));
                 });
             }
             StateAction::DevicesAdd(device) => {
-                self.state_tx.send_if_modified(|state| {
-                    if state.devices.insert(device) {
-                        changed.push(name_of!(devices in State));
+                self.state_tx.send_modify(|state| {
+                    state.devices.replace(device);
 
-                        return true;
-                    }
-
-                    false
+                    changed.push(name_of!(devices in State));
                 });
             }
             StateAction::DevicesRemove(device) => {

@@ -7,6 +7,7 @@ use hostaddr::HostAddr;
 use itertools::Itertools;
 use meshtastic::protobufs::{channel, config, module_config, routing};
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 use std::sync::LazyLock;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -105,11 +106,67 @@ pub enum AppEvent {
     QuitRequested,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize)]
 pub enum Device {
-    Ble(BDAddr, Option<String>),
-    Tcp(HostAddr<String>),
-    Serial(String),
+    Ble {
+        name: Option<String>,
+        address: BDAddr,
+        id: Option<String>,
+    },
+    Tcp {
+        name: Option<String>,
+        address: HostAddr<String>,
+    },
+    Serial {
+        name: Option<String>,
+        address: String,
+    },
+}
+
+impl Device {
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Device::Ble { name, .. } => name.as_deref(),
+            Device::Tcp { name, .. } => name.as_deref(),
+            Device::Serial { name, .. } => name.as_deref(),
+        }
+    }
+
+    pub fn with_name<S: Into<String>>(&self, name: S) -> Self {
+        match self {
+            Device::Ble { address, id, .. } => Device::Ble {
+                name: Some(name.into()),
+                address: address.clone(),
+                id: id.clone(),
+            },
+            Device::Tcp { address, .. } => Device::Tcp {
+                name: Some(name.into()),
+                address: address.clone(),
+            },
+            Device::Serial { address, .. } => Device::Serial {
+                name: Some(name.into()),
+                address: address.clone(),
+            },
+        }
+    }
+
+    pub fn without_name(&self) -> Self {
+        match self {
+            Device::Ble { address, id, .. } => Device::Ble {
+                name: None,
+                address: address.clone(),
+                id: id.clone(),
+            },
+            Device::Tcp { address, .. } => Device::Tcp {
+                name: None,
+                address: address.clone(),
+            },
+            Device::Serial { address, .. } => Device::Serial {
+                name: None,
+                address: address.clone(),
+            },
+        }
+    }
 }
 
 impl Ord for Device {
@@ -117,17 +174,58 @@ impl Ord for Device {
         match (self, other) {
             (Device::Tcp { .. }, Device::Ble { .. }) => std::cmp::Ordering::Less,
             (Device::Tcp { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (Device::Tcp(address), Device::Tcp(other_address)) => address.cmp(other_address),
+            (
+                Device::Tcp { address, .. },
+                Device::Tcp {
+                    address: other_address, ..
+                },
+            ) => address.cmp(other_address),
 
             (Device::Ble { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Ble { .. }, Device::Serial { .. }) => std::cmp::Ordering::Less,
-            (Device::Ble(address, name), Device::Ble(other_address, other_name)) => {
-                address.cmp(other_address).then(name.cmp(other_name))
-            }
+            (
+                Device::Ble { address, id, .. },
+                Device::Ble {
+                    address: other_address,
+                    id: other_id,
+                    ..
+                },
+            ) => address.cmp(other_address).then(id.cmp(other_id)),
 
             (Device::Serial { .. }, Device::Tcp { .. }) => std::cmp::Ordering::Greater,
             (Device::Serial { .. }, Device::Ble { .. }) => std::cmp::Ordering::Greater,
-            (Device::Serial(address), Device::Serial(other_address)) => address.cmp(other_address),
+            (
+                Device::Serial { address, .. },
+                Device::Serial {
+                    address: other_address, ..
+                },
+            ) => address.cmp(other_address),
+        }
+    }
+}
+
+impl Hash for Device {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Device::Ble { address, id, .. } => {
+                address.hash(state);
+                id.hash(state);
+            }
+            Device::Tcp { address, .. } => {
+                address.hash(state);
+            }
+            Device::Serial { address, .. } => {
+                address.hash(state);
+            }
+        }
+    }
+
+    fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
+    where
+        Self: Sized,
+    {
+        for device in data {
+            device.hash(state);
         }
     }
 }
@@ -136,9 +234,14 @@ impl Ord for Device {
 pub enum DeviceDiscoveringState {
     #[default]
     NotStarted,
-    Discovering,
-    Failed(String),
-    Done,
+    Scanning,
+    Finished,
+}
+
+impl DeviceDiscoveringState {
+    pub fn is_scanning(&self) -> bool {
+        self == &DeviceDiscoveringState::Scanning
+    }
 }
 
 #[derive(Debug, Clone, Default)]

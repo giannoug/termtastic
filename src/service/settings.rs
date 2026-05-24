@@ -292,7 +292,13 @@ impl SettingsService {
                     .as_ref()
                     .ok_or(anyhow::anyhow!("Lora config not loaded"))?,
             )?,
-            FormId::RadioChannels => to_formdata(&state.channels)?,
+            FormId::RadioChannels => {
+                if state.channels.len() < 8 {
+                    return Err(anyhow::anyhow!("Channels config not loaded (too few channels)"));
+                }
+
+                to_formdata(&state.channels)?
+            }
             FormId::RadioSecurity => to_formdata(
                 state
                     .device_config
