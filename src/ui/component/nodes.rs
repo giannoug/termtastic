@@ -251,7 +251,7 @@ impl<'a> Component for Nodes<'a> {
                     return Ok(true);
                 }
                 KeyCode::Tab | KeyCode::BackTab => {
-                    // Capture these events to prevent handling them by input widget
+                    // capture these events to prevent handling them by input widget
                     return Ok(false);
                 }
                 _ => {}

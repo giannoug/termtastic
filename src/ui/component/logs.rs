@@ -119,9 +119,6 @@ impl Component for Logs {
                     emit(AppEvent::CopyToClipboardRequested(state.logs[i].clone().into()))?;
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab if modifiers.is_empty() => {
-                    return Ok(false);
-                }
                 _ => {}
             },
             _ => {}

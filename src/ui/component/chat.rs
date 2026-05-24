@@ -88,9 +88,6 @@ impl<'a> Component for Chat<'a> {
 
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab => {
-                    return Ok(false);
-                }
                 _ => {}
             },
             _ => {}

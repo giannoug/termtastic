@@ -392,12 +392,14 @@ impl<'a> Component for Settings<'a> {
                         && let Some(SettingsItem::Form { id, .. }) = SETTINGS.get(index)
                     {
                         emit(AppEvent::SettingsFormSelected(id.clone()))?;
+                        return Ok(true);
                     }
                 }
                 (KeyCode::Esc, SettingsFormState::Loading { .. } | SettingsFormState::LoadingFailed { .. })
                     if modifiers.is_empty() =>
                 {
                     emit(AppEvent::SettingsFormCancelRequested)?;
+                    return Ok(true);
                 }
                 (KeyCode::Enter, SettingsFormState::Loaded { id }) if modifiers.is_empty() => {
                     if self.is_exit_confirm_visible {
@@ -421,6 +423,8 @@ impl<'a> Component for Settings<'a> {
                     };
 
                     self.handle_form_item_edit(form_item, &value, emit)?;
+
+                    return Ok(true);
                 }
                 (KeyCode::Esc, SettingsFormState::Loaded { .. }) if modifiers.is_empty() => {
                     if state.settings_form_is_changed {
@@ -429,26 +433,27 @@ impl<'a> Component for Settings<'a> {
                         emit(AppEvent::SettingsFormCancelRequested)?;
                         self.form_list_state = ListState::default();
                     }
+
+                    return Ok(true);
                 }
                 (KeyCode::Char('r'), SettingsFormState::Loaded { .. })
                     if modifiers.is_empty() && state.settings_form_is_changed =>
                 {
                     emit(AppEvent::SettingsFormResetRequested)?;
+                    return Ok(true);
                 }
                 (KeyCode::Char('s'), SettingsFormState::Loaded { id })
                     if modifiers.is_empty() && state.settings_form_is_changed =>
                 {
                     emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
-                }
-                (KeyCode::Tab | KeyCode::BackTab, _) => {
-                    return Ok(false);
+                    return Ok(true);
                 }
                 _ => {}
             },
             _ => {}
         }
 
-        Ok(true)
+        Ok(false)
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {

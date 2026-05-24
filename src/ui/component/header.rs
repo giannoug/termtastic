@@ -52,7 +52,7 @@ impl Component for Header {
                 } else {
                     Span::from("node").dark_gray()
                 },
-                Span::from("  "),
+                Span::from(" "),
                 short_name_to_span(my_node, true),
                 Span::from("  "),
             ]

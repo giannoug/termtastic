@@ -259,9 +259,6 @@ impl<'a> Component for Connection<'a> {
                     }
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab => {
-                    return Ok(false);
-                }
                 _ => {}
             },
             _ => {}
@@ -369,9 +366,7 @@ impl<'a> Component for Connection<'a> {
                                     .unwrap_or("UNKNOWN"),
                             )
                             .magenta(),
-                            Span::from(" (").dark_gray(),
-                            Span::from(&metadata.firmware_version).blue(),
-                            Span::from(")").dark_gray(),
+                            Span::from(format!(" [v{}]", &metadata.firmware_version)).dark_gray(),
                         ]))
                     }),
                 ]
