@@ -560,8 +560,17 @@ impl Store {
                     }
 
                     match chat {
-                        Chat::Channel(_) => {
-                            state.chats.get_mut(&chat).map(|messages| messages.clear());
+                        Chat::Channel(key) => {
+                            if state
+                                .channels
+                                .get(&key)
+                                .and_then(|ch| Some(ch.role.is_disabled()))
+                                .unwrap_or(false)
+                            {
+                                state.chats.remove(&chat);
+                            } else {
+                                state.chats.get_mut(&chat).map(|messages| messages.clear());
+                            }
                         }
                         Chat::Direct(_) => {
                             state.chats.remove(&chat);

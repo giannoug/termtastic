@@ -239,7 +239,9 @@ pub fn chat_to_spans<'a>(chat: &'a Chat, state: &'a State) -> Vec<Span<'a>> {
                     vec![
                         Span::from(format!("#{}", channel.key)).dark_gray(),
                         Span::from(" "),
-                        Span::from("Channel").dark_gray().add_modifier(Modifier::CROSSED_OUT),
+                        Span::from("Secondary Disabled")
+                            .dark_gray()
+                            .add_modifier(Modifier::CROSSED_OUT),
                     ]
                 }
             }
