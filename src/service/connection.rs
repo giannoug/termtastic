@@ -154,6 +154,11 @@ impl ConnectionService {
                                 .send(StateAction::MyNodeKeySet(my_info.my_node_num))?;
 
                             self.app_event_tx.send(AppEvent::DbLoadRequested(my_info.my_node_num))?;
+
+                            self.meshtastic_command_tx
+                                .send(CommandToMeshtastic::LoadCannedMessages {
+                                    my_node_num: my_info.my_node_num,
+                                })?;
                         }
                         from_radio::PayloadVariant::Metadata(metadata) => {
                             self.state_action_tx
@@ -164,17 +169,10 @@ impl ConnectionService {
                                 .send(StateAction::ChannelSet(ch.index as u32, Channel::from(ch)))?;
                         }
                         from_radio::PayloadVariant::ConfigCompleteId(_) => {
-                            let state = &self.state_rx.borrow();
-
                             self.state_action_tx.send(StateAction::ConnectionSuccess)?;
 
                             self.state_action_tx
                                 .send(StateAction::Toast(Toast::success("connected")))?;
-
-                            self.meshtastic_command_tx
-                                .send(CommandToMeshtastic::LoadCannedMessages {
-                                    my_node_num: state.my_node_key.expect("should be Some"),
-                                })?;
                         }
                         from_radio::PayloadVariant::Rebooted(true) => {
                             self.state_action_tx
