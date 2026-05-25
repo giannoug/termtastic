@@ -250,7 +250,7 @@ impl<'a> Component for Nodes<'a> {
                     }
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab => {
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc => {
                     // capture these events to prevent handling them by input widget
                     return Ok(false);
                 }
@@ -415,7 +415,7 @@ impl<'a> Widget for NodeWidget<'a> {
             x: area.x,
             y: area.y,
             width: area.width - 2,
-            height: area.height - 1,
+            height: 2,
         };
 
         let block = Block::bordered()

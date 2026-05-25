@@ -304,7 +304,7 @@ impl<'a> Component for Connection<'a> {
                 KeyCode::Char('r') if modifiers.is_empty() => {
                     if let Some(device) = self.list_state.selected.and_then(|i| state.devices.iter().nth(i)) {
                         self.popup_input_state.set_title(Some(" rename device "));
-                        self.popup_input_state.set_placeholder("type new name...");
+                        self.popup_input_state.set_placeholder("no name");
                         self.popup_input_state.reset();
                         self.popup_input_state.insert_str(device.name().unwrap_or(""));
 
@@ -489,7 +489,7 @@ impl<'a> Widget for DeviceWidget<'a> {
                 Span::from(" BLE ").black().on_blue(),
                 Span::from(format!(
                     " {} ",
-                    [name, id, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                    [name, id, &Some(address.to_string())].into_iter().flatten().join(" – ")
                 ))
                 .add_modifier(modifier),
             ],
@@ -497,7 +497,7 @@ impl<'a> Widget for DeviceWidget<'a> {
                 Span::from(" TCP ").black().on_green(),
                 Span::from(format!(
                     " {} ",
-                    [name, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                    [name, &Some(address.to_string())].into_iter().flatten().join(" – ")
                 ))
                 .add_modifier(modifier),
             ],
@@ -505,7 +505,7 @@ impl<'a> Widget for DeviceWidget<'a> {
                 Span::from(" COM ").black().on_magenta(),
                 Span::from(format!(
                     " {} ",
-                    [name, &Some(address.to_string())].into_iter().flatten().join(" / ")
+                    [name, &Some(address.to_string())].into_iter().flatten().join(" – ")
                 ))
                 .add_modifier(modifier),
             ],

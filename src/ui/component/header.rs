@@ -24,9 +24,7 @@ impl Component for Header {
     }
 
     fn render(&mut self, state: &State, frame: &mut Frame, area: Rect) {
-        let v = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
-            .flex(Flex::SpaceBetween)
-            .split(area);
+        let h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(2)]).split(area);
 
         frame.render_widget(
             Paragraph::new(Line::from(vec![
@@ -34,7 +32,7 @@ impl Component for Header {
                 Span::from(" "),
                 Span::from(crate::APP_VERSION).dark_gray(),
             ])),
-            v[0],
+            h[0],
         );
 
         let hw_model = state.device_metadata.as_ref().and_then(|metadata| {
@@ -87,7 +85,7 @@ impl Component for Header {
 
         frame.render_widget(
             Line::from([my_node_info.as_slice(), conn_info.as_slice()].concat()).right_aligned(),
-            v[1],
+            h[1],
         );
     }
 }

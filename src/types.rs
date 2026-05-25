@@ -7,7 +7,7 @@ use hostaddr::HostAddr;
 use itertools::Itertools;
 use meshtastic::protobufs::{channel, config, module_config, routing};
 use serde::{Deserialize, Serialize};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::LazyLock;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -31,8 +31,6 @@ pub struct AppConfig {
     pub nodes_filter: String,
     #[serde(default)]
     pub ui_config: UiConfig,
-    #[serde(default)]
-    pub my_node_key: Option<u32>,
 }
 
 impl From<&State> for AppConfig {
@@ -44,7 +42,6 @@ impl From<&State> for AppConfig {
             nodes_sort_by: value.nodes_sort_by.clone(),
             nodes_filter: value.nodes_filter.clone(),
             ui_config: value.ui_config.clone(),
-            my_node_key: value.my_node_key,
         }
     }
 }
@@ -106,7 +103,7 @@ pub enum AppEvent {
     QuitRequested,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Hash, Serialize, Deserialize)]
 pub enum Device {
     Ble {
         name: Option<String>,
@@ -200,32 +197,6 @@ impl Ord for Device {
                     address: other_address, ..
                 },
             ) => address.cmp(other_address),
-        }
-    }
-}
-
-impl Hash for Device {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Device::Ble { address, id, .. } => {
-                address.hash(state);
-                id.hash(state);
-            }
-            Device::Tcp { address, .. } => {
-                address.hash(state);
-            }
-            Device::Serial { address, .. } => {
-                address.hash(state);
-            }
-        }
-    }
-
-    fn hash_slice<H: Hasher>(data: &[Self], state: &mut H)
-    where
-        Self: Sized,
-    {
-        for device in data {
-            device.hash(state);
         }
     }
 }

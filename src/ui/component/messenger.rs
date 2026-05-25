@@ -335,7 +335,7 @@ impl<'a> Component for Messenger<'a> {
                     emit(AppEvent::ChatSwitchRequested)?;
                     return Ok(true);
                 }
-                KeyCode::Tab | KeyCode::BackTab if modifiers.is_empty() => {
+                KeyCode::Tab | KeyCode::BackTab | KeyCode::Esc if modifiers.is_empty() => {
                     // capture these events to prevent handling by input widget
                     return Ok(false);
                 }

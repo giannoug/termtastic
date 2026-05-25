@@ -96,7 +96,6 @@ impl Store {
                     state.nodes_sort_by = cfg.nodes_sort_by;
                     state.nodes_filter = cfg.nodes_filter;
                     state.ui_config = cfg.ui_config;
-                    state.my_node_key = cfg.my_node_key;
                     state.config_loaded = true;
 
                     changed.extend([
@@ -106,7 +105,6 @@ impl Store {
                         name_of!(nodes_sort_by in State),
                         name_of!(nodes_filter in State),
                         name_of!(ui_config in State),
-                        name_of!(my_node_key in State),
                         name_of!(config_loaded in State),
                     ]);
                 });
