@@ -190,23 +190,23 @@
 
 ## Stack
 
-| Feature                     | Library                                                                                         |
-|:----------------------------|:------------------------------------------------------------------------------------------------|
-| TUI: Framework              | [Ratatui](https://ratatui.rs)                                                                   |
-| TUI: Backend                | [crossterm](https://github.com/crossterm-rs/crossterm)                                          |
-| TUI: Inputs                 | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea)                                 |
-| TUI: Lists                  | [tui-widget-list](https://github.com/preiter93/tui-widget-list)                                 |
-| Interaction with Meshtastic | [meshtastic](https://github.com/meshtastic/rust)                                                |
-| Clipboard functionality     | [arboard](https://github.com/1Password/arboard)                                                 |
-| Bluetooth devices discovery | [bluest](https://github.com/alexmoon/bluest/)                                                   |
-| TCP devices discovery       | [mdns-sd](https://github.com/keepsimple1/mdns-sd)                                               |
-| Logging                     | [tracing](https://github.com/tokio-rs/tracing)                                                  |
-| Async/Channels              | [tokio](https://github.com/tokio-rs/tokio)                                                      |
-| Configuration               | [confy](https://github.com/rust-cli/confy), [etcetera](https://github.com/lunacookies/etcetera) |
-| Errors                      | [anyhow](https://github.com/dtolnay/anyhow), [thiserror](https://github.com/dtolnay/thiserror)  |
-| Datetime                    | [chrono](https://github.com/chronotope/chrono)                                                  |
-| Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                                                    |
-| Local DB                    | [rusqlite](https://github.com/rusqlite/rusqlite)                                                |
+| Feature                     | Library                                                                                                              |
+|:----------------------------|:---------------------------------------------------------------------------------------------------------------------|
+| TUI: Framework              | [Ratatui](https://ratatui.rs)                                                                                        |
+| TUI: Backend                | [crossterm](https://github.com/crossterm-rs/crossterm)                                                               |
+| TUI: Inputs                 | [ratatui-textarea](https://github.com/ratatui/ratatui-textarea)                                                      |
+| TUI: Lists                  | [tui-widget-list](https://github.com/preiter93/tui-widget-list)                                                      |
+| Interaction with Meshtastic | [meshtastic](https://github.com/meshtastic/rust)                                                                     |
+| Clipboard functionality     | [arboard](https://github.com/1Password/arboard)                                                                      |
+| Bluetooth devices discovery | [bluest](https://github.com/alexmoon/bluest/)                                                                        |
+| TCP devices discovery       | [mdns-sd](https://github.com/keepsimple1/mdns-sd)                                                                    |
+| Logging                     | [tracing](https://github.com/tokio-rs/tracing)                                                                       |
+| Async/Channels              | [tokio](https://github.com/tokio-rs/tokio)                                                                           |
+| Configuration               | [confy](https://github.com/rust-cli/confy), [etcetera](https://github.com/lunacookies/etcetera)                      |
+| Errors                      | [anyhow](https://github.com/dtolnay/anyhow), [thiserror](https://github.com/dtolnay/thiserror)                       |
+| Datetime                    | [chrono](https://github.com/chronotope/chrono)                                                                       |
+| Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                                                                         |
+| Local DB                    | [rusqlite](https://github.com/rusqlite/rusqlite), [rusqlite_migration](https://github.com/cljoly/rusqlite_migration) |
 
 ## Compatibility
 

@@ -501,25 +501,28 @@ impl Store {
                 });
             }
             StateAction::NodeLastTelemetrySet(node_key, variant) => {
-                self.state_tx.send_if_modified(|state| {
-                    let default_telemetry = NodeLastTelemetry::default();
+                self.state_tx.send_modify(|state| {
+                    let telemetry = state
+                        .nodes_last_telemetry
+                        .entry(node_key)
+                        .or_insert(NodeLastTelemetry::default());
 
-                    let handled = match variant {
-                        telemetry::Variant::DeviceMetrics(metrics) => {
-                            let telemetry = state.nodes_last_telemetry.entry(node_key).or_insert(default_telemetry);
-
-                            telemetry.device_metrics = Some(metrics);
-
-                            true
+                    match variant {
+                        telemetry::Variant::DeviceMetrics(metrics) => telemetry.device_metrics = Some(metrics),
+                        telemetry::Variant::EnvironmentMetrics(metrics) => {
+                            telemetry.environment_metrics = Some(metrics)
                         }
-                        _ => false,
+                        telemetry::Variant::AirQualityMetrics(metrics) => telemetry.air_quality_metrics = Some(metrics),
+                        telemetry::Variant::PowerMetrics(metrics) => telemetry.power_metrics = Some(metrics),
+                        telemetry::Variant::LocalStats(metrics) => telemetry.local_stats = Some(metrics),
+                        telemetry::Variant::HealthMetrics(metrics) => telemetry.health_metrics = Some(metrics),
+                        telemetry::Variant::HostMetrics(metrics) => telemetry.host_metrics = Some(metrics),
+                        telemetry::Variant::TrafficManagementStats(metrics) => {
+                            telemetry.traffic_management_stats = Some(metrics)
+                        }
                     };
 
-                    if handled {
-                        changed.push(name_of!(nodes_last_telemetry in State));
-                    }
-
-                    handled
+                    changed.push(name_of!(nodes_last_telemetry in State));
                 });
             }
             StateAction::ChannelSet(key, channel) => {

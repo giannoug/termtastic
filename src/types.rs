@@ -885,6 +885,13 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
 #[derive(Debug, Clone, Default)]
 pub struct NodeLastTelemetry {
     pub device_metrics: Option<meshtastic::protobufs::DeviceMetrics>,
+    pub environment_metrics: Option<meshtastic::protobufs::EnvironmentMetrics>,
+    pub air_quality_metrics: Option<meshtastic::protobufs::AirQualityMetrics>,
+    pub power_metrics: Option<meshtastic::protobufs::PowerMetrics>,
+    pub local_stats: Option<meshtastic::protobufs::LocalStats>,
+    pub health_metrics: Option<meshtastic::protobufs::HealthMetrics>,
+    pub host_metrics: Option<meshtastic::protobufs::HostMetrics>,
+    pub traffic_management_stats: Option<meshtastic::protobufs::TrafficManagementStats>,
 }
 
 #[derive(Debug, Clone)]

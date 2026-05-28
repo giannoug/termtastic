@@ -2,7 +2,10 @@ use rusqlite::Connection;
 use rusqlite_migration::{M, Migrations};
 use std::path::PathBuf;
 
-const MIGRATIONS_LIST: &[M<'_>] = &[M::up(include_str!("migrations/0001.sql"))];
+#[rustfmt::skip]
+const MIGRATIONS_LIST: &[M<'_>] = &[
+    M::up(include_str!("migrations/0001.sql"))
+];
 
 const MIGRATIONS: Migrations<'_> = Migrations::from_slice(MIGRATIONS_LIST);
 

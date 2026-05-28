@@ -2709,6 +2709,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_sqlite_jsonb"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b727d9bd81080738c4f01944b4cc7153cd33ce33211fcf813a874b97ad64d1c2"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serialport"
 version = "4.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3033,6 +3043,7 @@ dependencies = [
  "rusqlite_migration",
  "serde",
  "serde_rusqlite",
+ "serde_sqlite_jsonb",
  "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",

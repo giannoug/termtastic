@@ -18,16 +18,13 @@ CREATE TABLE nodes
     user_is_unmessagable INTEGER
 ) WITHOUT ROWID;
 
-CREATE INDEX idx_node_key ON telemetry_device_metrics (node_key, datetime DESC);
-
-CREATE TABLE telemetry_device_metrics
+CREATE TABLE telemetry
 (
-    id                          INTEGER PRIMARY KEY ASC,
-    node_key                    INTEGER NOT NULL,
-    datetime                    INTEGER NOT NULL,
-    metrics_battery_level       INTEGER,
-    metrics_voltage             REAL,
-    metrics_channel_utilization REAL,
-    metrics_air_util_tx         REAL,
-    metrics_uptime_seconds      INTEGER
-)
+    id       INTEGER PRIMARY KEY ASC,
+    node_key INTEGER NOT NULL,
+    datetime INTEGER NOT NULL,
+    kind     TEXT    NOT NULL,
+    data     BLOB
+);
+
+CREATE INDEX idx_telemetry_node_key_datetime ON telemetry (node_key, datetime DESC);

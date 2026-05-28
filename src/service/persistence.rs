@@ -173,14 +173,7 @@ impl PersistenceService {
                     return Ok(());
                 };
 
-                match packet.data {
-                    meshtastic::protobufs::telemetry::Variant::DeviceMetrics(_) => {
-                        repository.telemetry_device_metrics_insert(packet.try_into()?)?;
-                    }
-                    _ => {
-                        tracing::debug!("telemetry packet not handled: {:?}", packet.data);
-                    }
-                }
+                repository.telemetry_insert(packet.try_into()?)?;
             }
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 tracing::warn!("broadcast receiver lagged by {} events", n);
@@ -220,21 +213,42 @@ impl PersistenceService {
 
         self.forward_state_action_tx.send(StateAction::DbDataLoaded { nodes })?;
 
-        // telemetry: device metrics
-        match repository.telemetry_device_metrics_find_last_for_each_node() {
+        // telemetry
+        match repository.telemetry_find_last_for_each_node() {
             Ok(map) => {
-                for (node_key, metrics) in map.into_iter() {
-                    self.forward_state_action_tx.send(StateAction::NodeLastTelemetrySet(
-                        node_key,
-                        meshtastic::protobufs::telemetry::Variant::DeviceMetrics(metrics.into()),
-                    ))?;
+                let map_nodes = map.len();
+                let map_bytes_total = map.values().map(|v| v.data.len()).sum::<usize>();
+
+                for (node_key, telemetry) in map.into_iter() {
+                    let telemetry_node_key = telemetry.node_key.clone();
+                    let telemetry_kind = telemetry.kind.clone();
+
+                    match telemetry.try_into() {
+                        Ok(variant) => self
+                            .forward_state_action_tx
+                            .send(StateAction::NodeLastTelemetrySet(node_key, variant))?,
+                        Err(e) => {
+                            tracing::error!(
+                                "telemetry conversion failed, node_key: {}, kind: {}, error: {}",
+                                telemetry_node_key,
+                                telemetry_kind,
+                                e
+                            )
+                        }
+                    }
                 }
+
+                tracing::info!(
+                    "telemetry data loaded from DB: {} bytes for {} nodes",
+                    map_bytes_total,
+                    map_nodes
+                );
             }
             Err(e) => {
-                tracing::error!("nodes telemetry load failed: {}", e);
+                tracing::error!("telemetry load failed: {}", e);
 
                 self.forward_state_action_tx
-                    .send(StateAction::Toast(Toast::error("nodes telemetry not loaded from DB")))?;
+                    .send(StateAction::Toast(Toast::error("telemetry not loaded from DB")))?;
 
                 return Ok(());
             }
