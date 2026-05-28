@@ -193,15 +193,16 @@ impl<'a> Component for Layout<'a> {
 
         // node info popup
         if let Some(node_key) = state.nodeinfo_popup {
-            let popup_area = area.centered(Constraint::Length(60), Constraint::Length(20));
+            let popup_area = area.centered(Constraint::Length(60), Constraint::Length(17));
 
             Clear.render(popup_area, frame.buffer_mut());
 
-            NodeInfoWidget::new(state.nodes.get(&node_key), state.my_node_key == Some(node_key)).render(
-                popup_area,
-                frame.buffer_mut(),
-                &mut self.nodeinfo_state,
-            );
+            NodeInfoWidget::new(
+                state.nodes.get(&node_key),
+                state.nodes_last_telemetry.get(&node_key),
+                state.my_node_key == Some(node_key),
+            )
+            .render(popup_area, frame.buffer_mut(), &mut self.nodeinfo_state);
         }
 
         // splash logo

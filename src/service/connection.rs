@@ -325,11 +325,16 @@ async fn discover_tcp_devices(state_action_tx: mpsc::UnboundedSender<StateAction
             match event {
                 mdns_sd::ServiceEvent::ServiceResolved(info) => {
                     for addr in info.addresses.iter() {
+                        let short_name = info
+                            .txt_properties
+                            .get("shortname")
+                            .and_then(|txt| Some(txt.val_str().to_owned()));
+
                         match addr {
                             mdns_sd::ScopedIp::V4(ipv4) => {
                                 if let Err(e) = state_action_tx.send(StateAction::DevicesDiscoveredAdd(Device::Tcp {
                                     address: HostAddr::from_ip_addr(IpAddr::from(*ipv4.addr())).with_port(info.port),
-                                    name: Some(info.host.clone()),
+                                    name: short_name,
                                 })) {
                                     let _ = mdns_daemon.shutdown();
                                     return Err(e.into());
@@ -338,7 +343,7 @@ async fn discover_tcp_devices(state_action_tx: mpsc::UnboundedSender<StateAction
                             mdns_sd::ScopedIp::V6(ipv6) => {
                                 if let Err(e) = state_action_tx.send(StateAction::DevicesDiscoveredAdd(Device::Tcp {
                                     address: HostAddr::from_ip_addr(IpAddr::from(*ipv6.addr())).with_port(info.port),
-                                    name: Some(info.host.clone()),
+                                    name: short_name,
                                 })) {
                                     let _ = mdns_daemon.shutdown();
                                     return Err(e.into());

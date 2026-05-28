@@ -1,30 +1,25 @@
 use itertools::Itertools;
-use std::fs;
 use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::repository::{create_repository, Repository};
+use crate::repository::{Repository, create_sqlite_repository};
 use crate::types::Node;
 use crate::{
+    APP_NAME,
     state::StateAction,
     types::{AppEvent, Toast},
-    APP_NAME,
 };
 
-// We read the data from the DB only once during the initialization.
-// The cache size is set to zero to avoid unnecessary memory usage.
-const DB_CACHE_SIZE: usize = 0;
-
-pub struct PersistenceService<'a> {
+pub struct PersistenceService {
     app_event_rx: broadcast::Receiver<AppEvent>,
     forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
     data_dir: PathBuf,
-    repository: Option<Repository<'a>>,
+    repository: Option<Repository>,
 }
 
-impl<'a> PersistenceService<'a> {
+impl PersistenceService {
     pub fn new(
         app_event_rx: broadcast::Receiver<AppEvent>,
         forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
@@ -67,7 +62,7 @@ impl<'a> PersistenceService<'a> {
 
         match &action {
             StateAction::NodeInit(node) if node.user.is_some() => {
-                if let Err(e) = repository.nodes_upsert(node.into()) {
+                if let Err(e) = repository.node_upsert(node.into()) {
                     tracing::error!("node init failed: {}", e);
 
                     self.forward_state_action_tx
@@ -75,7 +70,7 @@ impl<'a> PersistenceService<'a> {
                 }
             }
             StateAction::NodeUpdate(node) => {
-                if let Err(e) = repository.nodes_upsert(node.into()) {
+                if let Err(e) = repository.node_upsert(node.into()) {
                     tracing::error!("node update failed: {}", e);
 
                     self.forward_state_action_tx
@@ -83,7 +78,7 @@ impl<'a> PersistenceService<'a> {
                 }
             }
             StateAction::NodeDelete(node_key) => {
-                if let Err(e) = repository.nodes_remove(*node_key) {
+                if let Err(e) = repository.node_remove(*node_key) {
                     tracing::error!("node delete failed: {}", e);
 
                     self.forward_state_action_tx
@@ -95,13 +90,13 @@ impl<'a> PersistenceService<'a> {
                 hops,
                 snr,
                 rssi,
-            } => match repository.nodes_find_by_key(*node_key) {
+            } => match repository.node_get_by_key(*node_key) {
                 Ok(Some(mut node)) => {
                     node.hops = Some(*hops);
                     node.snr = *snr;
                     node.rssi = Some(*rssi);
 
-                    if let Err(e) = repository.nodes_upsert(node) {
+                    if let Err(e) = repository.node_upsert(node) {
                         tracing::error!("node update failed: {}", e);
 
                         self.forward_state_action_tx
@@ -129,26 +124,12 @@ impl<'a> PersistenceService<'a> {
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
             Ok(AppEvent::DbLoadRequested(node_key)) => {
-                let db_file = self.data_dir.join(format!("{}_{}.db", APP_NAME, node_key));
+                let db_file = self.data_dir.join(format!("{}_{}.sqlite3", APP_NAME, node_key));
 
-                match create_repository(db_file, DB_CACHE_SIZE) {
-                    Ok(mut repository) => match repository.check_integrity() {
-                        Ok(res) => {
-                            if res {
-                                tracing::info!("DB integrity check passed");
-                            } else {
-                                tracing::warn!("DB integrity check passed after repair");
-                            }
-
-                            self.repository = Some(repository);
-                        }
-                        Err(e) => {
-                            tracing::error!("DB integrity check failed: {}", e);
-
-                            self.forward_state_action_tx
-                                .send(StateAction::Toast(Toast::error("DB is broken")))?;
-                        }
-                    },
+                match create_sqlite_repository(db_file) {
+                    Ok(repository) => {
+                        self.repository = Some(repository);
+                    }
                     Err(e) => {
                         tracing::error!("DB initialization failed: {}", e);
 
@@ -160,34 +141,44 @@ impl<'a> PersistenceService<'a> {
                 self.load_data()?;
             }
             Ok(AppEvent::DbCompactRequested) => {
-                if let Some(repository) = self.repository.as_mut() {
-                    let old_size = fs::metadata(repository.get_file_path())?.len();
+                let Some(repository) = &self.repository else {
+                    return Ok(());
+                };
 
-                    match repository.compact() {
-                        Ok(true) => {
-                            let new_size = fs::metadata(repository.get_file_path())?.len();
+                let old_size = std::fs::metadata(repository.get_file_path())?.len();
 
-                            tracing::info!(
-                                "DB compacted, old size: {}KB, new size: {}KB",
-                                old_size / 1024,
-                                new_size / 1024
-                            );
+                match repository.vacuum() {
+                    Ok(_) => {
+                        let new_size = std::fs::metadata(repository.get_file_path())?.len();
 
-                            self.forward_state_action_tx
-                                .send(StateAction::Toast(Toast::success("DB compacted")))?;
-                        }
-                        Ok(false) => {
-                            tracing::info!("DB already compacted");
+                        tracing::info!(
+                            "DB compacted, old size: {}KB, new size: {}KB",
+                            old_size / 1024,
+                            new_size / 1024
+                        );
 
-                            self.forward_state_action_tx
-                                .send(StateAction::Toast(Toast::success("DB already compacted")))?;
-                        }
-                        Err(e) => {
-                            tracing::error!("DB compact failed: {}", e);
+                        self.forward_state_action_tx
+                            .send(StateAction::Toast(Toast::success("DB compacted")))?;
+                    }
+                    Err(e) => {
+                        tracing::error!("DB compact failed: {}", e);
 
-                            self.forward_state_action_tx
-                                .send(StateAction::Toast(Toast::error("DB compact failed")))?;
-                        }
+                        self.forward_state_action_tx
+                            .send(StateAction::Toast(Toast::error("DB compact failed")))?;
+                    }
+                }
+            }
+            Ok(AppEvent::TelemetryArrived(packet)) => {
+                let Some(repository) = &self.repository else {
+                    return Ok(());
+                };
+
+                match packet.data {
+                    meshtastic::protobufs::telemetry::Variant::DeviceMetrics(_) => {
+                        repository.telemetry_device_metrics_insert(packet.try_into()?)?;
+                    }
+                    _ => {
+                        tracing::debug!("telemetry packet not handled: {:?}", packet.data);
                     }
                 }
             }
@@ -210,7 +201,8 @@ impl<'a> PersistenceService<'a> {
             return Ok(());
         };
 
-        let nodes: Vec<Node> = match repository.nodes_get_all() {
+        // nodes
+        let nodes: Vec<Node> = match repository.node_find_all() {
             Ok(nodes) => {
                 tracing::info!("nodes loaded from DB: {}", nodes.len());
 
@@ -227,6 +219,26 @@ impl<'a> PersistenceService<'a> {
         };
 
         self.forward_state_action_tx.send(StateAction::DbDataLoaded { nodes })?;
+
+        // telemetry: device metrics
+        match repository.telemetry_device_metrics_find_last_for_each_node() {
+            Ok(map) => {
+                for (node_key, metrics) in map.into_iter() {
+                    self.forward_state_action_tx.send(StateAction::NodeLastTelemetrySet(
+                        node_key,
+                        meshtastic::protobufs::telemetry::Variant::DeviceMetrics(metrics.into()),
+                    ))?;
+                }
+            }
+            Err(e) => {
+                tracing::error!("nodes telemetry load failed: {}", e);
+
+                self.forward_state_action_tx
+                    .send(StateAction::Toast(Toast::error("nodes telemetry not loaded from DB")))?;
+
+                return Ok(());
+            }
+        };
 
         self.forward_state_action_tx
             .send(StateAction::Toast(Toast::normal("DB data loaded")))?;

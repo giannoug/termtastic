@@ -75,6 +75,7 @@ async fn main() {
     let ui_service = UiService::new(app_event_rx.resubscribe(), persisted_state_action_tx.clone());
 
     let nodes_service = NodesService::new(
+        app_event_tx.clone(),
         app_event_rx.resubscribe(),
         state_rx.clone(),
         persisted_state_action_tx.clone(),

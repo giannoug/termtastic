@@ -1,5 +1,5 @@
 use chrono::Utc;
-use meshtastic::protobufs::{config, module_config};
+use meshtastic::protobufs::{config, module_config, telemetry};
 use nameof::name_of;
 use std::collections::hash_map::Entry;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -10,7 +10,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::types::Chat;
+use crate::types::{Chat, NodeLastTelemetry};
 use crate::{
     state::{State, StateAction},
     types::{ConnectionState, DeviceDiscoveringState, FormItemKey, SettingsFormState, Tab},
@@ -498,6 +498,28 @@ impl Store {
                     }
 
                     false
+                });
+            }
+            StateAction::NodeLastTelemetrySet(node_key, variant) => {
+                self.state_tx.send_if_modified(|state| {
+                    let default_telemetry = NodeLastTelemetry::default();
+
+                    let handled = match variant {
+                        telemetry::Variant::DeviceMetrics(metrics) => {
+                            let telemetry = state.nodes_last_telemetry.entry(node_key).or_insert(default_telemetry);
+
+                            telemetry.device_metrics = Some(metrics);
+
+                            true
+                        }
+                        _ => false,
+                    };
+
+                    if handled {
+                        changed.push(name_of!(nodes_last_telemetry in State));
+                    }
+
+                    handled
                 });
             }
             StateAction::ChannelSet(key, channel) => {

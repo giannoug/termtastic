@@ -1,5 +1,5 @@
-mod entities;
-mod mappers;
+pub mod domain;
+
 mod repository;
 
 pub use repository::*;

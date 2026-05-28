@@ -303,7 +303,7 @@ where
     trimmed
 }
 
-pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
+pub fn humanize_last_heard<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
     if delta.num_seconds() < 60 {
         return vec![Span::from("now").green()];
     }
@@ -326,6 +326,15 @@ pub fn humanize_duration<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
         Span::from(format!("{}d", delta.num_days())),
         Span::from(" ago").dark_gray(),
     ]
+}
+
+pub fn humanize_uptime<'a>(secs: u32) -> Span<'a> {
+    match secs {
+        0..60 => Span::from(format!("{}s", secs)),
+        60..3600 => Span::from(format!("{}m", secs / 60)),
+        3600..86400 => Span::from(format!("{}h {}m", secs / 3600, secs % 3600 / 60)),
+        _ => Span::from(format!("{}d {}h", secs / 86400, secs % 86400 / 3600)),
+    }
 }
 
 pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware, my: bool) -> Vec<Span<'a>> {
@@ -365,7 +374,7 @@ pub fn short_name_to_span(node: &Node, my: bool) -> Span<'_> {
 pub fn last_heard_to_spans(node: &Node, my: bool) -> Vec<Span<'_>> {
     match node.last_heard {
         Some(_) if my => vec![Span::from("now").blue()],
-        Some(dt) => humanize_duration(Utc::now().round_subsecs(0) - dt),
+        Some(dt) => humanize_last_heard(Utc::now().round_subsecs(0) - dt),
         None => vec![Span::from("?").dark_gray()],
     }
 }

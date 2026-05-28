@@ -1,13 +1,12 @@
-use super::entities;
 use crate::types::{Node, NodeUser};
 
-impl From<Node> for entities::v1::Node {
+impl From<Node> for super::Node {
     fn from(value: Node) -> Self {
         Self::from(&value)
     }
 }
 
-impl From<&Node> for entities::v1::Node {
+impl From<&Node> for super::Node {
     fn from(value: &Node) -> Self {
         let user = value.user.as_ref().expect("should be Some");
 
@@ -32,8 +31,8 @@ impl From<&Node> for entities::v1::Node {
     }
 }
 
-impl From<entities::v1::Node> for Node {
-    fn from(value: entities::v1::Node) -> Self {
+impl From<super::Node> for Node {
+    fn from(value: super::Node) -> Self {
         let mut node = Self {
             key: value.key,
             user: Some(NodeUser {

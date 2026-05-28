@@ -52,6 +52,7 @@ pub enum StateAction {
     },
     NodeDelete(u32),
     NodeOwnerSet(NodeUser),
+    NodeLastTelemetrySet(u32, meshtastic::protobufs::telemetry::Variant),
     NodesSortBySet(NodesSortBy),
     NodesFilterSet(String),
     NodesOnlineSet(u16),

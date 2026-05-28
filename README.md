@@ -206,7 +206,7 @@
 | Errors                      | [anyhow](https://github.com/dtolnay/anyhow), [thiserror](https://github.com/dtolnay/thiserror)  |
 | Datetime                    | [chrono](https://github.com/chronotope/chrono)                                                  |
 | Emoji selector              | [emoji](https://github.com/Shizcow/emoji-rs)                                                    |
-| Local DB                    | [native_db](https://github.com/vincent-herlemont/native_db)                                     |
+| Local DB                    | [rusqlite](https://github.com/rusqlite/rusqlite)                                                |
 
 ## Compatibility
 

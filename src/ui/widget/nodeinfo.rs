@@ -1,5 +1,5 @@
-use crate::types::{Hotkey, Node};
-use crate::ui::helpers::{hops_to_spans, last_heard_to_spans};
+use crate::types::{Hotkey, Node, NodeLastTelemetry};
+use crate::ui::helpers::{hops_to_spans, humanize_uptime, last_heard_to_spans};
 use crate::ui::prelude::{Constraint, Layout, PlaceholderWidget, PopupConfirmWidget, TabsWidget};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
@@ -140,39 +140,88 @@ impl NodeInfoState {
 
 pub struct NodeInfoWidget<'a> {
     maybe_node: Option<&'a Node>,
+    node_last_telemetry: Option<&'a NodeLastTelemetry>,
     is_my_node: bool,
 }
 
 impl<'a> NodeInfoWidget<'a> {
-    pub fn new(maybe_node: Option<&'a Node>, is_my_node: bool) -> Self {
-        Self { maybe_node, is_my_node }
+    pub fn new(
+        maybe_node: Option<&'a Node>,
+        node_last_telemetry: Option<&'a NodeLastTelemetry>,
+        is_my_node: bool,
+    ) -> Self {
+        Self {
+            maybe_node,
+            node_last_telemetry,
+            is_my_node,
+        }
     }
 
     fn render_info(&self, node: &Node, area: Rect, buf: &mut Buffer, state: &mut NodeInfoState) {
-        let v = Layout::vertical([Constraint::Length(9), Constraint::Length(2)]).split(area);
-        let v0_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[0]);
+        let v = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(2),
+        ])
+        .split(area);
 
-        // first column
+        let v0_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[0]);
+        let v1_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[1]);
+        let v2_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[2]);
+
+        // first line
         Paragraph::new(vec![
             Line::from(Span::from("short name").dark_gray()),
             Line::from(node.short_name().to_span()),
-            Line::default(),
-            Line::from(Span::from("last heard").dark_gray()),
-            Line::from(last_heard_to_spans(node, self.is_my_node)),
-            Line::default(),
-            Line::from(Span::from("device role").dark_gray()),
-            Line::from(node.role().to_span()),
         ])
         .render(v0_h[0], buf);
 
-        // second column
         Paragraph::new(vec![
             Line::from(Span::from("node number").dark_gray()),
             Line::from(node.key.to_span()),
-            Line::default(),
+        ])
+        .render(v0_h[1], buf);
+
+        Paragraph::new(vec![
+            Line::from(Span::from("user ID").dark_gray()),
+            Line::from(node.id().to_span()),
+        ])
+        .render(v0_h[2], buf);
+
+        // second line
+        Paragraph::new(vec![
+            Line::from(Span::from("last heard").dark_gray()),
+            Line::from(last_heard_to_spans(node, self.is_my_node)),
+        ])
+        .render(v1_h[0], buf);
+
+        Paragraph::new(vec![
             Line::from(Span::from("hops").dark_gray()),
             Line::from(hops_to_spans(node, self.is_my_node)),
-            Line::default(),
+        ])
+        .render(v1_h[1], buf);
+
+        Paragraph::new(vec![
+            Line::from(Span::from("uptime").dark_gray()),
+            Line::from(
+                self.node_last_telemetry
+                    .and_then(|t| t.device_metrics)
+                    .and_then(|m| m.uptime_seconds)
+                    .and_then(|s| Some(humanize_uptime(s)))
+                    .unwrap_or(Span::from("no data")),
+            ),
+        ])
+        .render(v1_h[2], buf);
+
+        // third line
+        Paragraph::new(vec![
+            Line::from(Span::from("device role").dark_gray()),
+            Line::from(node.role().to_span()),
+        ])
+        .render(v2_h[0], buf);
+
+        Paragraph::new(vec![
             Line::from(Span::from("public key").dark_gray()),
             Line::from(if let Some(user) = node.user.as_ref() {
                 Span::from(format!("{}-byte", user.public_key.len())).green()
@@ -180,16 +229,9 @@ impl<'a> NodeInfoWidget<'a> {
                 "none".to_span().red()
             }),
         ])
-        .render(v0_h[1], buf);
+        .render(v2_h[1], buf);
 
-        // third column
         Paragraph::new(vec![
-            Line::from(Span::from("user ID").dark_gray()),
-            Line::from(node.id().to_span()),
-            Line::default(),
-            Line::from(Span::from("uptime").dark_gray()),
-            Line::from("no data".to_span()),
-            Line::default(),
             Line::from(Span::from("status").dark_gray()),
             Line::from(if node.user.is_none() {
                 Span::from("UNKNOWN").yellow()
@@ -197,14 +239,14 @@ impl<'a> NodeInfoWidget<'a> {
                 Span::from("STORED").green()
             }),
         ])
-        .render(v0_h[2], buf);
+        .render(v2_h[2], buf);
 
-        // long line
+        // fourth line
         Paragraph::new(vec![
             Line::from(Span::from("hardware").dark_gray()),
             Line::from(node.hw_model().to_span().magenta()),
         ])
-        .render(v[1], buf);
+        .render(v[3], buf);
 
         // delete popup
         if state.is_delete_node_popup_visible {
@@ -215,7 +257,7 @@ impl<'a> NodeInfoWidget<'a> {
                 40,
                 Color::Red,
             )
-            .render(v[0], buf);
+            .render(area, buf);
         }
     }
 }

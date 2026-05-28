@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use meshtastic::{
-    protobufs::{admin_message, from_radio, mesh_packet, AdminMessage, MeshPacket, PortNum, User},
     Message as _,
+    protobufs::{AdminMessage, MeshPacket, PortNum, Telemetry, User, admin_message, from_radio, mesh_packet},
 };
 use tokio::{
     sync::{broadcast, mpsc, watch},
@@ -12,7 +12,7 @@ use tokio::{
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::Toast;
+use crate::types::{TelemetryPacket, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
@@ -23,6 +23,7 @@ pub const ONLINE_NODE_THRESHOLD_SECS: i64 = 7200;
 const UPDATE_ONLINE_NODES_INTERVAL_SECS: u64 = 2;
 
 pub struct NodesService {
+    app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
     state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
@@ -33,6 +34,7 @@ pub struct NodesService {
 
 impl NodesService {
     pub fn new(
+        app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
         state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
@@ -40,6 +42,7 @@ impl NodesService {
         meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
     ) -> Self {
         Self {
+            app_event_tx,
             app_event_rx,
             state_rx,
             state_action_tx,
@@ -208,6 +211,27 @@ impl NodesService {
                             },
                             Err(e) => {
                                 tracing::debug!("can't decode AdminMessage payload: {:?}", e);
+                            }
+                        },
+                        PortNum::TelemetryApp => match Telemetry::decode(&*data.payload) {
+                            Ok(Telemetry {
+                                time,
+                                variant: Some(data),
+                            }) => {
+                                self.app_event_tx.send(AppEvent::TelemetryArrived(TelemetryPacket {
+                                    node_key: mesh_packet.from,
+                                    time,
+                                    data: data.clone(),
+                                }))?;
+
+                                self.state_action_tx
+                                    .send(StateAction::NodeLastTelemetrySet(mesh_packet.from, data))?;
+                            }
+                            Ok(_) => {
+                                tracing::debug!("TelemetryApp with empty variant");
+                            }
+                            Err(e) => {
+                                tracing::debug!("can't decode TelemetryApp payload: {:?}", e);
                             }
                         },
                         _ => {}

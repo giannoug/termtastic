@@ -364,7 +364,7 @@ impl<'a> Component for Messenger<'a> {
         }
 
         if !self.follow_chat.contains_key(active_chat) {
-            self.follow_chat.insert(active_chat.clone(), false);
+            self.follow_chat.insert(active_chat.clone(), true);
         }
 
         let list_state = self.list_states.get_mut(active_chat).unwrap();

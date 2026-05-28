@@ -97,6 +97,7 @@ pub enum AppEvent {
     SettingsFormSaveRequested(FormId),
     SettingsFormSelected(FormId),
     SplashLogoRequested,
+    TelemetryArrived(TelemetryPacket),
     TabNextRequested,
     TabPreviousRequested,
     TryingToQuit,
@@ -879,6 +880,18 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
             routing_error: None,
         })
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct NodeLastTelemetry {
+    pub device_metrics: Option<meshtastic::protobufs::DeviceMetrics>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TelemetryPacket {
+    pub node_key: u32,
+    pub time: u32,
+    pub data: meshtastic::protobufs::telemetry::Variant,
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
