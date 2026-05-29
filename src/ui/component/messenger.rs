@@ -524,7 +524,7 @@ impl<'a> Component for Messenger<'a> {
                 .and_then(|i| message_ids.get(i))
                 .and_then(|id| state.messages.get(id))
         {
-            let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(15));
+            let popup_area = v[0].centered(Constraint::Length(40), Constraint::Length(14));
 
             Clear.render(popup_area, frame.buffer_mut());
 

@@ -5,7 +5,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Padding, StatefulWidget, Widg
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
 use crate::types::{Message, Node};
-use crate::ui::helpers::{default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span, ListStateExt};
+use crate::ui::helpers::{ListStateExt, default_scrollbar, hops_to_spans, routing_error_to_span, short_name_to_span};
 use crate::ui::widget::PlaceholderWidget;
 
 pub struct ReactionViewerState {
@@ -74,7 +74,7 @@ impl<'a> StatefulWidget for ReactionViewerWidget<'a> {
         }
 
         const ITEM_HEIGHT: usize = 3;
-        let is_scrollable = self.reactions.len() * ITEM_HEIGHT > block_area.height as usize;
+        let is_scrollable = self.reactions.len() * ITEM_HEIGHT - 1 > block_area.height as usize;
 
         let list_builder = ListBuilder::new(|context| {
             let reaction = &self.reactions[context.index];
@@ -85,7 +85,14 @@ impl<'a> StatefulWidget for ReactionViewerWidget<'a> {
                 is_scrollable,
             };
 
-            (item, ITEM_HEIGHT as u16)
+            (
+                item,
+                if context.index < self.reactions.len() - 1 {
+                    ITEM_HEIGHT as u16
+                } else {
+                    ITEM_HEIGHT as u16 - 1
+                },
+            )
         });
 
         let list = ListView::new(list_builder, self.reactions.len())
@@ -107,7 +114,7 @@ impl<'a> Widget for ReactionWidget<'a> {
     where
         Self: Sized,
     {
-        let area = Rect::new(area.x, area.y, area.width, area.height - 1);
+        let area = Rect::new(area.x, area.y, area.width, 2);
 
         let block = Block::new()
             .padding(Padding::new(1, if self.is_scrollable { 3 } else { 0 }, 0, 0))

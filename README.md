@@ -128,6 +128,8 @@
 
 - [x] Loading device configuration (generic feature)
 - [x] Saving device configuration (generic feature)
+- [x] Storing telemetry in the local DB
+- [x] Loading last telemetry data for each node from the local DB on app start
 - [ ] Import configuration from the link
 
 #### App
