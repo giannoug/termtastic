@@ -1,0 +1,1 @@
+CREATE INDEX idx_telemetry_node_key_kind_datetime ON telemetry (node_key, kind, datetime DESC);

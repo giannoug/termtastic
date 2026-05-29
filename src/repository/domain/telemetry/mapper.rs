@@ -30,10 +30,10 @@ impl TryFrom<TelemetryPacket> for Telemetry {
     }
 }
 
-impl TryFrom<Telemetry> for telemetry::Variant {
+impl TryFrom<&Telemetry> for telemetry::Variant {
     type Error = anyhow::Error;
 
-    fn try_from(value: Telemetry) -> Result<Self, Self::Error> {
+    fn try_from(value: &Telemetry) -> Result<Self, Self::Error> {
         let slice = value.data.as_slice();
 
         let variant = match value.kind.as_str() {

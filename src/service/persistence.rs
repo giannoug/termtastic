@@ -216,32 +216,29 @@ impl PersistenceService {
         // telemetry
         match repository.telemetry_find_last_for_each_node() {
             Ok(map) => {
-                let map_nodes = map.len();
-                let map_bytes_total = map.values().map(|v| v.data.len()).sum::<usize>();
-
-                for (node_key, telemetry) in map.into_iter() {
-                    let telemetry_node_key = telemetry.node_key.clone();
-                    let telemetry_kind = telemetry.kind.clone();
-
-                    match telemetry.try_into() {
-                        Ok(variant) => self
-                            .forward_state_action_tx
-                            .send(StateAction::NodeLastTelemetrySet(node_key, variant))?,
-                        Err(e) => {
-                            tracing::error!(
-                                "telemetry conversion failed, node_key: {}, kind: {}, error: {}",
-                                telemetry_node_key,
-                                telemetry_kind,
-                                e
-                            )
+                for (node_key, telemetry) in map.iter() {
+                    for item in telemetry {
+                        match item.try_into() {
+                            Ok(variant) => self
+                                .forward_state_action_tx
+                                .send(StateAction::NodeLastTelemetrySet(*node_key, variant))?,
+                            Err(e) => {
+                                tracing::error!(
+                                    "telemetry conversion failed, id: {:?}, node_key: {}, kind: {}, error: {}",
+                                    item.id,
+                                    item.node_key,
+                                    item.kind,
+                                    e
+                                )
+                            }
                         }
                     }
                 }
 
                 tracing::info!(
-                    "telemetry data loaded from DB: {} bytes for {} nodes",
-                    map_bytes_total,
-                    map_nodes
+                    "telemetry data loaded from DB: {} items for {} nodes",
+                    map.values().map(|items| items.len()).sum::<usize>(),
+                    map.len()
                 );
             }
             Err(e) => {

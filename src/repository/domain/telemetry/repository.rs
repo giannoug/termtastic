@@ -1,7 +1,7 @@
 use crate::repository::domain::telemetry::Telemetry;
 use crate::repository::{Repository, RepositoryError};
-use rusqlite::{Error, params};
-use serde_rusqlite::{from_row, from_rows, to_params_named};
+use rusqlite::params;
+use serde_rusqlite::{from_rows, to_params_named};
 use std::collections::HashMap;
 
 pub const TABLE_NAME: &str = "telemetry";
@@ -18,9 +18,10 @@ impl Repository {
 
     #[allow(dead_code)]
     pub fn telemetry_find_by_node_key(&self, node_key: u32) -> Result<Vec<Telemetry>, RepositoryError> {
-        let mut statement = self
-            .conn
-            .prepare(&format!("SELECT * FROM {} WHERE node_key = :node_key", TABLE_NAME))?;
+        let mut statement = self.conn.prepare(&format!(
+            "SELECT * FROM {} AS t WHERE t.node_key = :node_key",
+            TABLE_NAME
+        ))?;
 
         let result: Result<Vec<Telemetry>, _> = from_rows::<Telemetry>(statement.query(params![node_key])?)
             .into_iter()
@@ -30,34 +31,56 @@ impl Repository {
     }
 
     #[allow(dead_code)]
-    pub fn telemetry_find_last_by_node_key(&self, node_key: u32) -> Result<Option<Telemetry>, RepositoryError> {
-        let mut statement = self.conn.prepare(&format!(
-            "SELECT * FROM {} WHERE node_key = :node_key ORDER BY datetime DESC LIMIT 1",
-            TABLE_NAME
-        ))?;
-
-        match statement.query_row(params![node_key], |row| Ok(from_row::<Telemetry>(row))) {
-            Ok(Ok(item)) => Ok(Some(item)),
-            Ok(Err(e)) => Err(e.into()),
-            Err(Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    pub fn telemetry_find_last_for_each_node(&self) -> Result<HashMap<u32, Telemetry>, RepositoryError> {
+    pub fn telemetry_find_last_by_node_key(&self, node_key: u32) -> Result<Vec<Telemetry>, RepositoryError> {
         let mut statement = self.conn.prepare(&format!(
             r#"
-            SELECT * FROM (
-                SELECT *, ROW_NUMBER() OVER (PARTITION BY node_key ORDER BY datetime DESC) AS rn FROM {}
-            ) WHERE rn = 1;
+            SELECT *
+            FROM (
+                SELECT t.*, ROW_NUMBER() OVER (
+                    PARTITION BY node_key, kind
+                    ORDER BY datetime DESC
+                ) AS rn
+                FROM {} t WHERE t.node_key = :node_key
+            )
+            WHERE rn = 1;
             "#,
             TABLE_NAME
         ))?;
 
-        let result: Result<HashMap<u32, Telemetry>, _> = from_rows::<Telemetry>(statement.query([])?)
+        let result: Result<Vec<Telemetry>, _> = from_rows::<Telemetry>(statement.query(params![node_key])?)
             .into_iter()
-            .map(|item| item.map(|metrics| (metrics.node_key, metrics)))
             .collect();
+
+        result.map_err(Into::into)
+    }
+
+    pub fn telemetry_find_last_for_each_node(&self) -> Result<HashMap<u32, Vec<Telemetry>>, RepositoryError> {
+        let mut statement = self.conn.prepare(&format!(
+            r#"
+            SELECT *
+            FROM (
+                SELECT t.*, ROW_NUMBER() OVER (
+                    PARTITION BY node_key, kind
+                    ORDER BY datetime DESC
+                ) AS rn
+                FROM {} t
+            )
+            WHERE rn = 1;
+            "#,
+            TABLE_NAME
+        ))?;
+
+        let result: Result<HashMap<u32, Vec<Telemetry>>, _> = from_rows::<Telemetry>(statement.query([])?)
+            .into_iter()
+            .collect::<Result<Vec<Telemetry>, _>>()
+            .map(|valid_items| {
+                valid_items
+                    .into_iter()
+                    .fold(HashMap::new(), |mut map: HashMap<u32, Vec<Telemetry>>, item| {
+                        map.entry(item.node_key).or_default().push(item);
+                        map
+                    })
+            });
 
         result.map_err(Into::into)
     }
