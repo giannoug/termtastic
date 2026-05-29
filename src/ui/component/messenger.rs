@@ -10,6 +10,7 @@ use crate::ui::prelude::*;
 
 const INPUT_VALUE_MAX_LENGTH: usize = 200;
 const VALID_INPUT_LENGTH: RangeInclusive<usize> = 1..=INPUT_VALUE_MAX_LENGTH;
+const REACTIONS_LINE_MAX_WIDTH: usize = 20;
 
 static EMPTY_MESSAGES_VEC: LazyLock<Vec<u32>> = LazyLock::new(|| Vec::default());
 
@@ -394,17 +395,23 @@ impl<'a> Component for Messenger<'a> {
                     .and_then(|id| state.messages.get(id))
                     .expect_or_log("message should exist");
 
-                let reactions = message
+                let reactions: Vec<&Message> = message
                     .reactions
                     .iter()
                     .filter_map(|message_id| state.messages.get(message_id))
                     .collect();
 
-                let replied_message = if message.reply_message_id > 0 {
+                let replying_node = if message.reply_message_id > 0 {
                     state
                         .messages
                         .get(&message.reply_message_id)
-                        .and_then(|m| Some((state.nodes.get(&m.from).unwrap_or(&UNKNOWN_NODE), m)))
+                        .and_then(|m| Some(state.nodes.get(&m.from).unwrap_or(&UNKNOWN_NODE)))
+                } else {
+                    None
+                };
+
+                let replying_message = if message.reply_message_id > 0 {
+                    state.messages.get(&message.reply_message_id)
                 } else {
                     None
                 };
@@ -414,8 +421,9 @@ impl<'a> Component for Messenger<'a> {
                 let item = MessageWidget {
                     node,
                     message,
-                    reactions,
-                    replied_message,
+                    message_paragraph: MessageWidget::get_text_paragraph(message, replying_message),
+                    reactions_line: MessageWidget::get_reactions_line(reactions),
+                    replying_node,
                     is_my_node: state.is_my_node(node.key),
                     is_selected: context.is_selected,
                     is_highlighted: replying_to
@@ -423,7 +431,7 @@ impl<'a> Component for Messenger<'a> {
                         .unwrap_or(false),
                 };
 
-                let mut height = item.height(area.width);
+                let mut height = item.text_height(area.width) + 1;
 
                 if context.index < message_ids.len() - 1 {
                     height += 1;
@@ -569,26 +577,60 @@ fn new_input_widget() -> TextArea<'static> {
 struct MessageWidget<'a> {
     pub node: &'a Node,
     pub message: &'a Message,
-    pub reactions: Vec<&'a Message>,
-    pub replied_message: Option<(&'a Node, &'a Message)>,
+    pub message_paragraph: Paragraph<'a>,
+    pub reactions_line: Line<'a>,
+    pub replying_node: Option<&'a Node>,
     pub is_my_node: bool,
     pub is_selected: bool,
     pub is_highlighted: bool,
 }
 
 impl MessageWidget<'_> {
-    pub fn get_text_paragraph(&self) -> Paragraph<'_> {
-        let reply_line = self.replied_message.and_then(|(_, m)| {
-            Some(Line::from(vec!["“".to_span(), Span::from(m.text_oneline()), "”".to_span()]).magenta())
+    pub fn text_height(&self, width: u16) -> u16 {
+        self.message_paragraph.line_count(
+            width
+                .saturating_sub(self.reactions_line.width().min(REACTIONS_LINE_MAX_WIDTH) as u16)
+                .saturating_sub(4),
+        ) as u16
+    }
+
+    pub fn get_text_paragraph<'a>(message: &'a Message, replied_message: Option<&'a Message>) -> Paragraph<'a> {
+        let reply_line = replied_message.and_then(|msg| {
+            Some(Line::from(vec!["“".to_span(), Span::from(msg.text_oneline()), "”".to_span()]).magenta())
         });
 
-        let text_lines: Vec<Line<'_>> = self.message.text.to_hyperlinked_lines();
+        let text_lines: Vec<Line<'_>> = message.text.to_hyperlinked_lines();
 
         Paragraph::new(reply_line.into_iter().chain(text_lines).collect::<Vec<Line<'_>>>()).wrap(Wrap { trim: false })
     }
 
-    pub fn height(&self, width: u16) -> u16 {
-        1 + self.get_text_paragraph().line_count(width - 2) as u16 + !self.message.reactions.is_empty() as u16
+    pub fn get_reactions_line(reactions: Vec<&'_ Message>) -> Line<'_> {
+        let summary = reactions
+            .iter()
+            .sorted_by_key(|r| r.datetime)
+            .fold(OrderMap::new(), |mut acc, r| {
+                *acc.entry(&r.text).or_insert(0) += 1;
+                acc
+            });
+
+        Line::from(
+            summary
+                .into_iter()
+                .map(|(emoji, nodes_count)| {
+                    if nodes_count > 1 {
+                        vec![
+                            " ".to_span(),
+                            emoji.to_span(),
+                            Span::from(format!(":{}", nodes_count)).dark_gray(),
+                        ]
+                    } else {
+                        vec![" ".to_span(), emoji.to_span()]
+                    }
+                })
+                .flatten()
+                .collect::<Vec<Span>>(),
+        )
+        .right_aligned()
     }
 }
 
@@ -597,14 +639,13 @@ impl<'a> Widget for MessageWidget<'a> {
     where
         Self: Sized,
     {
-        let text_paragraph = self.get_text_paragraph();
-        let text_height = text_paragraph.line_count(area.width - 2) as u16;
+        let text_height = self.text_height(area.width);
 
         let area = Rect {
             x: area.x,
             y: area.y,
             width: area.width - 2,
-            height: 1 + text_height + !self.message.reactions.is_empty() as u16,
+            height: text_height + 1,
         };
 
         let block = Block::bordered()
@@ -626,23 +667,21 @@ impl<'a> Widget for MessageWidget<'a> {
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let v = Layout::vertical(if self.message.reactions.is_empty() {
-            vec![Constraint::Length(1), Constraint::Length(text_height)]
-        } else {
-            vec![
-                Constraint::Length(1),
-                Constraint::Length(text_height),
-                Constraint::Length(1),
-            ]
-        })
-        .split(block_area);
+        let v = Layout::vertical([Constraint::Length(1), Constraint::Length(text_height)]).split(block_area);
 
-        // first line
         let v0_h = Layout::horizontal([Constraint::Fill(4), Constraint::Fill(2), Constraint::Fill(1)])
             .flex(Flex::SpaceBetween)
             .split(v[0]);
 
-        if let Some((rep_node, _)) = self.replied_message {
+        let v1_h = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(2),
+            Constraint::Length(self.reactions_line.width().min(REACTIONS_LINE_MAX_WIDTH) as u16),
+        ])
+        .split(v[1]);
+
+        // first line
+        if let Some(rep_node) = self.replying_node {
             Line::from(vec![
                 short_name_to_span(self.node, self.is_my_node),
                 " → ".to_span().dark_gray(),
@@ -678,30 +717,7 @@ impl<'a> Widget for MessageWidget<'a> {
         .render(v0_h[2], buf);
 
         // second line
-        text_paragraph.render(v[1], buf);
-
-        // third line
-        if !self.reactions.is_empty() {
-            Line::from(
-                self.reactions
-                    .iter()
-                    .sorted_by_key(|r| r.datetime)
-                    .fold(OrderMap::new(), |mut acc, r| {
-                        *acc.entry(&r.text).or_insert(0) += 1;
-                        acc
-                    })
-                    .iter()
-                    .map(|(emoji, nodes_count)| {
-                        if *nodes_count > 1 {
-                            vec![emoji.to_span(), Span::from(format!(":{} ", nodes_count)).dark_gray()]
-                        } else {
-                            vec![emoji.to_span(), " ".to_span()]
-                        }
-                    })
-                    .flatten()
-                    .collect::<Vec<Span>>(),
-            )
-            .render(v[2], buf);
-        }
+        self.message_paragraph.render(v1_h[0], buf);
+        self.reactions_line.render(v1_h[2], buf);
     }
 }

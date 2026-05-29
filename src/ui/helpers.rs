@@ -348,11 +348,24 @@ pub fn hops_to_spans<'a>(provider: &impl HopsSnrRssiAware, my: bool) -> Vec<Span
         }
         (Some(0), Some(rssi)) => vec![
             Span::from(format!("{:.2}dB", provider.snr())).style(Style::new().fg(provider.snr().snr_to_color())),
-            Span::from("/").dark_gray(),
+            Span::from("/").dim(),
             Span::from(format!("{}dbm", rssi)).fg(rssi.rssi_to_color()),
         ],
-        (Some(1), _) => vec![Span::from("1 hop")],
-        (Some(hops), _) => vec![Span::from(format!("{} hops", hops))],
+        (Some(1), _) => vec![Span::from("❱").green()],
+        (Some(2), _) => vec![Span::from("❱❱").green()],
+        (Some(3), _) => vec![Span::from("❱❱❱").green()],
+        (Some(4), _) => vec![Span::from("❱❱❱").green(), Span::from("❱").yellow()],
+        (Some(5), _) => vec![Span::from("❱❱❱").green(), Span::from("❱❱").yellow()],
+        (Some(6), _) => vec![
+            Span::from("❱❱❱").green(),
+            Span::from("❱❱").yellow(),
+            Span::from("❱").red(),
+        ],
+        (Some(7), _) => vec![
+            Span::from("❱❱❱").green(),
+            Span::from("❱❱").yellow(),
+            Span::from("❱❱").red(),
+        ],
         _ => vec![Span::from("unknown").dark_gray()],
     }
 }
@@ -381,7 +394,7 @@ pub fn last_heard_to_spans(node: &Node, my: bool) -> Vec<Span<'_>> {
 
 pub fn routing_error_to_span<'a>(error: Option<routing::Error>) -> Span<'a> {
     match error {
-        Some(routing::Error::None) => Span::from("acked").green(),
+        Some(routing::Error::None) => Span::from("ACK").green(),
         Some(e) => Span::from(e.as_str_name()).red(),
         None => Span::from("sent").dark_gray(),
     }

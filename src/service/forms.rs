@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::sync::LazyLock;
 
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use hostaddr::HostAddr;
+use meshtastic::protobufs::User;
 use meshtastic::protobufs::config::bluetooth_config::PairingMode;
 use meshtastic::protobufs::config::device_config::{RebroadcastMode, Role};
 use meshtastic::protobufs::config::display_config::{CompassOrientation, DisplayMode, DisplayUnits, OledType};
@@ -23,7 +24,6 @@ use meshtastic::protobufs::module_config::{
     MqttConfig, NeighborInfoConfig, RangeTestConfig, SerialConfig, StoreForwardConfig, TelemetryConfig,
     TrafficManagementConfig,
 };
-use meshtastic::protobufs::User;
 use strum::IntoEnumIterator;
 
 use crate::serde::to_formdata;
@@ -224,7 +224,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
         Vec::from([
             FormItem::new(
                 FormItemKey::Simple(name_of!(is_top_padding_hidden in UiConfig)),
-                "Hide top padding",
+                "Window: Hide top padding",
                 None,
                 FormItemKind::Switch,
                 |v| v.to_string(),
@@ -232,7 +232,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
             ),
             FormItem::new(
                 FormItemKey::Simple(name_of!(is_bottom_padding_hidden in UiConfig)),
-                "Hide bottom padding",
+                "Window: Hide bottom padding",
                 None,
                 FormItemKind::Switch,
                 |v| v.to_string(),
@@ -240,7 +240,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
             ),
             FormItem::new(
                 FormItemKey::Simple(name_of!(is_left_padding_hidden in UiConfig)),
-                "Hide left padding",
+                "Window: Hide left padding",
                 None,
                 FormItemKind::Switch,
                 |v| v.to_string(),
@@ -248,7 +248,7 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
             ),
             FormItem::new(
                 FormItemKey::Simple(name_of!(is_right_padding_hidden in UiConfig)),
-                "Hide right padding",
+                "Window: Hide right padding",
                 None,
                 FormItemKind::Switch,
                 |v| v.to_string(),
