@@ -419,6 +419,9 @@ impl<'a> Component for Connection<'a> {
                 ConnectionState::Connecting => {
                     vec![Line::from(Span::from("connecting...").yellow())]
                 }
+                ConnectionState::LoadingConfig => {
+                    vec![Line::from(Span::from("loading config...").yellow())]
+                }
                 ConnectionState::Connected => vec![
                     Some(Line::from(Span::from("connected").green())),
                     state.device_metadata.as_ref().and_then(|_| Some(Line::from(""))),

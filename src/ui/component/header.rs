@@ -73,6 +73,13 @@ impl Component for Header {
                 ]
             }
             ConnectionState::Connecting => vec![Span::from("connecting...").yellow()],
+            ConnectionState::LoadingConfig => vec![
+                Span::from(state.online_nodes.to_string()).dark_gray(),
+                Span::from("/").dark_gray(),
+                Span::from(state.nodes.len().to_string()).dark_gray(),
+                Span::from(" "),
+                Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
+            ],
             ConnectionState::Connected => vec![
                 Span::from("online ").dark_gray(),
                 Span::from(state.online_nodes.to_string()).green(),

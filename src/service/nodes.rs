@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use meshtastic::{
     Message as _,
     protobufs::{AdminMessage, MeshPacket, PortNum, Telemetry, User, admin_message, from_radio, mesh_packet},
@@ -12,7 +12,7 @@ use tokio::{
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::{TelemetryPacket, Toast};
+use crate::types::{NodeTelemetry, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
@@ -98,11 +98,11 @@ impl NodesService {
                             user: my_node.try_into()?,
                         })?;
                 }
-                AppEvent::NodeInfoPopupRequested(node_key) => {
-                    self.state_action_tx.send(StateAction::NodeInfoPopupSetKey(node_key))?;
+                AppEvent::NodeInfoPopupOpenRequested(node_key) => {
+                    self.state_action_tx.send(StateAction::NodeInfoSet(node_key))?;
                 }
                 AppEvent::NodeInfoPopupCloseRequested => {
-                    self.state_action_tx.send(StateAction::NodeInfoPopupUnsetKey)?;
+                    self.state_action_tx.send(StateAction::NodeInfoUnset)?;
                 }
                 AppEvent::NodeDeleteRequested(node_num) => {
                     let my_node_num = state.my_node_key.expect("should be Some");
@@ -218,14 +218,17 @@ impl NodesService {
                                 time,
                                 variant: Some(data),
                             }) => {
-                                self.app_event_tx.send(AppEvent::TelemetryArrived(TelemetryPacket {
+                                let node_telemetry = NodeTelemetry {
                                     node_key: mesh_packet.from,
-                                    time,
-                                    data: data.clone(),
-                                }))?;
+                                    datetime: DateTime::from_timestamp(time as i64, 0).unwrap_or_else(|| Utc::now()),
+                                    variant: data.clone(),
+                                };
+
+                                self.app_event_tx
+                                    .send(AppEvent::TelemetryArrived(node_telemetry.clone()))?;
 
                                 self.state_action_tx
-                                    .send(StateAction::NodeLastTelemetrySet(mesh_packet.from, data))?;
+                                    .send(StateAction::NodeLastTelemetrySet(node_telemetry))?;
                             }
                             Ok(_) => {
                                 tracing::debug!("TelemetryApp with empty variant");

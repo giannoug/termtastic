@@ -1,10 +1,11 @@
 use itertools::Itertools;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::repository::{Repository, create_sqlite_repository};
-use crate::types::Node;
+use crate::types::{Node, NodeTelemetry};
 use crate::{
     APP_NAME,
     state::StateAction,
@@ -16,7 +17,7 @@ pub struct PersistenceService {
     forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
     data_dir: PathBuf,
-    repository: Option<Repository>,
+    repository: Option<Arc<Repository>>,
 }
 
 impl PersistenceService {
@@ -42,9 +43,10 @@ impl PersistenceService {
     pub async fn run(mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
         loop {
             tokio::select! {
-                Some(action) = self.state_action_rx.recv() => self.handle_action(action)?,
-                event = self.app_event_rx.recv() => self.handle_app_event(event)?,
+                Some(action) = self.state_action_rx.recv() => self.handle_action(action).await?,
+                event = self.app_event_rx.recv() => self.handle_app_event(event).await?,
                 _ = subsys.on_shutdown_requested() => {
+                    self.repository.take();
                     tracing::info!("shutdown");
                     break;
                 }
@@ -54,7 +56,7 @@ impl PersistenceService {
         Ok(())
     }
 
-    fn handle_action(&mut self, action: StateAction) -> anyhow::Result<()> {
+    async fn handle_action(&mut self, action: StateAction) -> anyhow::Result<()> {
         let Some(repository) = &self.repository else {
             self.forward_state_action_tx.send(action)?;
             return Ok(());
@@ -62,7 +64,7 @@ impl PersistenceService {
 
         match &action {
             StateAction::NodeInit(node) if node.user.is_some() => {
-                if let Err(e) = repository.node_upsert(node.into()) {
+                if let Err(e) = repository.node_upsert(node.into()).await {
                     tracing::error!("node init failed: {}", e);
 
                     self.forward_state_action_tx
@@ -70,7 +72,7 @@ impl PersistenceService {
                 }
             }
             StateAction::NodeUpdate(node) => {
-                if let Err(e) = repository.node_upsert(node.into()) {
+                if let Err(e) = repository.node_upsert(node.into()).await {
                     tracing::error!("node update failed: {}", e);
 
                     self.forward_state_action_tx
@@ -78,7 +80,7 @@ impl PersistenceService {
                 }
             }
             StateAction::NodeDelete(node_key) => {
-                if let Err(e) = repository.node_remove(*node_key) {
+                if let Err(e) = repository.node_remove(*node_key).await {
                     tracing::error!("node delete failed: {}", e);
 
                     self.forward_state_action_tx
@@ -90,13 +92,13 @@ impl PersistenceService {
                 hops,
                 snr,
                 rssi,
-            } => match repository.node_get_by_key(*node_key) {
+            } => match repository.node_get_by_key(*node_key).await {
                 Ok(Some(mut node)) => {
                     node.hops = Some(*hops);
                     node.snr = *snr;
                     node.rssi = Some(*rssi);
 
-                    if let Err(e) = repository.node_upsert(node) {
+                    if let Err(e) = repository.node_upsert(node).await {
                         tracing::error!("node update failed: {}", e);
 
                         self.forward_state_action_tx
@@ -121,60 +123,75 @@ impl PersistenceService {
         Ok(())
     }
 
-    fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
+    async fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            Ok(AppEvent::DbLoadRequested(node_key)) => {
-                let db_file = self.data_dir.join(format!("{}_{}.sqlite3", APP_NAME, node_key));
+            Ok(event) => match event {
+                AppEvent::DbLoadRequested(node_key) => {
+                    let db_file = self.data_dir.join(format!("{}_{}.sqlite3", APP_NAME, node_key));
 
-                match create_sqlite_repository(db_file) {
-                    Ok(repository) => {
-                        self.repository = Some(repository);
-                    }
-                    Err(e) => {
-                        tracing::error!("DB initialization failed: {}", e);
+                    match create_sqlite_repository(db_file).await {
+                        Ok(repository) => {
+                            self.repository = Some(Arc::new(repository));
+                        }
+                        Err(e) => {
+                            tracing::error!("DB initialization failed: {}", e);
 
-                        self.forward_state_action_tx
-                            .send(StateAction::Toast(Toast::error("DB initialization failed")))?;
+                            self.forward_state_action_tx
+                                .send(StateAction::Toast(Toast::error("DB initialization failed")))?;
+                        }
                     }
+
+                    self.load_data().await?;
                 }
+                AppEvent::TelemetryArrived(packet) => {
+                    let Some(repository) = &self.repository else {
+                        return Ok(());
+                    };
 
-                self.load_data()?;
-            }
-            Ok(AppEvent::DbCompactRequested) => {
-                let Some(repository) = &self.repository else {
-                    return Ok(());
-                };
-
-                let old_size = std::fs::metadata(repository.get_file_path())?.len();
-
-                match repository.vacuum() {
-                    Ok(_) => {
-                        let new_size = std::fs::metadata(repository.get_file_path())?.len();
-
-                        tracing::info!(
-                            "DB compacted, old size: {}KB, new size: {}KB",
-                            old_size / 1024,
-                            new_size / 1024
-                        );
-
-                        self.forward_state_action_tx
-                            .send(StateAction::Toast(Toast::success("DB compacted")))?;
-                    }
-                    Err(e) => {
-                        tracing::error!("DB compact failed: {}", e);
-
-                        self.forward_state_action_tx
-                            .send(StateAction::Toast(Toast::error("DB compact failed")))?;
-                    }
+                    match repository.telemetry_insert(packet.try_into()?).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("telemetry store to DB failed: {}", e);
+                        }
+                    };
                 }
-            }
-            Ok(AppEvent::TelemetryArrived(packet)) => {
-                let Some(repository) = &self.repository else {
-                    return Ok(());
-                };
+                AppEvent::NodeInfoPopupOpenRequested(node_key) => {
+                    let Some(repository) = &self.repository else {
+                        return Ok(());
+                    };
 
-                repository.telemetry_insert(packet.try_into()?)?;
-            }
+                    let repository_clone = repository.clone();
+                    let state_action_tx = self.forward_state_action_tx.clone();
+
+                    tokio::spawn(async move {
+                        let node_telemetry: Result<Vec<NodeTelemetry>, anyhow::Error> =
+                            match repository_clone.telemetry_find_by_node_key(node_key).await {
+                                Ok(t) => t.iter().map(|t| t.try_into()).collect(),
+                                Err(e) => {
+                                    tracing::error!("node telemetry load failed: {}", e);
+
+                                    state_action_tx
+                                        .send(StateAction::Toast(Toast::error("node telemetry not loaded")))
+                                        .ok();
+
+                                    return;
+                                }
+                            };
+
+                        match node_telemetry {
+                            Ok(nt) => state_action_tx.send(StateAction::NodeInfoTelemetrySet(nt)).ok(),
+                            Err(e) => {
+                                tracing::error!("node telemetry load failed: {}", e);
+
+                                state_action_tx
+                                    .send(StateAction::Toast(Toast::error("node telemetry not loaded")))
+                                    .ok()
+                            }
+                        };
+                    });
+                }
+                _ => {}
+            },
             Err(broadcast::error::RecvError::Lagged(n)) => {
                 tracing::warn!("broadcast receiver lagged by {} events", n);
             }
@@ -184,7 +201,7 @@ impl PersistenceService {
         Ok(())
     }
 
-    fn load_data(&self) -> anyhow::Result<()> {
+    async fn load_data(&self) -> anyhow::Result<()> {
         let Some(repository) = &self.repository else {
             tracing::warn!("DB data not loaded");
 
@@ -195,7 +212,7 @@ impl PersistenceService {
         };
 
         // nodes
-        let nodes: Vec<Node> = match repository.node_find_all() {
+        let nodes: Vec<Node> = match repository.node_find_all().await {
             Ok(nodes) => {
                 tracing::info!("nodes loaded from DB: {}", nodes.len());
 
@@ -214,14 +231,14 @@ impl PersistenceService {
         self.forward_state_action_tx.send(StateAction::DbDataLoaded { nodes })?;
 
         // telemetry
-        match repository.telemetry_find_last_for_each_node() {
+        match repository.telemetry_find_last_for_each_node().await {
             Ok(map) => {
-                for (node_key, telemetry) in map.iter() {
+                for (_, telemetry) in map.iter() {
                     for item in telemetry {
                         match item.try_into() {
-                            Ok(variant) => self
+                            Ok(node_telemetry) => self
                                 .forward_state_action_tx
-                                .send(StateAction::NodeLastTelemetrySet(*node_key, variant))?,
+                                .send(StateAction::NodeLastTelemetrySet(node_telemetry))?,
                             Err(e) => {
                                 tracing::error!(
                                     "telemetry conversion failed, id: {:?}, node_key: {}, kind: {}, error: {}",

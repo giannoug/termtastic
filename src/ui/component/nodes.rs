@@ -228,7 +228,7 @@ impl<'a> Component for Nodes<'a> {
                 }
                 KeyCode::F(4) | KeyCode::Enter if modifiers.is_empty() => {
                     if let Some(node_key) = self.list_state.selected.and_then(|index| state.nodes_view.get(index)) {
-                        emit(AppEvent::NodeInfoPopupRequested(*node_key))?;
+                        emit(AppEvent::NodeInfoPopupOpenRequested(*node_key))?;
                     }
                     return Ok(true);
                 }
@@ -292,7 +292,7 @@ impl<'a> Component for Nodes<'a> {
 
         let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).split(area);
         let is_popup_visible =
-            state.nodeinfo_popup.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
+            state.nodeinfo.is_some() || self.is_filter_help_visible || self.is_emoji_selector_visible;
 
         if !state.nodes_view.is_empty() {
             let list_builder = ListBuilder::new(|context| {

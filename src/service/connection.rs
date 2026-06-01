@@ -27,6 +27,7 @@ pub struct ConnectionService {
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     meshtastic_command_tx: mpsc::UnboundedSender<CommandToMeshtastic>,
     meshtastic_event_rx: broadcast::Receiver<MeshtasticEvent>,
+    my_node_key: Option<u32>,
 }
 
 impl ConnectionService {
@@ -45,6 +46,7 @@ impl ConnectionService {
             state_action_tx,
             meshtastic_command_tx,
             meshtastic_event_rx,
+            my_node_key: None,
         }
     }
 
@@ -125,13 +127,15 @@ impl ConnectionService {
     }
 
     fn handle_meshtastic_event(
-        &self,
+        &mut self,
         event: Result<MeshtasticEvent, broadcast::error::RecvError>,
     ) -> anyhow::Result<()> {
         match event {
             Ok(meshtastic_event) => match meshtastic_event {
                 MeshtasticEvent::Connected => {
-                    tracing::info!("successfully connected");
+                    tracing::info!("connection established");
+
+                    self.state_action_tx.send(StateAction::ConnectionLoadConfig)?;
 
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::normal("loading data...")))?;
@@ -150,15 +154,10 @@ impl ConnectionService {
                 MeshtasticEvent::IncomingPacket(packet) => {
                     match &packet {
                         from_radio::PayloadVariant::MyInfo(my_info) => {
+                            self.my_node_key = Some(my_info.my_node_num);
+
                             self.state_action_tx
                                 .send(StateAction::MyNodeKeySet(my_info.my_node_num))?;
-
-                            self.app_event_tx.send(AppEvent::DbLoadRequested(my_info.my_node_num))?;
-
-                            self.meshtastic_command_tx
-                                .send(CommandToMeshtastic::LoadCannedMessages {
-                                    my_node_num: my_info.my_node_num,
-                                })?;
                         }
                         from_radio::PayloadVariant::Metadata(metadata) => {
                             self.state_action_tx
@@ -170,6 +169,15 @@ impl ConnectionService {
                         }
                         from_radio::PayloadVariant::ConfigCompleteId(_) => {
                             self.state_action_tx.send(StateAction::ConnectionSuccess)?;
+
+                            if let Some(my_node_key) = self.my_node_key.take() {
+                                self.app_event_tx.send(AppEvent::DbLoadRequested(my_node_key))?;
+
+                                self.meshtastic_command_tx
+                                    .send(CommandToMeshtastic::LoadCannedMessages {
+                                        my_node_num: my_node_key,
+                                    })?;
+                            }
 
                             self.state_action_tx
                                 .send(StateAction::Toast(Toast::success("connected")))?;

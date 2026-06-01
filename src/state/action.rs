@@ -3,8 +3,8 @@ use std::time::Duration;
 use meshtastic::protobufs::{config, module_config, routing};
 
 use crate::types::{
-    AppConfig, Channel, Chat, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, Node, NodeUser,
-    NodesSortBy, Toast, UiConfig,
+    AppConfig, Channel, Chat, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, Node,
+    NodeTelemetry, NodeUser, NodesSortBy, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -17,6 +17,7 @@ pub enum StateAction {
     ConnectionFail(String),
     ConnectionStart,
     ConnectionStop,
+    ConnectionLoadConfig,
     ConnectionSuccess,
     ReconnectionBackoffSet(Duration),
     DbDataLoaded {
@@ -41,8 +42,9 @@ pub enum StateAction {
     },
     MyNodeKeySet(u32),
     NodeInit(Node),
-    NodeInfoPopupSetKey(u32),
-    NodeInfoPopupUnsetKey,
+    NodeInfoSet(u32),
+    NodeInfoUnset,
+    NodeInfoTelemetrySet(Vec<NodeTelemetry>),
     NodeUpdate(Node),
     NodeUpdateLastHeard {
         node_key: u32,
@@ -52,7 +54,7 @@ pub enum StateAction {
     },
     NodeDelete(u32),
     NodeOwnerSet(NodeUser),
-    NodeLastTelemetrySet(u32, meshtastic::protobufs::telemetry::Variant),
+    NodeLastTelemetrySet(NodeTelemetry),
     NodesSortBySet(NodesSortBy),
     NodesFilterSet(String),
     NodesOnlineSet(u16),

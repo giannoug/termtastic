@@ -54,10 +54,6 @@ impl<'a> Component for Messenger<'a> {
             ];
         }
 
-        if state.nodeinfo_popup.is_some() {
-            return vec![Hotkey::new("esc", "close")];
-        }
-
         let active_chat = state.active_chat.as_ref().expect_or_log("channel should be selected");
 
         let input_has_single_emoji = self
@@ -315,7 +311,7 @@ impl<'a> Component for Messenger<'a> {
                         .and_then(|i| messages.get(i))
                         .and_then(|message| Some(message.from))
                     {
-                        emit(AppEvent::NodeInfoPopupRequested(node_key))?;
+                        emit(AppEvent::NodeInfoPopupOpenRequested(node_key))?;
                     }
 
                     return Ok(true);
@@ -385,7 +381,7 @@ impl<'a> Component for Messenger<'a> {
         .split(area);
 
         let is_any_popup_visible =
-            state.nodeinfo_popup.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
+            state.nodeinfo.is_some() || self.is_emoji_selector_visible || self.is_reaction_viewer_visible;
 
         // list
         if !message_ids.is_empty() {

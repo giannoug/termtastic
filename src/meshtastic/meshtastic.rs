@@ -1,10 +1,11 @@
 use meshtastic::{
+    Message,
     api::ConnectedStreamApi,
     packet::{PacketDestination, PacketRouter},
-    protobufs::{admin_message, from_radio, Config, FromRadio, MeshPacket, ModuleConfig, PortNum},
+    protobufs::{Config, FromRadio, MeshPacket, ModuleConfig, PortNum, admin_message, from_radio},
     types::{EncodedMeshPacketData, MeshChannel, NodeId},
-    Message,
 };
+use std::convert::Infallible;
 use std::time::Duration;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -16,11 +17,13 @@ use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, Su
 use tracing_unwrap::OptionExt;
 
 use crate::meshtastic::{
-    connect_via_ble, connect_via_serial, connect_via_tcp, types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
-    RadioService,
+    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp,
+    types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
 };
 
-const CONNECTION_TIMEOUT_SECS: u64 = 3;
+const BLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
+const TCP_CONNECTION_TIMEOUT_SECS: u64 = 5;
+const SERIAL_CONNECTION_TIMEOUT_SECS: u64 = 5;
 const SAVE_CONFIG_TIMEOUT_SECS: u64 = 5;
 const SAVE_CONFIG_AFTER_PAUSE_MILLIS: u64 = 100;
 const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 80;
@@ -111,7 +114,12 @@ impl MeshtasticService {
         match cmd {
             CommandToMeshtastic::ConnectViaTcp(address) => {
                 self.connection_join_handle = Some(tokio::spawn(async move {
-                    match timeout(Duration::from_secs(CONNECTION_TIMEOUT_SECS), connect_via_tcp(address)).await {
+                    match timeout(
+                        Duration::from_secs(TCP_CONNECTION_TIMEOUT_SECS),
+                        connect_via_tcp(address),
+                    )
+                    .await
+                    {
                         Ok(Ok(conn)) => {
                             connection_tx_clone.send(conn).await?;
                         }
@@ -129,7 +137,7 @@ impl MeshtasticService {
             CommandToMeshtastic::ConnectViaBle(address, name) => {
                 self.connection_join_handle = Some(tokio::spawn(async move {
                     match timeout(
-                        Duration::from_secs(CONNECTION_TIMEOUT_SECS),
+                        Duration::from_secs(BLE_CONNECTION_TIMEOUT_SECS),
                         connect_via_ble(address, name),
                     )
                     .await
@@ -151,7 +159,7 @@ impl MeshtasticService {
             CommandToMeshtastic::ConnectViaSerial(address) => {
                 self.connection_join_handle = Some(tokio::spawn(async move {
                     match timeout(
-                        Duration::from_secs(CONNECTION_TIMEOUT_SECS),
+                        Duration::from_secs(SERIAL_CONNECTION_TIMEOUT_SECS),
                         connect_via_serial(address),
                     )
                     .await
@@ -557,15 +565,12 @@ impl MeshtasticService {
 
 struct NullPacketRouter {}
 
-#[derive(thiserror::Error, Debug)]
-enum NullPacketRouterErr {}
-
-impl PacketRouter<(), NullPacketRouterErr> for NullPacketRouter {
-    fn handle_packet_from_radio(&mut self, _packet: FromRadio) -> Result<(), NullPacketRouterErr> {
+impl PacketRouter<(), Infallible> for NullPacketRouter {
+    fn handle_packet_from_radio(&mut self, _packet: FromRadio) -> Result<(), Infallible> {
         Ok(())
     }
 
-    fn handle_mesh_packet(&mut self, _packet: MeshPacket) -> Result<(), NullPacketRouterErr> {
+    fn handle_mesh_packet(&mut self, _packet: MeshPacket) -> Result<(), Infallible> {
         Ok(())
     }
 

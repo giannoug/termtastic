@@ -19,7 +19,7 @@ pub struct Layout<'a> {
     connection_component: Connection<'a>,
     logs_component: Logs,
     logo: Text<'static>,
-    nodeinfo_state: NodeInfoState,
+    nodeinfo_widget_state: NodeInfoWidgetState,
     last_esc_t: Instant,
 }
 
@@ -33,7 +33,7 @@ impl<'a> Layout<'a> {
             connection_component: Connection::new(),
             logs_component: Logs::new(),
             logo: APP_LOGO_TEXT.clone(),
-            nodeinfo_state: NodeInfoState::default(),
+            nodeinfo_widget_state: NodeInfoWidgetState::default(),
             last_esc_t: Instant::now().sub(Duration::from_secs(1)),
         }
     }
@@ -41,8 +41,10 @@ impl<'a> Layout<'a> {
 
 impl<'a> Component for Layout<'a> {
     fn get_hotkeys(&self, state: &State) -> Vec<Hotkey> {
-        if let Some(node_key) = state.nodeinfo_popup {
-            return self.nodeinfo_state.get_hotkeys(state.my_node_key == Some(node_key));
+        if let Some(node_key) = state.nodeinfo {
+            return self
+                .nodeinfo_widget_state
+                .get_hotkeys(state.my_node_key == Some(node_key));
         }
 
         match state.active_tab {
@@ -71,25 +73,28 @@ impl<'a> Component for Layout<'a> {
             return Ok(true);
         }
 
-        if let Some(node_key) = state.nodeinfo_popup {
-            if self.nodeinfo_state.handle_event(event.clone(), &mut |ev| match ev {
-                NodeInfoWidgetEvent::PopupCloseRequested => {
-                    emit(AppEvent::NodeInfoPopupCloseRequested)?;
+        if let Some(node_key) = state.nodeinfo {
+            if self
+                .nodeinfo_widget_state
+                .handle_event(event.clone(), &mut |ev| match ev {
+                    NodeInfoWidgetEvent::PopupCloseRequested => {
+                        emit(AppEvent::NodeInfoPopupCloseRequested)?;
 
-                    Ok(())
-                }
-                NodeInfoWidgetEvent::PublicKeyCopyRequested => {
-                    if let Some(user) = state.nodes.get(&node_key).and_then(|n| n.user.as_ref()) {
-                        emit(AppEvent::CopyToClipboardRequested(user.public_key.base64_encode()))?;
+                        Ok(())
                     }
+                    NodeInfoWidgetEvent::PublicKeyCopyRequested => {
+                        if let Some(user) = state.nodes.get(&node_key).and_then(|n| n.user.as_ref()) {
+                            emit(AppEvent::CopyToClipboardRequested(user.public_key.base64_encode()))?;
+                        }
 
-                    Ok(())
-                }
-                NodeInfoWidgetEvent::NodeDeleteRequested => {
-                    emit(AppEvent::NodeDeleteRequested(node_key))?;
-                    Ok(())
-                }
-            })? {
+                        Ok(())
+                    }
+                    NodeInfoWidgetEvent::NodeDeleteRequested => {
+                        emit(AppEvent::NodeDeleteRequested(node_key))?;
+                        Ok(())
+                    }
+                })?
+            {
                 return Ok(true);
             }
 
@@ -192,7 +197,7 @@ impl<'a> Component for Layout<'a> {
         HotkeysWidget::new(&self.get_hotkeys(state)).render(v[4], frame.buffer_mut());
 
         // node info popup
-        if let Some(node_key) = state.nodeinfo_popup {
+        if let Some(node_key) = state.nodeinfo {
             let popup_area = area.centered(Constraint::Length(60), Constraint::Length(17));
 
             Clear.render(popup_area, frame.buffer_mut());
@@ -200,9 +205,10 @@ impl<'a> Component for Layout<'a> {
             NodeInfoWidget::new(
                 state.nodes.get(&node_key),
                 state.nodes_last_telemetry.get(&node_key),
+                state.nodeinfo_telemetry.as_ref(),
                 state.my_node_key == Some(node_key),
             )
-            .render(popup_area, frame.buffer_mut(), &mut self.nodeinfo_state);
+            .render(popup_area, frame.buffer_mut(), &mut self.nodeinfo_widget_state);
         }
 
         // splash logo

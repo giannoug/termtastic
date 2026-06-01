@@ -1,13 +1,12 @@
 use crate::repository::domain::telemetry::Telemetry;
-use crate::types::TelemetryPacket;
-use chrono::{DateTime, Utc};
+use crate::types::NodeTelemetry;
 use meshtastic::protobufs::telemetry;
 
-impl TryFrom<TelemetryPacket> for Telemetry {
+impl TryFrom<NodeTelemetry> for Telemetry {
     type Error = anyhow::Error;
 
-    fn try_from(value: TelemetryPacket) -> Result<Self, Self::Error> {
-        let (kind, data) = match value.data {
+    fn try_from(value: NodeTelemetry) -> Result<Self, Self::Error> {
+        let (kind, data) = match value.variant {
             telemetry::Variant::DeviceMetrics(v) => ("device_metrics", serde_sqlite_jsonb::to_vec(&v)?),
             telemetry::Variant::EnvironmentMetrics(v) => ("environment_metrics", serde_sqlite_jsonb::to_vec(&v)?),
             telemetry::Variant::AirQualityMetrics(v) => ("air_quality_metrics", serde_sqlite_jsonb::to_vec(&v)?),
@@ -23,14 +22,14 @@ impl TryFrom<TelemetryPacket> for Telemetry {
         Ok(Self {
             id: None,
             node_key: value.node_key,
-            datetime: DateTime::from_timestamp(value.time as i64, 0).unwrap_or_else(|| Utc::now()),
+            datetime: value.datetime,
             kind: kind.to_owned(),
             data: data.to_vec(),
         })
     }
 }
 
-impl TryFrom<&Telemetry> for telemetry::Variant {
+impl TryFrom<&Telemetry> for NodeTelemetry {
     type Error = anyhow::Error;
 
     fn try_from(value: &Telemetry) -> Result<Self, Self::Error> {
@@ -64,6 +63,10 @@ impl TryFrom<&Telemetry> for telemetry::Variant {
             _ => anyhow::bail!("unknown telemetry kind: {}", value.kind),
         };
 
-        Ok(variant)
+        Ok(Self {
+            node_key: value.node_key,
+            datetime: value.datetime,
+            variant,
+        })
     }
 }

@@ -194,6 +194,13 @@ impl Store {
                     ]);
                 });
             }
+            StateAction::ConnectionLoadConfig => {
+                self.state_tx.send_modify(|state| {
+                    state.connection_state = ConnectionState::LoadingConfig;
+
+                    changed.push(name_of!(connection_state in State));
+                });
+            }
             StateAction::ConnectionSuccess => {
                 self.state_tx.send_modify(|state| {
                     state.connection_state = ConnectionState::Connected;
@@ -409,18 +416,26 @@ impl Store {
                     }
                 });
             }
-            StateAction::NodeInfoPopupSetKey(node_key) => {
+            StateAction::NodeInfoSet(node_key) => {
                 self.state_tx.send_modify(|state| {
-                    state.nodeinfo_popup = Some(node_key);
+                    state.nodeinfo = Some(node_key);
 
-                    changed.push(name_of!(nodeinfo_popup in State));
+                    changed.push(name_of!(nodeinfo in State));
                 });
             }
-            StateAction::NodeInfoPopupUnsetKey => {
+            StateAction::NodeInfoUnset => {
                 self.state_tx.send_modify(|state| {
-                    state.nodeinfo_popup = None;
+                    state.nodeinfo = None;
+                    state.nodeinfo_telemetry.clear();
 
-                    changed.push(name_of!(nodeinfo_popup in State));
+                    changed.extend([name_of!(nodeinfo in State), name_of!(nodeinfo_telemetry in State)]);
+                });
+            }
+            StateAction::NodeInfoTelemetrySet(telemetry) => {
+                self.state_tx.send_modify(|state| {
+                    state.nodeinfo_telemetry = telemetry;
+
+                    changed.push(name_of!(nodeinfo_telemetry in State));
                 });
             }
             StateAction::NodeUpdate(node) => {
@@ -473,12 +488,12 @@ impl Store {
                         return false;
                     }
 
-                    if let Some(nodeinfo_key) = state.nodeinfo_popup
+                    if let Some(nodeinfo_key) = state.nodeinfo
                         && nodeinfo_key == node_key
                     {
-                        state.nodeinfo_popup = None;
+                        state.nodeinfo = None;
 
-                        changed.push(name_of!(nodeinfo_popup in State));
+                        changed.push(name_of!(nodeinfo in State));
                     }
 
                     changed.push(name_of!(nodes in State));
@@ -500,14 +515,14 @@ impl Store {
                     false
                 });
             }
-            StateAction::NodeLastTelemetrySet(node_key, variant) => {
+            StateAction::NodeLastTelemetrySet(node_telemetry) => {
                 self.state_tx.send_modify(|state| {
                     let telemetry = state
                         .nodes_last_telemetry
-                        .entry(node_key)
+                        .entry(node_telemetry.node_key)
                         .or_insert(NodeLastTelemetry::default());
 
-                    match variant {
+                    match node_telemetry.variant {
                         telemetry::Variant::DeviceMetrics(metrics) => telemetry.device_metrics = Some(metrics),
                         telemetry::Variant::EnvironmentMetrics(metrics) => {
                             telemetry.environment_metrics = Some(metrics)

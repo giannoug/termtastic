@@ -216,7 +216,7 @@
 
 | Feature                      | 🐧 Linux | 🍏 macOS | 🪟 Windows |
 |:-----------------------------|:--------:|:--------:|:----------:|
-| BLE devices discovery        |    ✅     |    ✅     |     🔬     |
+| BLE devices discovery        |    ✅     |    ✅     |     ✅      |
 | Serial devices discovery     |    ✅     |    ✅     |     ✅      |
 | TCP devices discovery (mDNS) |    ✅     |    ✅     |     ✅      |
 | Copy to clipboard            |    ✅     |    ✅     |     ✅      |

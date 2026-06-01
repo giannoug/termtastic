@@ -1,4 +1,4 @@
-use crate::types::{Hotkey, Node, NodeLastTelemetry};
+use crate::types::{Hotkey, Node, NodeLastTelemetry, NodeTelemetry};
 use crate::ui::helpers::{hops_to_spans, humanize_uptime, last_heard_to_spans};
 use crate::ui::prelude::{Constraint, Layout, PlaceholderWidget, PopupConfirmWidget, TabsWidget};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
@@ -10,7 +10,7 @@ use ratatui::{
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, FromRepr, Display, EnumIter, EnumCount)]
-enum Tab {
+enum NodeInfoTab {
     #[default]
     #[strum(to_string = "info")]
     Info,
@@ -22,19 +22,29 @@ enum Tab {
     Telemetry,
 }
 
-impl Tab {
+impl NodeInfoTab {
     pub fn prev(self) -> Self {
         let current_index: usize = self as usize;
         let (previous_index, overflowed) = current_index.overflowing_sub(1);
 
-        Self::from_repr(if overflowed { Tab::COUNT - 1 } else { previous_index }).unwrap_or(self)
+        Self::from_repr(if overflowed {
+            NodeInfoTab::COUNT - 1
+        } else {
+            previous_index
+        })
+        .unwrap_or(self)
     }
 
     pub fn next(self) -> Self {
         let current_index = self as usize;
         let next_index = current_index.saturating_add(1);
 
-        Self::from_repr(if next_index > Tab::COUNT - 1 { 0 } else { next_index }).unwrap_or(self)
+        Self::from_repr(if next_index > NodeInfoTab::COUNT - 1 {
+            0
+        } else {
+            next_index
+        })
+        .unwrap_or(self)
     }
 }
 
@@ -45,21 +55,21 @@ pub enum NodeInfoWidgetEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct NodeInfoState {
-    active_tab: Tab,
+pub struct NodeInfoWidgetState {
+    active_tab: NodeInfoTab,
     is_delete_node_popup_visible: bool,
 }
 
-impl Default for NodeInfoState {
+impl Default for NodeInfoWidgetState {
     fn default() -> Self {
         Self {
-            active_tab: Tab::default(),
+            active_tab: NodeInfoTab::default(),
             is_delete_node_popup_visible: false,
         }
     }
 }
 
-impl NodeInfoState {
+impl NodeInfoWidgetState {
     pub fn handle_event(
         &mut self,
         event: Event,
@@ -103,11 +113,11 @@ impl NodeInfoState {
                     self.active_tab = self.active_tab.prev();
                     return Ok(true);
                 }
-                (Tab::Info, KeyCode::Char('k')) if modifiers.is_empty() => {
+                (NodeInfoTab::Info, KeyCode::Char('k')) if modifiers.is_empty() => {
                     emit(NodeInfoWidgetEvent::PublicKeyCopyRequested)?;
                     return Ok(true);
                 }
-                (Tab::Info, KeyCode::Delete | KeyCode::Backspace) if modifiers.is_empty() => {
+                (NodeInfoTab::Info, KeyCode::Delete | KeyCode::Backspace) if modifiers.is_empty() => {
                     self.is_delete_node_popup_visible = true;
                     return Ok(true);
                 }
@@ -125,7 +135,7 @@ impl NodeInfoState {
 
     pub fn get_hotkeys(&self, is_my_node: bool) -> Vec<Hotkey> {
         match &self.active_tab {
-            Tab::Info => vec![
+            NodeInfoTab::Info => vec![
                 Some(Hotkey::new("esc", "close")),
                 Some(Hotkey::new("k", "copy public key")),
                 (!is_my_node).then_some(Hotkey::new("delete", "remove")),
@@ -140,24 +150,27 @@ impl NodeInfoState {
 
 pub struct NodeInfoWidget<'a> {
     maybe_node: Option<&'a Node>,
-    node_last_telemetry: Option<&'a NodeLastTelemetry>,
+    last_telemetry: Option<&'a NodeLastTelemetry>,
+    telemetry: &'a Vec<NodeTelemetry>,
     is_my_node: bool,
 }
 
 impl<'a> NodeInfoWidget<'a> {
     pub fn new(
         maybe_node: Option<&'a Node>,
-        node_last_telemetry: Option<&'a NodeLastTelemetry>,
+        last_telemetry: Option<&'a NodeLastTelemetry>,
+        telemetry: &'a Vec<NodeTelemetry>,
         is_my_node: bool,
     ) -> Self {
         Self {
             maybe_node,
-            node_last_telemetry,
+            last_telemetry,
+            telemetry,
             is_my_node,
         }
     }
 
-    fn render_info(&self, node: &Node, area: Rect, buf: &mut Buffer, state: &mut NodeInfoState) {
+    fn render_info(&self, node: &Node, area: Rect, buf: &mut Buffer, state: &mut NodeInfoWidgetState) {
         let v = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(3),
@@ -205,7 +218,7 @@ impl<'a> NodeInfoWidget<'a> {
         Paragraph::new(vec![
             Line::from(Span::from("uptime").dark_gray()),
             Line::from(
-                self.node_last_telemetry
+                self.last_telemetry
                     .and_then(|t| t.device_metrics)
                     .and_then(|m| m.uptime_seconds)
                     .and_then(|s| Some(humanize_uptime(s)))
@@ -260,10 +273,20 @@ impl<'a> NodeInfoWidget<'a> {
             .render(area, buf);
         }
     }
+
+    fn render_telemetry(
+        &self,
+        telemetry: &Vec<NodeTelemetry>,
+        area: Rect,
+        buf: &mut Buffer,
+        _state: &mut NodeInfoWidgetState,
+    ) {
+        Span::from(telemetry.len().to_string()).render(area, buf);
+    }
 }
 
 impl<'a> StatefulWidget for NodeInfoWidget<'a> {
-    type State = NodeInfoState;
+    type State = NodeInfoWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let block = Block::bordered()
@@ -293,13 +316,14 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
 
         // tabs
         TabsWidget::new(
-            Tab::iter().map(|t| (t as usize, t.to_string())).collect(),
+            NodeInfoTab::iter().map(|t| (t as usize, t.to_string())).collect(),
             state.active_tab as usize,
         )
         .render(v[0], buf);
 
         match &state.active_tab {
-            Tab::Info => self.render_info(node, v[2], buf, state),
+            NodeInfoTab::Info => self.render_info(node, v[2], buf, state),
+            NodeInfoTab::Telemetry => self.render_telemetry(self.telemetry, v[2], buf, state),
             _ => PlaceholderWidget::red("not implemented").render(v[2], buf),
         }
     }

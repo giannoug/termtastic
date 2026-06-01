@@ -258,18 +258,6 @@ fn build_forms() -> HashMap<FormId, Vec<FormItem>> {
     );
 
     forms.insert(
-        FormId::AppDb,
-        Vec::from([FormItem::new(
-            FormItemKey::None,
-            "Compact DB",
-            Some("Try to compact the database to free some space."),
-            FormItemKind::Action(AppEvent::DbCompactRequested),
-            |_| "<COMPACT>".to_owned(),
-            |_| Ok(()),
-        )]),
-    );
-
-    forms.insert(
         FormId::RadioLora,
         Vec::from([
             FormItem::new(

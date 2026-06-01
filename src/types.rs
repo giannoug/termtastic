@@ -73,7 +73,6 @@ pub enum AppEvent {
     },
     ConfigLoaded,
     CopyToClipboardRequested(String),
-    DbCompactRequested,
     DbLoadRequested(u32),
     DeviceRebootRequested,
     DeviceRediscoverRequested,
@@ -87,7 +86,7 @@ pub enum AppEvent {
     NodeDeleteRequested(u32),
     NodeInfoBroadcastRequested,
     NodeInfoPopupCloseRequested,
-    NodeInfoPopupRequested(u32),
+    NodeInfoPopupOpenRequested(u32),
     NodesFilterChanged(String),
     NodesSortByNextRequested,
     NodesSortByPrevRequested,
@@ -97,7 +96,7 @@ pub enum AppEvent {
     SettingsFormSaveRequested(FormId),
     SettingsFormSelected(FormId),
     SplashLogoRequested,
-    TelemetryArrived(TelemetryPacket),
+    TelemetryArrived(NodeTelemetry),
     TabNextRequested,
     TabPreviousRequested,
     TryingToQuit,
@@ -225,6 +224,7 @@ pub enum ConnectionState {
         error: String,
     },
     Connecting,
+    LoadingConfig,
     Connected,
 }
 
@@ -895,10 +895,10 @@ pub struct NodeLastTelemetry {
 }
 
 #[derive(Debug, Clone)]
-pub struct TelemetryPacket {
+pub struct NodeTelemetry {
     pub node_key: u32,
-    pub time: u32,
-    pub data: meshtastic::protobufs::telemetry::Variant,
+    pub datetime: DateTime<Utc>,
+    pub variant: meshtastic::protobufs::telemetry::Variant,
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
@@ -926,7 +926,6 @@ pub enum FormId {
     ModuleDetectionSensor,
     ModuleTrafficManagement,
     AppUi,
-    AppDb,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
