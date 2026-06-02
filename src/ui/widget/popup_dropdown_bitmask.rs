@@ -34,7 +34,10 @@ impl<'a> PopupDropdownBitmaskState<'a> {
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
-        if self.list_state.handle_navigation_events(&event, self.variants.len()) {
+        if self
+            .list_state
+            .handle_navigation_events(&event, Some(self.variants.len()))
+        {
             return Ok(true);
         }
 

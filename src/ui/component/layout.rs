@@ -74,27 +74,24 @@ impl<'a> Component for Layout<'a> {
         }
 
         if let Some(node_key) = state.nodeinfo {
-            if self
-                .nodeinfo_widget_state
-                .handle_event(event.clone(), &mut |ev| match ev {
-                    NodeInfoWidgetEvent::PopupCloseRequested => {
+            if self.nodeinfo_widget_state.handle_event(
+                build_nodeinfo_context(node_key, state),
+                event.clone(),
+                &mut |ev| match ev {
+                    NodeInfoWidgetEvent::CloseRequested => {
                         emit(AppEvent::NodeInfoPopupCloseRequested)?;
-
                         Ok(())
                     }
-                    NodeInfoWidgetEvent::PublicKeyCopyRequested => {
-                        if let Some(user) = state.nodes.get(&node_key).and_then(|n| n.user.as_ref()) {
-                            emit(AppEvent::CopyToClipboardRequested(user.public_key.base64_encode()))?;
-                        }
-
+                    NodeInfoWidgetEvent::CopyToClipboardRequested(s) => {
+                        emit(AppEvent::CopyToClipboardRequested(s))?;
                         Ok(())
                     }
                     NodeInfoWidgetEvent::NodeDeleteRequested => {
                         emit(AppEvent::NodeDeleteRequested(node_key))?;
                         Ok(())
                     }
-                })?
-            {
+                },
+            )? {
                 return Ok(true);
             }
 
@@ -202,13 +199,11 @@ impl<'a> Component for Layout<'a> {
 
             Clear.render(popup_area, frame.buffer_mut());
 
-            NodeInfoWidget::new(
-                state.nodes.get(&node_key),
-                state.nodes_last_telemetry.get(&node_key),
-                state.nodeinfo_telemetry.as_ref(),
-                state.my_node_key == Some(node_key),
-            )
-            .render(popup_area, frame.buffer_mut(), &mut self.nodeinfo_widget_state);
+            NodeInfoWidget::new(build_nodeinfo_context(node_key, state)).render(
+                popup_area,
+                frame.buffer_mut(),
+                &mut self.nodeinfo_widget_state,
+            );
         }
 
         // splash logo
@@ -255,5 +250,18 @@ impl<'a> Component for Layout<'a> {
                 .centered()
                 .render(toast_block_area, frame.buffer_mut());
         }
+    }
+}
+
+fn build_nodeinfo_context(node_key: u32, state: &State) -> NodeInfoContext<'_> {
+    NodeInfoContext {
+        maybe_node: state.nodes.get(&node_key),
+        telemetry: &state.nodeinfo_telemetry,
+        uptime: state
+            .nodes_last_telemetry
+            .get(&node_key)
+            .and_then(|t| t.device_metrics)
+            .and_then(|m| m.uptime_seconds),
+        is_my_node: state.my_node_key == Some(node_key),
     }
 }

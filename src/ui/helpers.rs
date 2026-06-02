@@ -328,12 +328,12 @@ pub fn humanize_last_heard<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
     ]
 }
 
-pub fn humanize_uptime<'a>(secs: u32) -> Span<'a> {
+pub fn humanize_uptime<'a>(secs: u32) -> String {
     match secs {
-        0..60 => Span::from(format!("{}s", secs)),
-        60..3600 => Span::from(format!("{}m", secs / 60)),
-        3600..86400 => Span::from(format!("{}h {}m", secs / 3600, secs % 3600 / 60)),
-        _ => Span::from(format!("{}d {}h", secs / 86400, secs % 86400 / 3600)),
+        0..60 => format!("{}s", secs),
+        60..3600 => format!("{}m", secs / 60),
+        3600..86400 => format!("{}h {}m", secs / 3600, secs % 3600 / 60),
+        _ => format!("{}d {}h", secs / 86400, secs % 86400 / 3600),
     }
 }
 
@@ -401,13 +401,13 @@ pub fn routing_error_to_span<'a>(error: Option<routing::Error>) -> Span<'a> {
 }
 
 pub trait ListStateExt {
-    fn handle_navigation_events(&mut self, event: &Event, items_count: usize) -> bool;
+    fn handle_navigation_events(&mut self, event: &Event, items_count: Option<usize>) -> bool;
 
     fn fix_selection(&mut self, items_count: usize);
 }
 
 impl ListStateExt for ListState {
-    fn handle_navigation_events(&mut self, event: &Event, items_count: usize) -> bool {
+    fn handle_navigation_events(&mut self, event: &Event, items_count: Option<usize>) -> bool {
         match event {
             Event::Key(KeyEvent {
                 code,
@@ -416,16 +416,20 @@ impl ListStateExt for ListState {
                 ..
             }) if modifiers.is_empty() => match code {
                 KeyCode::Home => {
-                    if items_count > 0 {
+                    if let Some(count) = items_count
+                        && count > 0
+                    {
                         self.select(Some(0));
+                        return true;
                     }
-                    return true;
                 }
                 KeyCode::End => {
-                    if items_count > 0 {
-                        self.select(Some(items_count - 1));
+                    if let Some(count) = items_count
+                        && count > 0
+                    {
+                        self.select(Some(count - 1));
+                        return true;
                     }
-                    return true;
                 }
                 KeyCode::Up => {
                     self.previous();

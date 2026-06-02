@@ -262,7 +262,7 @@ impl<'a> Component for Messenger<'a> {
             return Ok(true);
         }
 
-        if input_widget.is_empty() && list_state.handle_navigation_events(event, messages.len()) {
+        if input_widget.is_empty() && list_state.handle_navigation_events(event, Some(messages.len())) {
             if let Some(index) = list_state.selected {
                 self.follow_chat
                     .insert(active_chat.clone(), index == messages.len() - 1);

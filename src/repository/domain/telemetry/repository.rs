@@ -22,26 +22,6 @@ impl Repository {
         Ok(result)
     }
 
-    pub async fn telemetry_find_by_node_key(&self, node_key: u32) -> Result<Vec<Telemetry>, RepositoryError> {
-        let result: Vec<Telemetry> = self
-            .conn
-            .call(move |conn| -> Result<_, RepositoryError> {
-                let mut statement = conn.prepare(&format!(
-                    "SELECT * FROM {} AS t WHERE t.node_key = :node_key",
-                    TABLE_NAME
-                ))?;
-
-                let result: Result<_, _> = from_rows::<Telemetry>(statement.query(params![node_key])?)
-                    .into_iter()
-                    .collect();
-
-                result.map_err(Into::into)
-            })
-            .await?;
-
-        Ok(result)
-    }
-
     #[allow(dead_code)]
     pub async fn telemetry_find_last_by_node_key(&self, node_key: u32) -> Result<Vec<Telemetry>, RepositoryError> {
         let result: Vec<Telemetry> = self

@@ -9,7 +9,7 @@ use ratatui::{
 use ratatui_textarea::TextArea;
 use tui_widget_list::{ListBuilder, ListState, ListView};
 
-use crate::ui::helpers::{default_scrollbar, ListStateExt};
+use crate::ui::helpers::{ListStateExt, default_scrollbar};
 
 pub struct EmojiSelectorState<'a> {
     input_widget: TextArea<'a>,
@@ -41,7 +41,10 @@ impl<'a> EmojiSelectorState<'a> {
     }
 
     pub fn handle_event(&mut self, event: Event) -> anyhow::Result<bool> {
-        if self.list_state.handle_navigation_events(&event, self.emojis.len()) {
+        if self
+            .list_state
+            .handle_navigation_events(&event, Some(self.emojis.len()))
+        {
             return Ok(true);
         }
 

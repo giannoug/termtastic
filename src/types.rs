@@ -525,6 +525,7 @@ impl Node {
                 .to_lowercase(),
             self.role().to_lowercase(),
             self.hw_model().to_lowercase(),
+            self.key.to_string(),
             self.id(),
             if is_direct {
                 "$direct".to_owned()
@@ -899,6 +900,36 @@ pub struct NodeTelemetry {
     pub node_key: u32,
     pub datetime: DateTime<Utc>,
     pub variant: meshtastic::protobufs::telemetry::Variant,
+}
+
+#[derive(Debug, Clone)]
+pub enum TelemetryItem {
+    Group {
+        title: String,
+        json: String,
+    },
+    Item {
+        title: String,
+        value: Option<String>,
+        formatted_value: Option<String>,
+    },
+}
+
+impl TelemetryItem {
+    pub fn group(title: impl AsRef<str>, json: String) -> Self {
+        Self::Group {
+            title: title.as_ref().to_owned(),
+            json,
+        }
+    }
+
+    pub fn item(title: impl AsRef<str>, value: Option<impl ToString>, formatted_value: Option<impl ToString>) -> Self {
+        Self::Item {
+            title: title.as_ref().to_owned(),
+            value: value.map(|v| v.to_string()),
+            formatted_value: formatted_value.map(|v| v.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]

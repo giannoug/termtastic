@@ -89,7 +89,7 @@ impl Component for Logs {
             return Ok(false);
         }
 
-        if self.list_state.handle_navigation_events(event, state.logs.len()) {
+        if self.list_state.handle_navigation_events(event, Some(state.logs.len())) {
             if let Some(index) = self.list_state.selected {
                 self.follow = index == state.logs.len() - 1;
             }

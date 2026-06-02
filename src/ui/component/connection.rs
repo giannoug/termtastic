@@ -142,7 +142,7 @@ impl<'a> Component for Connection<'a> {
         if self.is_discovery_popup_visible {
             if self
                 .discovery_list_state
-                .handle_navigation_events(event, state.devices_discovered.len())
+                .handle_navigation_events(event, Some(state.devices_discovered.len()))
             {
                 return Ok(true);
             }
@@ -275,7 +275,10 @@ impl<'a> Component for Connection<'a> {
             return Ok(false);
         }
 
-        if self.list_state.handle_navigation_events(event, state.devices.len()) {
+        if self
+            .list_state
+            .handle_navigation_events(event, Some(state.devices.len()))
+        {
             return Ok(true);
         }
 

@@ -5,7 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::repository::{Repository, create_sqlite_repository};
-use crate::types::{Node, NodeTelemetry};
+use crate::types::Node;
 use crate::{
     APP_NAME,
     state::StateAction,
@@ -154,41 +154,6 @@ impl PersistenceService {
                             tracing::error!("telemetry store to DB failed: {}", e);
                         }
                     };
-                }
-                AppEvent::NodeInfoPopupOpenRequested(node_key) => {
-                    let Some(repository) = &self.repository else {
-                        return Ok(());
-                    };
-
-                    let repository_clone = repository.clone();
-                    let state_action_tx = self.forward_state_action_tx.clone();
-
-                    tokio::spawn(async move {
-                        let node_telemetry: Result<Vec<NodeTelemetry>, anyhow::Error> =
-                            match repository_clone.telemetry_find_by_node_key(node_key).await {
-                                Ok(t) => t.iter().map(|t| t.try_into()).collect(),
-                                Err(e) => {
-                                    tracing::error!("node telemetry load failed: {}", e);
-
-                                    state_action_tx
-                                        .send(StateAction::Toast(Toast::error("node telemetry not loaded")))
-                                        .ok();
-
-                                    return;
-                                }
-                            };
-
-                        match node_telemetry {
-                            Ok(nt) => state_action_tx.send(StateAction::NodeInfoTelemetrySet(nt)).ok(),
-                            Err(e) => {
-                                tracing::error!("node telemetry load failed: {}", e);
-
-                                state_action_tx
-                                    .send(StateAction::Toast(Toast::error("node telemetry not loaded")))
-                                    .ok()
-                            }
-                        };
-                    });
                 }
                 _ => {}
             },

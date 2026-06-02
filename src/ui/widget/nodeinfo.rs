@@ -1,13 +1,16 @@
-use crate::types::{Hotkey, Node, NodeLastTelemetry, NodeTelemetry};
-use crate::ui::helpers::{hops_to_spans, humanize_uptime, last_heard_to_spans};
-use crate::ui::prelude::{Constraint, Layout, PlaceholderWidget, PopupConfirmWidget, TabsWidget};
+use crate::types::{Hotkey, Node, TelemetryItem};
+use crate::ui::helpers::{
+    Base64EncoderExt, ListStateExt, default_scrollbar, hops_to_spans, humanize_uptime, last_heard_to_spans,
+};
+use crate::ui::widget::{PlaceholderWidget, PopupConfirmWidget, TabsWidget};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     prelude::*,
     text::ToSpan,
-    widgets::{Block, BorderType, Padding, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, BorderType, Padding, Paragraph},
 };
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
+use tui_widget_list::{ListBuilder, ListState, ListView};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, FromRepr, Display, EnumIter, EnumCount)]
 enum NodeInfoTab {
@@ -49,14 +52,23 @@ impl NodeInfoTab {
 }
 
 pub enum NodeInfoWidgetEvent {
-    PopupCloseRequested,
-    PublicKeyCopyRequested,
+    CloseRequested,
+    CopyToClipboardRequested(String),
     NodeDeleteRequested,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeInfoContext<'a> {
+    pub maybe_node: Option<&'a Node>,
+    pub telemetry: &'a Vec<TelemetryItem>,
+    pub uptime: Option<u32>,
+    pub is_my_node: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct NodeInfoWidgetState {
     active_tab: NodeInfoTab,
+    telemetry_list_state: ListState,
     is_delete_node_popup_visible: bool,
 }
 
@@ -64,6 +76,7 @@ impl Default for NodeInfoWidgetState {
     fn default() -> Self {
         Self {
             active_tab: NodeInfoTab::default(),
+            telemetry_list_state: ListState::default(),
             is_delete_node_popup_visible: false,
         }
     }
@@ -72,6 +85,7 @@ impl Default for NodeInfoWidgetState {
 impl NodeInfoWidgetState {
     pub fn handle_event(
         &mut self,
+        context: NodeInfoContext,
         event: Event,
         emit: &mut impl FnMut(NodeInfoWidgetEvent) -> anyhow::Result<()>,
     ) -> anyhow::Result<bool> {
@@ -98,6 +112,11 @@ impl NodeInfoWidgetState {
             return Ok(true);
         }
 
+        if self.active_tab == NodeInfoTab::Telemetry && self.telemetry_list_state.handle_navigation_events(&event, None)
+        {
+            return Ok(true);
+        }
+
         match event {
             Event::Key(KeyEvent {
                 code,
@@ -114,15 +133,38 @@ impl NodeInfoWidgetState {
                     return Ok(true);
                 }
                 (NodeInfoTab::Info, KeyCode::Char('k')) if modifiers.is_empty() => {
-                    emit(NodeInfoWidgetEvent::PublicKeyCopyRequested)?;
-                    return Ok(true);
+                    if let Some(user) = context.maybe_node.and_then(|n| n.user.as_ref()) {
+                        emit(NodeInfoWidgetEvent::CopyToClipboardRequested(
+                            user.public_key.base64_encode(),
+                        ))?;
+                        return Ok(true);
+                    }
                 }
                 (NodeInfoTab::Info, KeyCode::Delete | KeyCode::Backspace) if modifiers.is_empty() => {
                     self.is_delete_node_popup_visible = true;
                     return Ok(true);
                 }
+                (NodeInfoTab::Telemetry, KeyCode::Char('c')) if modifiers.is_empty() => {
+                    if let Some(item) = self
+                        .telemetry_list_state
+                        .selected
+                        .and_then(|i| context.telemetry.get(i))
+                    {
+                        match item {
+                            TelemetryItem::Group { json, .. } => {
+                                emit(NodeInfoWidgetEvent::CopyToClipboardRequested(json.to_owned()))?;
+                            }
+                            TelemetryItem::Item { value: Some(v), .. } => {
+                                emit(NodeInfoWidgetEvent::CopyToClipboardRequested(v.to_owned()))?;
+                            }
+                            _ => {}
+                        };
+
+                        return Ok(true);
+                    }
+                }
                 (_, KeyCode::Esc) if modifiers.is_empty() => {
-                    emit(NodeInfoWidgetEvent::PopupCloseRequested)?;
+                    emit(NodeInfoWidgetEvent::CloseRequested)?;
                     return Ok(true);
                 }
                 _ => {}
@@ -143,31 +185,19 @@ impl NodeInfoWidgetState {
             .into_iter()
             .flatten()
             .collect(),
+            NodeInfoTab::Telemetry => vec![Hotkey::new("esc", "close"), Hotkey::new("c", "copy")],
             _ => vec![],
         }
     }
 }
 
 pub struct NodeInfoWidget<'a> {
-    maybe_node: Option<&'a Node>,
-    last_telemetry: Option<&'a NodeLastTelemetry>,
-    telemetry: &'a Vec<NodeTelemetry>,
-    is_my_node: bool,
+    context: NodeInfoContext<'a>,
 }
 
 impl<'a> NodeInfoWidget<'a> {
-    pub fn new(
-        maybe_node: Option<&'a Node>,
-        last_telemetry: Option<&'a NodeLastTelemetry>,
-        telemetry: &'a Vec<NodeTelemetry>,
-        is_my_node: bool,
-    ) -> Self {
-        Self {
-            maybe_node,
-            last_telemetry,
-            telemetry,
-            is_my_node,
-        }
+    pub fn new(context: NodeInfoContext<'a>) -> Self {
+        Self { context }
     }
 
     fn render_info(&self, node: &Node, area: Rect, buf: &mut Buffer, state: &mut NodeInfoWidgetState) {
@@ -179,87 +209,55 @@ impl<'a> NodeInfoWidget<'a> {
         ])
         .split(area);
 
-        let v0_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[0]);
-        let v1_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[1]);
-        let v2_h = Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1), Constraint::Fill(1)]).split(v[2]);
-
         // first line
-        Paragraph::new(vec![
-            Line::from(Span::from("short name").dark_gray()),
-            Line::from(node.short_name().to_span()),
-        ])
-        .render(v0_h[0], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("node number").dark_gray()),
-            Line::from(node.key.to_span()),
-        ])
-        .render(v0_h[1], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("user ID").dark_gray()),
-            Line::from(node.id().to_span()),
-        ])
-        .render(v0_h[2], buf);
+        ThreeColumnInfoWidget {
+            first: Some(InfoWidget::new("short name", node.short_name().to_span())),
+            second: Some(InfoWidget::new("node number", node.key.to_span())),
+            third: Some(InfoWidget::new("user ID", node.id().to_span())),
+        }
+        .render(v[0], buf);
 
         // second line
-        Paragraph::new(vec![
-            Line::from(Span::from("last heard").dark_gray()),
-            Line::from(last_heard_to_spans(node, self.is_my_node)),
-        ])
-        .render(v1_h[0], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("hops").dark_gray()),
-            Line::from(hops_to_spans(node, self.is_my_node)),
-        ])
-        .render(v1_h[1], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("uptime").dark_gray()),
-            Line::from(
-                self.last_telemetry
-                    .and_then(|t| t.device_metrics)
-                    .and_then(|m| m.uptime_seconds)
-                    .and_then(|s| Some(humanize_uptime(s)))
-                    .unwrap_or(Span::from("no data")),
-            ),
-        ])
-        .render(v1_h[2], buf);
+        ThreeColumnInfoWidget {
+            first: Some(InfoWidget::new(
+                "last heard",
+                last_heard_to_spans(node, self.context.is_my_node),
+            )),
+            second: Some(InfoWidget::new("hops", hops_to_spans(node, self.context.is_my_node))),
+            third: Some(InfoWidget::new(
+                "uptime",
+                self.context
+                    .uptime
+                    .and_then(|s| Some(Span::from(humanize_uptime(s))))
+                    .unwrap_or(Span::from("no data").dark_gray()),
+            )),
+        }
+        .render(v[1], buf);
 
         // third line
-        Paragraph::new(vec![
-            Line::from(Span::from("device role").dark_gray()),
-            Line::from(node.role().to_span()),
-        ])
-        .render(v2_h[0], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("public key").dark_gray()),
-            Line::from(if let Some(user) = node.user.as_ref() {
-                Span::from(format!("{}-byte", user.public_key.len())).green()
-            } else {
-                "none".to_span().red()
-            }),
-        ])
-        .render(v2_h[1], buf);
-
-        Paragraph::new(vec![
-            Line::from(Span::from("status").dark_gray()),
-            Line::from(if node.user.is_none() {
-                Span::from("UNKNOWN").yellow()
-            } else {
-                Span::from("STORED").green()
-            }),
-        ])
-        .render(v2_h[2], buf);
+        ThreeColumnInfoWidget {
+            first: Some(InfoWidget::new("device role", node.role().to_span())),
+            second: Some(InfoWidget::new(
+                "public key",
+                if let Some(user) = node.user.as_ref() {
+                    Span::from(format!("{}-byte", user.public_key.len())).green()
+                } else {
+                    "none".to_span().red()
+                },
+            )),
+            third: Some(InfoWidget::new(
+                "status",
+                if node.user.is_none() {
+                    Span::from("UNKNOWN").yellow()
+                } else {
+                    Span::from("STORED").green()
+                },
+            )),
+        }
+        .render(v[2], buf);
 
         // fourth line
-        Paragraph::new(vec![
-            Line::from(Span::from("hardware").dark_gray()),
-            Line::from(node.hw_model().to_span().magenta()),
-        ])
-        .render(v[3], buf);
+        InfoWidget::new("hardware", node.hw_model().to_span().magenta()).render(v[3], buf);
 
         // delete popup
         if state.is_delete_node_popup_visible {
@@ -276,12 +274,32 @@ impl<'a> NodeInfoWidget<'a> {
 
     fn render_telemetry(
         &self,
-        telemetry: &Vec<NodeTelemetry>,
+        telemetry: &Vec<TelemetryItem>,
         area: Rect,
         buf: &mut Buffer,
-        _state: &mut NodeInfoWidgetState,
+        state: &mut NodeInfoWidgetState,
     ) {
-        Span::from(telemetry.len().to_string()).render(area, buf);
+        if telemetry.is_empty() {
+            PlaceholderWidget::dark_gray("no telemetry collected yet").render(area, buf);
+            return;
+        };
+
+        state.telemetry_list_state.fix_selection(telemetry.len());
+
+        let list_builder = ListBuilder::new(|context| {
+            let widget = TelemetryItemWidget {
+                item: &telemetry[context.index],
+                is_selected: context.is_selected,
+            };
+
+            (widget, 1)
+        });
+
+        let list = ListView::new(list_builder, telemetry.len())
+            .infinite_scrolling(false)
+            .scrollbar(default_scrollbar());
+
+        list.render(area, buf, &mut state.telemetry_list_state);
     }
 }
 
@@ -295,7 +313,8 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
             .title(Line::from(vec![
                 Span::from(" "),
                 Span::from(
-                    self.maybe_node
+                    self.context
+                        .maybe_node
                         .as_ref()
                         .and_then(|n| Some(n.long_name()))
                         .unwrap_or("UNKNOWN".to_owned()),
@@ -307,7 +326,7 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
         let block_area = block.inner(area);
         block.render(area, buf);
 
-        let Some(node) = self.maybe_node else {
+        let Some(node) = self.context.maybe_node else {
             PlaceholderWidget::dark_gray("node not found").render(block_area, buf);
             return;
         };
@@ -323,8 +342,115 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
 
         match &state.active_tab {
             NodeInfoTab::Info => self.render_info(node, v[2], buf, state),
-            NodeInfoTab::Telemetry => self.render_telemetry(self.telemetry, v[2], buf, state),
+            NodeInfoTab::Telemetry => self.render_telemetry(self.context.telemetry, v[2], buf, state),
             _ => PlaceholderWidget::red("not implemented").render(v[2], buf),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ThreeColumnInfoWidget<'a> {
+    first: Option<InfoWidget<'a>>,
+    second: Option<InfoWidget<'a>>,
+    third: Option<InfoWidget<'a>>,
+}
+
+impl<'a> Widget for ThreeColumnInfoWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        let h = Layout::horizontal([
+            Constraint::Ratio(1, 3),
+            Constraint::Ratio(1, 3),
+            Constraint::Ratio(1, 3),
+        ])
+        .split(area);
+
+        if let Some(first) = self.first {
+            first.render(h[0], buf);
+        }
+
+        if let Some(second) = self.second {
+            second.render(h[1], buf);
+        }
+
+        if let Some(third) = self.third {
+            third.render(h[2], buf);
+        }
+    }
+}
+
+#[derive(Clone)]
+struct InfoWidget<'a> {
+    pub title: &'a str,
+    pub value: Line<'a>,
+}
+
+impl<'a> InfoWidget<'a> {
+    pub fn new(title: &'a str, value: impl Into<Line<'a>>) -> Self {
+        Self {
+            title,
+            value: value.into(),
+        }
+    }
+}
+
+impl<'a> Widget for InfoWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer)
+    where
+        Self: Sized,
+    {
+        Paragraph::new(vec![Line::from(Span::from(self.title).dark_gray()), self.value]).render(area, buf);
+    }
+}
+
+struct TelemetryItemWidget<'a> {
+    item: &'a TelemetryItem,
+    is_selected: bool,
+}
+
+impl<'a> Widget for TelemetryItemWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        match self.item {
+            TelemetryItem::Group { title, .. } => {
+                Line::from(vec![
+                    Span::from("§ ").bold(),
+                    Span::from(title).bold().add_modifier(if self.is_selected {
+                        Modifier::UNDERLINED
+                    } else {
+                        Modifier::empty()
+                    }),
+                ])
+                .magenta()
+                .render(area, buf);
+            }
+            TelemetryItem::Item {
+                title, formatted_value, ..
+            } => {
+                let v = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(area);
+
+                Line::from(vec![
+                    Span::from("  "),
+                    Span::from(format!("{}:", title)).add_modifier(if self.is_selected {
+                        Modifier::UNDERLINED | Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ])
+                .render(v[0], buf);
+
+                formatted_value
+                    .as_ref()
+                    .and_then(|v| Some(Span::from(v)))
+                    .unwrap_or(Span::from("no data").dark_gray())
+                    .add_modifier(if self.is_selected {
+                        Modifier::UNDERLINED | Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    })
+                    .render(v[1], buf);
+            }
         }
     }
 }

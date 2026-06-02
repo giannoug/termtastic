@@ -32,7 +32,7 @@ pub struct State {
     pub my_node_user_hash: u64,
     pub need_clear_frame: bool,
     pub nodeinfo: Option<u32>,
-    pub nodeinfo_telemetry: Vec<NodeTelemetry>,
+    pub nodeinfo_telemetry: Vec<TelemetryItem>,
     pub nodes: HashMap<u32, Node>,
     pub nodes_last_telemetry: HashMap<u32, NodeLastTelemetry>,
     pub nodes_sort_by: NodesSortBy,

@@ -63,7 +63,7 @@ impl<'a> Component for Chat<'a> {
             return Ok(true);
         }
 
-        if self.list_state.handle_navigation_events(event, state.chats.len()) {
+        if self.list_state.handle_navigation_events(event, Some(state.chats.len())) {
             return Ok(true);
         }
 

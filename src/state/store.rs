@@ -10,6 +10,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
+use crate::service::update_nodeinfo_telemetry;
 use crate::types::{Chat, NodeLastTelemetry};
 use crate::{
     state::{State, StateAction},
@@ -421,6 +422,10 @@ impl Store {
                     state.nodeinfo = Some(node_key);
 
                     changed.push(name_of!(nodeinfo in State));
+
+                    if update_nodeinfo_telemetry(state) {
+                        changed.push(name_of!(nodeinfo_telemetry in State));
+                    }
                 });
             }
             StateAction::NodeInfoUnset => {
@@ -429,13 +434,6 @@ impl Store {
                     state.nodeinfo_telemetry.clear();
 
                     changed.extend([name_of!(nodeinfo in State), name_of!(nodeinfo_telemetry in State)]);
-                });
-            }
-            StateAction::NodeInfoTelemetrySet(telemetry) => {
-                self.state_tx.send_modify(|state| {
-                    state.nodeinfo_telemetry = telemetry;
-
-                    changed.push(name_of!(nodeinfo_telemetry in State));
                 });
             }
             StateAction::NodeUpdate(node) => {
@@ -538,6 +536,10 @@ impl Store {
                     };
 
                     changed.push(name_of!(nodes_last_telemetry in State));
+
+                    if update_nodeinfo_telemetry(state) {
+                        changed.push(name_of!(nodeinfo_telemetry in State));
+                    }
                 });
             }
             StateAction::ChannelSet(key, channel) => {

@@ -211,7 +211,10 @@ impl<'a> Component for Nodes<'a> {
             return Ok(false);
         }
 
-        if self.list_state.handle_navigation_events(event, state.nodes_view.len()) {
+        if self
+            .list_state
+            .handle_navigation_events(event, Some(state.nodes_view.len()))
+        {
             return Ok(true);
         }
 
@@ -258,6 +261,7 @@ impl<'a> Component for Nodes<'a> {
             },
             Event::Paste(text) => {
                 self.filter_input.insert_str(text);
+                emit(AppEvent::NodesFilterChanged(self.filter_input.lines()[0].clone()))?;
             }
             _ => {}
         }

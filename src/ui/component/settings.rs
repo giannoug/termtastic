@@ -369,13 +369,17 @@ impl<'a> Component for Settings<'a> {
 
         // default
         if let SettingsFormState::Inactive = state.settings_form_state
-            && self.settings_list_state.handle_navigation_events(event, SETTINGS.len())
+            && self
+                .settings_list_state
+                .handle_navigation_events(event, Some(SETTINGS.len()))
         {
             return Ok(true);
         }
 
         if let SettingsFormState::Loaded { id } = &state.settings_form_state
-            && self.form_list_state.handle_navigation_events(event, FORMS[&id].len())
+            && self
+                .form_list_state
+                .handle_navigation_events(event, Some(FORMS[&id].len()))
         {
             return Ok(true);
         }

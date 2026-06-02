@@ -44,7 +44,6 @@ pub enum StateAction {
     NodeInit(Node),
     NodeInfoSet(u32),
     NodeInfoUnset,
-    NodeInfoTelemetrySet(Vec<NodeTelemetry>),
     NodeUpdate(Node),
     NodeUpdateLastHeard {
         node_key: u32,

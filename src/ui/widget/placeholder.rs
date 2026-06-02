@@ -12,27 +12,25 @@ impl<'a> PlaceholderWidget<'a> {
         Self { text }
     }
 
-    pub fn dark_gray(text: &'a str) -> Self {
+    pub fn dark_gray<T: Into<Text<'a>>>(text: T) -> Self {
         Self {
-            text: Paragraph::new(Span::from(text).dark_gray())
+            text: Paragraph::new(text.into().dark_gray())
                 .centered()
                 .wrap(Wrap { trim: false }),
         }
     }
 
-    pub fn yellow(text: &'a str) -> Self {
+    pub fn yellow<T: Into<Text<'a>>>(text: T) -> Self {
         Self {
-            text: Paragraph::new(Span::from(text).yellow())
+            text: Paragraph::new(text.into().yellow())
                 .centered()
                 .wrap(Wrap { trim: false }),
         }
     }
 
-    pub fn red(text: &'a str) -> Self {
+    pub fn red<T: Into<Text<'a>>>(text: T) -> Self {
         Self {
-            text: Paragraph::new(Span::from(text).red())
-                .centered()
-                .wrap(Wrap { trim: false }),
+            text: Paragraph::new(text.into().red()).centered().wrap(Wrap { trim: false }),
         }
     }
 }

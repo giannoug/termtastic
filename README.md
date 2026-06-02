@@ -115,11 +115,11 @@
 - [x] Display node detailed info
 - [x] Copy public key to clipboard
 - [x] Delete node feature
+- [x] Telemetry info
 - [ ] Traceroute feature
 - [ ] Ignore feature
 - [ ] Add to Favorite feature
 - [ ] Position info
-- [ ] Telemetry info
 - [ ] TBD
 
 ### Settings tab
