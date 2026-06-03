@@ -215,7 +215,7 @@ impl Store {
                     ]);
                 });
             }
-            StateAction::DbDataLoaded { nodes } => {
+            StateAction::DbNodesLoad(nodes) => {
                 self.state_tx.send_modify(|state| {
                     for node in nodes {
                         if let Some(existing_node) = state.nodes.get(&node.key) {
@@ -395,17 +395,31 @@ impl Store {
                     changed.push(name_of!(device_canned_messages in State));
                 });
             }
+            StateAction::NodesStashPush(node) => {
+                self.state_tx.send_modify(|state| {
+                    state.nodes_stash.push(node);
+
+                    changed.push(name_of!(nodes_stash in State));
+                });
+            }
+            StateAction::NodesStashCapSet(cap) => {
+                self.state_tx.send_modify(|state| {
+                    state.nodes_stash_cap = cap;
+
+                    changed.push(name_of!(nodes_stash_cap in State));
+                });
+            }
+            StateAction::NodesStashFlush => {
+                self.state_tx.send_modify(|state| {
+                    state.nodes_stash.clear();
+                    state.nodes_stash_cap = 0;
+
+                    changed.extend([name_of!(nodes_stash in State), name_of!(nodes_stash_cap in State)]);
+                });
+            }
             StateAction::NodeInit(node) => {
-                self.state_tx.send_if_modified(|state| {
-                    if node.user.is_some() {
-                        state.nodes.insert(node.key, node);
-
-                        changed.push(name_of!(nodes in State));
-
-                        return true;
-                    }
-
-                    match state.nodes.entry(node.key) {
+                self.state_tx
+                    .send_if_modified(|state| match state.nodes.entry(node.key) {
                         Entry::Vacant(entry) => {
                             entry.insert(node);
 
@@ -413,9 +427,18 @@ impl Store {
 
                             true
                         }
-                        Entry::Occupied(_) => false,
-                    }
-                });
+                        Entry::Occupied(mut entry) => {
+                            if node.user.is_some() && node.last_heard > entry.get().last_heard {
+                                entry.insert(node);
+
+                                changed.push(name_of!(nodes in State));
+
+                                return true;
+                            }
+
+                            false
+                        }
+                    });
             }
             StateAction::NodeInfoSet(node_key) => {
                 self.state_tx.send_modify(|state| {

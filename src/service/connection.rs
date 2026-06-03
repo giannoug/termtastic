@@ -158,6 +158,9 @@ impl ConnectionService {
 
                             self.state_action_tx
                                 .send(StateAction::MyNodeKeySet(my_info.my_node_num))?;
+
+                            self.state_action_tx
+                                .send(StateAction::NodesStashCapSet(my_info.nodedb_count))?;
                         }
                         from_radio::PayloadVariant::Metadata(metadata) => {
                             self.state_action_tx

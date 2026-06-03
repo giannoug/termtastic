@@ -209,6 +209,7 @@ impl<'a> Component for Settings<'a> {
                     .then_some(Hotkey::new("enter", "edit")),
                 state.settings_form_is_changed.then_some(Hotkey::new("s", "save")),
                 state.settings_form_is_changed.then_some(Hotkey::new("r", "reset")),
+                Some(Hotkey::new("c", "copy")),
                 Some(Hotkey::new("esc", "return")),
             ],
             SettingsFormState::Saving { .. } => vec![],
@@ -451,6 +452,21 @@ impl<'a> Component for Settings<'a> {
                 {
                     emit(AppEvent::SettingsFormSaveRequested(id.clone()))?;
                     return Ok(true);
+                }
+                (KeyCode::Char('c'), SettingsFormState::Loaded { id }) if modifiers.is_empty() => {
+                    let index = self.form_list_state.selected.expect("should be Some");
+                    let data = state.settings_form_data.as_ref().expect("should be Some");
+                    let form_item = &FORMS[id][index];
+                    let form_value = match form_item.key {
+                        FormItemKey::Simple(k) => data.get(k).cloned(),
+                        FormItemKey::Custom { getter, .. } => Some(getter(data)),
+                        FormItemKey::None => None,
+                    };
+
+                    if let Some(v) = form_value {
+                        emit(AppEvent::CopyToClipboardRequested((form_item.formatter)(&v)))?;
+                        return Ok(true);
+                    }
                 }
                 _ => {}
             },

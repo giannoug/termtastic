@@ -423,7 +423,14 @@ impl<'a> Component for Connection<'a> {
                     vec![Line::from(Span::from("connecting...").yellow())]
                 }
                 ConnectionState::LoadingConfig => {
-                    vec![Line::from(Span::from("loading config...").yellow())]
+                    vec![Line::from(
+                        Span::from(format!(
+                            "loading nodes {}/{}...",
+                            state.nodes_stash.len(),
+                            state.nodes_stash_cap
+                        ))
+                        .yellow(),
+                    )]
                 }
                 ConnectionState::Connected => vec![
                     Some(Line::from(Span::from("connected").green())),

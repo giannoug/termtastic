@@ -13,6 +13,7 @@ use crate::{
 };
 
 pub struct PersistenceService {
+    app_event_tx: broadcast::Sender<AppEvent>,
     app_event_rx: broadcast::Receiver<AppEvent>,
     forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_action_rx: mpsc::UnboundedReceiver<StateAction>,
@@ -22,6 +23,7 @@ pub struct PersistenceService {
 
 impl PersistenceService {
     pub fn new(
+        app_event_tx: broadcast::Sender<AppEvent>,
         app_event_rx: broadcast::Receiver<AppEvent>,
         forward_state_action_tx: mpsc::UnboundedSender<StateAction>,
         data_dir: PathBuf,
@@ -30,6 +32,7 @@ impl PersistenceService {
 
         (
             Self {
+                app_event_tx,
                 app_event_rx,
                 forward_state_action_tx,
                 state_action_rx,
@@ -141,7 +144,12 @@ impl PersistenceService {
                         }
                     }
 
-                    self.load_data().await?;
+                    if self.load_data().await.is_ok() {
+                        self.forward_state_action_tx
+                            .send(StateAction::Toast(Toast::normal("DB data loaded")))?;
+                    }
+
+                    self.app_event_tx.send(AppEvent::DbLoadFinished)?;
                 }
                 AppEvent::TelemetryArrived(packet) => {
                     let Some(repository) = &self.repository else {
@@ -193,7 +201,7 @@ impl PersistenceService {
             }
         };
 
-        self.forward_state_action_tx.send(StateAction::DbDataLoaded { nodes })?;
+        self.forward_state_action_tx.send(StateAction::DbNodesLoad(nodes))?;
 
         // telemetry
         match repository.telemetry_find_last_for_each_node().await {
@@ -232,9 +240,6 @@ impl PersistenceService {
                 return Ok(());
             }
         };
-
-        self.forward_state_action_tx
-            .send(StateAction::Toast(Toast::normal("DB data loaded")))?;
 
         Ok(())
     }

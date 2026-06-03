@@ -95,6 +95,7 @@ impl Repository {
                         user_public_key = excluded.user_public_key,
                         user_is_licensed = excluded.user_is_licensed,
                         user_is_unmessagable = excluded.user_is_unmessagable
+                    WHERE excluded.last_heard >= last_heard
                     "#,
                     TABLE_NAME
                 ))?;

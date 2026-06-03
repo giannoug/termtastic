@@ -1,5 +1,6 @@
 use nameof::name_of;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::path::PathBuf;
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
@@ -15,6 +16,7 @@ pub struct ConfigService {
     state_rx: watch::Receiver<State>,
     state_action_tx: mpsc::UnboundedSender<StateAction>,
     state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
+    config_path: PathBuf,
     app_config_last_hash: u64,
 }
 
@@ -25,6 +27,7 @@ impl ConfigService {
         state_rx: watch::Receiver<State>,
         state_action_tx: mpsc::UnboundedSender<StateAction>,
         state_changed_rx: broadcast::Receiver<Vec<&'static str>>,
+        config_dir: PathBuf,
     ) -> Self {
         Self {
             app_event_tx,
@@ -32,6 +35,7 @@ impl ConfigService {
             state_rx,
             state_action_tx,
             state_changed_rx,
+            config_path: config_dir.join("app.ron"),
             app_config_last_hash: 0,
         }
     }
@@ -53,7 +57,7 @@ impl ConfigService {
 
     fn handle_app_event(&mut self, event: Result<AppEvent, broadcast::error::RecvError>) -> anyhow::Result<()> {
         match event {
-            Ok(AppEvent::InitializationRequested) => match confy::load::<AppConfig>(crate::APP_NAME, "app") {
+            Ok(AppEvent::InitializationRequested) => match confy::load_path::<AppConfig>(self.config_path.as_path()) {
                 Ok(app_config) => {
                     self.state_action_tx.send(StateAction::AppConfigApply(app_config))?;
                 }
@@ -93,7 +97,7 @@ impl ConfigService {
                     let app_config_hash = calculate_hash(&app_config);
 
                     if app_config_hash != self.app_config_last_hash {
-                        confy::store(crate::APP_NAME, "app", &app_config)?;
+                        confy::store_path(self.config_path.as_path(), &app_config)?;
                         self.app_config_last_hash = app_config_hash;
                     }
                 }

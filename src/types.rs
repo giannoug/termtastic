@@ -74,6 +74,7 @@ pub enum AppEvent {
     ConfigLoaded,
     CopyToClipboardRequested(String),
     DbLoadRequested(u32),
+    DbLoadFinished,
     DeviceRebootRequested,
     DeviceRediscoverRequested,
     DeviceRemoveRequested(Device),

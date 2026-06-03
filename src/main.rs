@@ -7,11 +7,11 @@ mod state;
 mod types;
 mod ui;
 
-use etcetera::AppStrategy;
+use etcetera::BaseStrategy;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio_graceful_shutdown::{SubsystemBuilder, SubsystemHandle, Toplevel};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use tracing_unwrap::ResultExt;
 
 use crate::service::PersistenceService;
@@ -29,17 +29,14 @@ pub const APP_VERSION: &str = env!("APP_VERSION");
 
 #[tokio::main]
 async fn main() {
-    let xdg = etcetera::choose_app_strategy(etcetera::AppStrategyArgs {
-        top_level_domain: "org".to_string(),
-        author: "acelot".to_string(),
-        app_name: APP_NAME.to_string(),
-    })
-    .expect_or_log("xdg config build failed");
+    let xdg = etcetera::choose_base_strategy().expect_or_log("xdg config build failed");
+    let data_dir = xdg.data_dir().join(APP_NAME);
+    let config_dir = xdg.config_dir().join(APP_NAME);
 
     let (store, state_action_tx, state_rx, state_changed_rx) = Store::new(State::default());
 
     let (file_writer, _file_writer_guard) = tracing_appender::non_blocking(tracing_appender::rolling::daily(
-        xdg.data_dir(),
+        data_dir.join("logs"),
         format!("{}.log", APP_NAME),
     ));
 
@@ -56,11 +53,17 @@ async fn main() {
         .init();
 
     tracing::info!("application started");
+    tracing::info!("data dir: {}", data_dir.display());
+    tracing::info!("config dir: {}", config_dir.display());
 
     let (app_event_tx, app_event_rx) = broadcast::channel::<AppEvent>(1024);
 
-    let (persistence_service, persisted_state_action_tx) =
-        PersistenceService::new(app_event_rx.resubscribe(), state_action_tx.clone(), xdg.data_dir());
+    let (persistence_service, persisted_state_action_tx) = PersistenceService::new(
+        app_event_tx.clone(),
+        app_event_rx.resubscribe(),
+        state_action_tx.clone(),
+        data_dir,
+    );
 
     let (meshtastic_service, meshtastic_command_tx, meshtastic_event_rx) = MeshtasticService::new();
 
@@ -70,6 +73,7 @@ async fn main() {
         state_rx.clone(),
         persisted_state_action_tx.clone(),
         state_changed_rx.resubscribe(),
+        config_dir,
     );
 
     let ui_service = UiService::new(app_event_rx.resubscribe(), persisted_state_action_tx.clone());

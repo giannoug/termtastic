@@ -63,7 +63,7 @@ impl UiService {
                 },
                 AppEvent::TryingToQuit => {
                     self.state_action_tx
-                        .send(StateAction::Toast(Toast::normal("press Esc twice quickly to quit")))?;
+                        .send(StateAction::Toast(Toast::normal("press <Esc> twice quickly to quit")))?;
                 }
                 AppEvent::QuitRequested => {
                     subsys.request_shutdown();

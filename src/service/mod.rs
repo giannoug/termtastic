@@ -5,6 +5,7 @@ mod forms;
 mod nodes;
 mod persistence;
 mod settings;
+mod telemetry;
 mod ui;
 
 pub use chat::*;
@@ -14,4 +15,5 @@ pub use forms::*;
 pub use nodes::*;
 pub use persistence::*;
 pub use settings::*;
+pub use telemetry::*;
 pub use ui::*;

@@ -224,16 +224,15 @@ impl<'a> StatefulWidget for LogRecordWidget<'a> {
 fn get_record_paragraph(record: &'_ LogRecord, is_selected: bool, wrap: bool) -> Paragraph<'_> {
     Paragraph::new(Line::from(vec![
         Span::from(record.datetime.with_timezone(&Local).format("%H:%M:%S").to_string()).dark_gray(),
-        Span::from(" ").dark_gray(),
-        Span::from(format!("{:<5}", record.level.to_string())).style(match record.level {
+        Span::from(format!("{:^7}", record.level.to_string())).style(match record.level {
             Level::TRACE | Level::DEBUG => Style::default().green(),
             Level::INFO => Style::default().blue(),
             Level::WARN => Style::default().yellow(),
             Level::ERROR => Style::default().red(),
         }),
-        Span::from(" ").dark_gray(),
-        Span::from(format!("{}: ", record.source)).dark_gray(),
-        Span::from(record.message.clone()),
+        Span::from(format!("[{}]", &record.source)),
+        Span::from(" "),
+        Span::from(&record.message),
     ]))
     .add_modifier(if is_selected {
         Modifier::REVERSED
