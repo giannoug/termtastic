@@ -1,6 +1,7 @@
 use crate::types::{Hotkey, Node, TelemetryItem};
 use crate::ui::helpers::{
     Base64EncoderExt, ListStateExt, default_scrollbar, hops_to_spans, humanize_uptime, last_heard_to_spans,
+    short_name_to_span,
 };
 use crate::ui::widget::{PlaceholderWidget, PopupConfirmWidget, TabsWidget};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
@@ -307,21 +308,21 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
     type State = NodeInfoWidgetState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        let title = match self.context.maybe_node {
+            Some(node) => Line::from(vec![
+                Span::from(" "),
+                short_name_to_span(node, self.context.is_my_node),
+                Span::from(" "),
+                Span::from(node.long_name()).bold(),
+                Span::from(" "),
+            ]),
+            None => Line::from(Span::from("Node not found").dark_gray()),
+        };
+
         let block = Block::bordered()
             .border_type(BorderType::Thick)
             .padding(Padding::symmetric(2, 1))
-            .title(Line::from(vec![
-                Span::from(" "),
-                Span::from(
-                    self.context
-                        .maybe_node
-                        .as_ref()
-                        .and_then(|n| Some(n.long_name()))
-                        .unwrap_or("UNKNOWN".to_owned()),
-                )
-                .bold(),
-                Span::from(" "),
-            ]));
+            .title(title);
 
         let block_area = block.inner(area);
         block.render(area, buf);
