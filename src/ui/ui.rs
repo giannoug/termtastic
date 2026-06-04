@@ -1,16 +1,20 @@
 use crate::state::{State, StateAction};
 use crate::types::AppEvent;
 use crate::ui::component::{Component, Layout};
-use crossterm::event::{DisableBracketedPaste, EnableBracketedPaste};
+use crossterm::event::{
+    DisableBracketedPaste, EnableBracketedPaste, KeyboardEnhancementFlags, PopKeyboardEnhancementFlags,
+    PushKeyboardEnhancementFlags,
+};
+use crossterm::terminal::supports_keyboard_enhancement;
 use crossterm::{
     event::{Event, EventStream},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use futures::{future::FutureExt, StreamExt};
-use ratatui::{prelude::CrosstermBackend, Terminal};
+use futures::{StreamExt, future::FutureExt};
+use ratatui::{Terminal, prelude::CrosstermBackend};
 use std::{
-    io::{self, stdout, Stdout},
+    io::{self, Stdout, stdout},
     panic::{set_hook, take_hook},
 };
 use tokio::sync::{broadcast, mpsc, watch};
@@ -114,6 +118,13 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 
     execute!(stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
 
+    if supports_keyboard_enhancement()? {
+        execute!(
+            stdout(),
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        )?;
+    }
+
     Terminal::new(CrosstermBackend::new(stdout()))
 }
 
@@ -121,6 +132,10 @@ fn restore_terminal() -> io::Result<()> {
     disable_raw_mode()?;
 
     execute!(stdout(), LeaveAlternateScreen, DisableBracketedPaste)?;
+
+    if supports_keyboard_enhancement()? {
+        execute!(stdout(), PopKeyboardEnhancementFlags)?;
+    }
 
     Ok(())
 }

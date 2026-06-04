@@ -101,19 +101,12 @@ impl<'a> Component for Messenger<'a> {
             .unwrap_or(false);
 
         Vec::from([
-            input_has_something.then_some(Hotkey::new(
-                if cfg!(target_os = "macos") {
-                    "⌥ enter"
-                } else {
-                    "alt+enter"
-                },
-                "new line",
-            )),
             (!input_has_something).then_some(Hotkey::new("↑↓", "scroll")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F2", "reply")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F4", "node info")),
             Some(Hotkey::new("F5", "emoji")),
             (is_message_selected && !input_has_something).then_some(Hotkey::new("F7", "reactions")),
+            input_has_something.then_some(Hotkey::new("shift+enter", "new line")),
             input_has_valid_value.then_some(Hotkey::new("enter", "send")),
             Some(Hotkey::new("esc", "switch channel")),
         ])
@@ -222,6 +215,10 @@ impl<'a> Component for Messenger<'a> {
                         self.is_emoji_selector_visible = true;
                         return Ok(true);
                     }
+                    KeyCode::Enter if modifiers.contains(KeyModifiers::SHIFT) => {
+                        input_widget.insert_newline();
+                        return Ok(true);
+                    }
                     KeyCode::Enter => {
                         if input_widget.trimmed_len() <= INPUT_VALUE_MAX_LENGTH
                             && let Some((_, message_id)) = self.replying_to.remove(active_chat)
@@ -278,7 +275,7 @@ impl<'a> Component for Messenger<'a> {
                 modifiers,
                 ..
             }) => match code {
-                KeyCode::Enter if modifiers.contains(KeyModifiers::ALT) => {
+                KeyCode::Enter if modifiers.contains(KeyModifiers::SHIFT) => {
                     input_widget.insert_newline();
                     return Ok(true);
                 }
