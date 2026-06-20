@@ -62,7 +62,6 @@ pub enum StateAction {
     SplashLogo,
     TabSwitchToNext,
     TabSwitchToPrevious,
-    FrameCleared,
     Toast(Toast),
     SettingsFormLoadingStart {
         id: FormId,

@@ -21,6 +21,7 @@ pub struct Layout<'a> {
     logo: Text<'static>,
     nodeinfo_widget_state: NodeInfoWidgetState,
     last_esc_t: Instant,
+    last_tab: Tab,
 }
 
 impl<'a> Layout<'a> {
@@ -35,6 +36,7 @@ impl<'a> Layout<'a> {
             logo: APP_LOGO_TEXT.clone(),
             nodeinfo_widget_state: NodeInfoWidgetState::default(),
             last_esc_t: Instant::now().sub(Duration::from_secs(1)),
+            last_tab: Default::default(),
         }
     }
 }
@@ -181,6 +183,11 @@ impl<'a> Component for Layout<'a> {
             state.active_tab as usize,
         )
         .render(v[1], frame.buffer_mut());
+
+        if self.last_tab != state.active_tab {
+            Clear.render(v[3], frame.buffer_mut());
+            self.last_tab = state.active_tab;
+        }
 
         match state.active_tab {
             Tab::Chat => self.chat_component.render(state, frame, v[3]),

@@ -1,4 +1,4 @@
-use crate::state::{State, StateAction};
+use crate::state::State;
 use crate::types::AppEvent;
 use crate::ui::component::{Component, Layout};
 use crossterm::event::{
@@ -17,34 +17,29 @@ use std::{
     io::{self, Stdout, stdout},
     panic::{set_hook, take_hook},
 };
-use tokio::sync::{broadcast, mpsc, watch};
+use tokio::sync::{broadcast, watch};
 use tokio_graceful_shutdown::SubsystemHandle;
 
 pub struct Ui<'a> {
     app_event_tx: broadcast::Sender<AppEvent>,
     state_rx: watch::Receiver<State>,
-    state_action_tx: mpsc::UnboundedSender<StateAction>,
     crossterm_events: EventStream,
     layout: Layout<'a>,
 }
 
 impl<'a> Ui<'a> {
-    pub fn new(
-        app_event_tx: broadcast::Sender<AppEvent>,
-        state_rx: watch::Receiver<State>,
-        state_action_tx: mpsc::UnboundedSender<StateAction>,
-    ) -> Self {
+    pub fn new(app_event_tx: broadcast::Sender<AppEvent>, state_rx: watch::Receiver<State>) -> Self {
         Self {
             app_event_tx,
             state_rx,
-            state_action_tx,
             crossterm_events: EventStream::new(),
             layout: Layout::new(),
         }
     }
 
     pub async fn run(&mut self, subsys: &mut SubsystemHandle) -> anyhow::Result<()> {
-        let mut terminal = setup_terminal()?;
+        let supports_keyboard_enhancement = supports_keyboard_enhancement().unwrap_or(false);
+        let mut terminal = setup_terminal(supports_keyboard_enhancement)?;
 
         self.redraw(&mut terminal)?;
 
@@ -63,7 +58,7 @@ impl<'a> Ui<'a> {
             }
         }
 
-        restore_terminal()?;
+        restore_terminal(supports_keyboard_enhancement)?;
 
         Ok(())
     }
@@ -91,26 +86,17 @@ impl<'a> Ui<'a> {
     }
 
     fn redraw(&mut self, terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> anyhow::Result<()> {
-        let state = &self.state_rx.borrow();
-
-        if state.need_clear_frame {
-            terminal.clear()?;
-            self.state_action_tx.send(StateAction::FrameCleared)?;
-
-            return Ok(());
-        }
-
-        terminal.draw(|frame| self.layout.render(&state, frame, frame.area()))?;
+        terminal.draw(|frame| self.layout.render(&self.state_rx.borrow(), frame, frame.area()))?;
 
         Ok(())
     }
 }
 
-fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
+fn setup_terminal(supports_keyboard_enhancement: bool) -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
     let original_hook = take_hook();
 
     set_hook(Box::new(move |panic_info| {
-        let _ = restore_terminal();
+        let _ = restore_terminal(supports_keyboard_enhancement);
         original_hook(panic_info);
     }));
 
@@ -118,7 +104,7 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
 
     execute!(stdout(), EnterAlternateScreen, EnableBracketedPaste)?;
 
-    if supports_keyboard_enhancement()? {
+    if supports_keyboard_enhancement {
         execute!(
             stdout(),
             PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
@@ -128,12 +114,12 @@ fn setup_terminal() -> io::Result<Terminal<CrosstermBackend<Stdout>>> {
     Terminal::new(CrosstermBackend::new(stdout()))
 }
 
-fn restore_terminal() -> io::Result<()> {
+fn restore_terminal(supports_keyboard_enhancement: bool) -> io::Result<()> {
     disable_raw_mode()?;
 
     execute!(stdout(), LeaveAlternateScreen, DisableBracketedPaste)?;
 
-    if supports_keyboard_enhancement()? {
+    if supports_keyboard_enhancement {
         execute!(stdout(), PopKeyboardEnhancementFlags)?;
     }
 

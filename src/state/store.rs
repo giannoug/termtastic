@@ -113,17 +113,15 @@ impl Store {
             StateAction::TabSwitchToNext => {
                 self.state_tx.send_modify(|state| {
                     state.active_tab = state.active_tab.next();
-                    state.need_clear_frame = true;
 
-                    changed.extend([name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
+                    changed.push(name_of!(active_tab in State));
                 });
             }
             StateAction::TabSwitchToPrevious => {
                 self.state_tx.send_modify(|state| {
                     state.active_tab = state.active_tab.prev();
-                    state.need_clear_frame = true;
 
-                    changed.extend([name_of!(active_tab in State), name_of!(need_clear_frame in State)]);
+                    changed.push(name_of!(active_tab in State));
                 });
             }
             StateAction::DeviceActiveSet(device) => {
@@ -738,13 +736,6 @@ impl Store {
                     }
 
                     false
-                });
-            }
-            StateAction::FrameCleared => {
-                self.state_tx.send_modify(|state| {
-                    state.need_clear_frame = false;
-
-                    changed.push(name_of!(need_clear_frame in State));
                 });
             }
             StateAction::Toast(toast) => {
