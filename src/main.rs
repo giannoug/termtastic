@@ -25,29 +25,30 @@ async fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.contains(&"--help".to_string()) || args.contains(&"-h".to_string()) {
-        println!("\x1b[1m{}\x1b[22m {}", APP_NAME, APP_VERSION);
-        println!();
-
-        for line in ui::logo::LOGO_ASCII {
-            println!("{}", line);
-        }
-
-        println!();
-        println!("Feature-rich handmade Meshtastic® console client written in Rust.");
-        println!();
         println!(
-            "\x1b[1mUsage\x1b[22m: {}{} [OPTIONS]",
+            "\x1b[1m{}\x1b[22m {}
+
+{}
+
+Feature-rich handmade Meshtastic® console client written in Rust.
+
+\x1b[1mUsage\x1b[22m: {}{} [OPTIONS]
+
+\x1b[1mOptions\x1b[22m:
+  -h, --help     Print help
+  -V, --version  Print version
+
+\x1b[1mDirectories\x1b[22m:
+  data:    {}
+  config:  {}",
             APP_NAME,
-            if cfg!(target_os = "windows") { ".exe" } else { "" }
+            APP_VERSION,
+            ui::logo::LOGO_ASCII.join("\n"),
+            APP_NAME,
+            if cfg!(target_os = "windows") { ".exe" } else { "" },
+            data_dir.display(),
+            config_dir.display()
         );
-        println!();
-        println!("\x1b[1mOptions\x1b[22m:");
-        println!("  -h, --help     Print help");
-        println!("  -V, --version  Print version");
-        println!();
-        println!("\x1b[1mDirectories\x1b[22m:");
-        println!("  data:    {}", data_dir.display());
-        println!("  config:  {}", config_dir.display());
 
         process::exit(0);
     }
