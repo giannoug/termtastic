@@ -35,8 +35,19 @@ async fn main() {
         println!();
         println!("Feature-rich handmade Meshtastic® console client written in Rust.");
         println!();
-        println!("\x1b[1m  data dir:\x1b[22m {}", data_dir.display());
-        println!("\x1b[1mconfig dir:\x1b[22m {}", config_dir.display());
+        println!(
+            "\x1b[1mUsage\x1b[22m: {}{} [OPTIONS]",
+            APP_NAME,
+            if cfg!(target_os = "windows") { ".exe" } else { "" }
+        );
+        println!();
+        println!("\x1b[1mOptions\x1b[22m:");
+        println!("  -h, --help     Print help");
+        println!("  -V, --version  Print version");
+        println!();
+        println!("\x1b[1mDirectories\x1b[22m:");
+        println!("  data:    {}", data_dir.display());
+        println!("  config:  {}", config_dir.display());
 
         process::exit(0);
     }
