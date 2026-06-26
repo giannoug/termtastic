@@ -155,9 +155,13 @@ impl<'a> Component for Chat<'a> {
             PlaceholderWidget::dark_gray("no channels").render(area, frame.buffer_mut());
         }
 
-        if self.chat_purge.is_some() {
+        if let Some(chat_purge) = &self.chat_purge {
             PopupConfirmWidget::new(
-                "Are you sure to delete the channel chat?",
+                if chat_purge.is_direct() {
+                    "Are you sure to delete the chat?"
+                } else {
+                    "Are you sure to clear the channel messages?"
+                },
                 "confirm",
                 "cancel",
                 40,

@@ -39,8 +39,8 @@ Feature-rich handmade Meshtastic® console client written in Rust.
   -V, --version  Print version
 
 \x1b[1mDirectories\x1b[22m:
-  data:    {}
-  config:  {}",
+  \x1b[2m  data\x1b[22m  {}
+  \x1b[2mconfig\x1b[22m  {}",
             APP_NAME,
             APP_VERSION,
             ui::logo::LOGO_ASCII.join("\n"),

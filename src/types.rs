@@ -705,6 +705,12 @@ pub enum Chat {
     Direct(u32),
 }
 
+impl Chat {
+    pub fn is_direct(&self) -> bool {
+        matches!(self, Chat::Direct(_))
+    }
+}
+
 impl Ord for Chat {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {

@@ -210,9 +210,11 @@ pub fn chat_to_spans<'a>(chat: &'a Chat, state: &'a State) -> Vec<Span<'a>> {
                 .and_then(|lora| config::lo_ra_config::ModemPreset::try_from(lora.modem_preset).ok())
                 .and_then(|preset| Some(preset.as_channel_name()));
 
-            let channel = state.channels.get(channel_key).expect("should be Some");
+            let Some(channel) = state.channels.get(channel_key) else {
+                return vec![Span::from(format!("!{:x}", channel_key))];
+            };
 
-            match &channel.role {
+            match channel.role {
                 ChannelRole::Primary => vec![
                     Span::from(format!("#{}", &channel.key)).dark_gray(),
                     Span::from(" "),
