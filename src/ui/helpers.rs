@@ -31,6 +31,20 @@ static LINK_REGEX: LazyLock<Regex> = LazyLock::new(|| {
         .unwrap()
 });
 
+pub trait BatteryLevelColorExt {
+    fn battery_level_to_color(&self) -> Color;
+}
+
+impl BatteryLevelColorExt for u32 {
+    fn battery_level_to_color(&self) -> Color {
+        match self {
+            ..20 => Color::Red,
+            20..50 => Color::Yellow,
+            50.. => Color::Green,
+        }
+    }
+}
+
 pub trait SnrColorExt {
     fn snr_to_color(&self) -> Color;
 }

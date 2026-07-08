@@ -168,7 +168,8 @@ impl<'a> Component for Layout<'a> {
         let area = container.inner(frame.area());
 
         let v = RatatuiLayout::vertical([
-            Constraint::Length(2),
+            Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(1),
@@ -182,23 +183,23 @@ impl<'a> Component for Layout<'a> {
             Tab::iter().map(|t| (t as usize, t.to_string())).collect(),
             state.active_tab as usize,
         )
-        .render(v[1], frame.buffer_mut());
+        .render(v[2], frame.buffer_mut());
 
         if self.last_tab != state.active_tab {
-            Clear.render(v[3], frame.buffer_mut());
+            Clear.render(v[4], frame.buffer_mut());
             self.last_tab = state.active_tab;
         }
 
         match state.active_tab {
-            Tab::Chat => self.chat_component.render(state, frame, v[3]),
-            Tab::Nodes => self.nodes_component.render(state, frame, v[3]),
-            Tab::Settings => self.settings_component.render(state, frame, v[3]),
-            Tab::Connection => self.connection_component.render(state, frame, v[3]),
-            Tab::Logs => self.logs_component.render(state, frame, v[3]),
+            Tab::Chat => self.chat_component.render(state, frame, v[4]),
+            Tab::Nodes => self.nodes_component.render(state, frame, v[4]),
+            Tab::Settings => self.settings_component.render(state, frame, v[4]),
+            Tab::Connection => self.connection_component.render(state, frame, v[4]),
+            Tab::Logs => self.logs_component.render(state, frame, v[4]),
         }
 
         // hotkeys
-        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[4], frame.buffer_mut());
+        HotkeysWidget::new(&self.get_hotkeys(state)).render(v[5], frame.buffer_mut());
 
         // node info popup
         if let Some(node_key) = state.nodeinfo {

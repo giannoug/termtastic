@@ -17,7 +17,9 @@ pub mod prelude {
     pub use ratatui::layout::Flex;
     pub use ratatui::prelude::*;
     pub use ratatui::text::{Text, ToSpan};
-    pub use ratatui::widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, ScrollbarState, Wrap};
+    pub use ratatui::widgets::{
+        Block, BorderType, Borders, Clear, LineGauge, Padding, Paragraph, ScrollbarState, Wrap,
+    };
     pub use ratatui_textarea::TextArea;
     pub use tui_widget_list::{ListBuilder, ListState, ListView};
 }

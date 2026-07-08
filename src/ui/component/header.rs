@@ -1,5 +1,4 @@
 use crate::ui::prelude::*;
-use meshtastic::protobufs::HardwareModel;
 
 pub struct Header {}
 
@@ -35,33 +34,14 @@ impl Component for Header {
             h[0],
         );
 
-        let hw_model = state.device_metadata.as_ref().and_then(|metadata| {
-            HardwareModel::try_from(metadata.hw_model)
-                .ok()
-                .and_then(|h| Some(h.as_str_name()))
-        });
-
-        let my_node_info = if let Some(my_node) = state.get_my_node()
-            && !matches!(state.connection_state, ConnectionState::NotConnected)
-        {
-            vec![
-                if let Some(hw) = hw_model {
-                    Span::from(hw).magenta()
-                } else {
-                    Span::from("node").dark_gray()
-                },
-                Span::from(" "),
-                short_name_to_span(my_node, true),
-                Span::from("  "),
-            ]
-        } else {
-            vec![]
-        };
-
-        let conn_info = match &state.connection_state {
-            ConnectionState::NotConnected => vec![Span::from("not connected").dark_gray()],
+        match &state.connection_state {
+            ConnectionState::NotConnected => {
+                Line::from(vec![Span::from("not connected").dark_gray()])
+                    .right_aligned()
+                    .render(h[1], frame.buffer_mut());
+            }
             ConnectionState::ProblemDetected { .. } => {
-                vec![
+                Line::from(vec![
                     Span::from(format!(
                         "reconnecting in {} sec...",
                         state
@@ -70,30 +50,76 @@ impl Component for Header {
                             .unwrap_or("?".to_owned())
                     ))
                     .red(),
-                ]
+                ])
+                .right_aligned()
+                .render(h[1], frame.buffer_mut());
             }
-            ConnectionState::Connecting => vec![Span::from("connecting...").yellow()],
-            ConnectionState::LoadingConfig => vec![
-                Span::from("loading nodes ").yellow(),
-                Span::from(state.nodes_stash.len().to_string()).yellow(),
-                Span::from("/").yellow().dim(),
-                Span::from(state.nodes_stash_cap.to_string()).yellow(),
-                Span::from(" "),
-                Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
-            ],
-            ConnectionState::Connected => vec![
-                Span::from("online ").dark_gray(),
-                Span::from(state.online_nodes.to_string()).green(),
-                Span::from("/").green().dim(),
-                Span::from(state.nodes.len().to_string()).green(),
-                Span::from(" "),
-                Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
-            ],
-        };
+            ConnectionState::Connecting => {
+                Line::from(vec![Span::from("connecting...").yellow()])
+                    .right_aligned()
+                    .render(h[1], frame.buffer_mut());
+            }
+            ConnectionState::LoadingConfig => {
+                Line::from(vec![
+                    Span::from("loading nodes ").yellow(),
+                    Span::from(state.nodes_stash.len().to_string()).yellow(),
+                    Span::from("/").yellow().dim(),
+                    Span::from(state.nodes_stash_cap.to_string()).yellow(),
+                    Span::from(" "),
+                    Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
+                ])
+                .right_aligned()
+                .render(h[1], frame.buffer_mut());
+            }
+            ConnectionState::Connected => {
+                let status_line = Line::from(vec![
+                    Span::from("online ").dark_gray(),
+                    Span::from(state.online_nodes.to_string()).green(),
+                    Span::from("/").green().dim(),
+                    Span::from(state.nodes.len().to_string()).green(),
+                    Span::from(" "),
+                    Span::from("■").fg(if state.rx { Color::Red } else { Color::DarkGray }),
+                ]);
 
-        frame.render_widget(
-            Line::from([my_node_info.as_slice(), conn_info.as_slice()].concat()).right_aligned(),
-            h[1],
-        );
+                let h1_h = Layout::horizontal([
+                    Constraint::Min(0),
+                    Constraint::Length(4),
+                    Constraint::Length(11),
+                    Constraint::Length(2),
+                    Constraint::Length(6),
+                    Constraint::Length(2),
+                    Constraint::Length(status_line.width() as u16),
+                ])
+                .split(h[1]);
+
+                if let Some(battery_level) = state
+                    .my_node_key
+                    .and_then(|my_node_key| state.nodes_last_telemetry.get(&my_node_key))
+                    .and_then(|telemetry| telemetry.device_metrics.as_ref())
+                    .and_then(|device_metrics| device_metrics.battery_level)
+                {
+                    let color = battery_level.battery_level_to_color();
+
+                    Line::from(vec![Span::from(format!("{}%", battery_level)).fg(color)])
+                        .right_aligned()
+                        .render(h1_h[1], frame.buffer_mut());
+
+                    LineGauge::default()
+                        .unfilled_symbol("\u{258C}")
+                        .unfilled_style(Style::new().dark_gray())
+                        .filled_symbol("\u{258C}")
+                        .filled_style(Style::new().fg(color))
+                        .ratio(battery_level as f64 / 100.0)
+                        .label("")
+                        .render(h1_h[2], frame.buffer_mut());
+                }
+
+                if let Some(my_node) = state.get_my_node() {
+                    short_name_to_span(my_node, true).render(h1_h[4], frame.buffer_mut());
+                }
+
+                status_line.render(h1_h[6], frame.buffer_mut());
+            }
+        };
     }
 }
