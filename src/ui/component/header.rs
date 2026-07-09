@@ -96,7 +96,7 @@ impl Component for Header {
                     .my_node_key
                     .and_then(|my_node_key| state.nodes_last_telemetry.get(&my_node_key))
                     .and_then(|telemetry| telemetry.device_metrics.as_ref())
-                    .and_then(|device_metrics| device_metrics.battery_level)
+                    .and_then(|device_metrics| device_metrics.battery_level.min(Some(100)))
                 {
                     let color = battery_level.battery_level_to_color();
 
