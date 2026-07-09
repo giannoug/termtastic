@@ -15,6 +15,7 @@ use tracing_unwrap::ResultExt;
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const APP_VERSION: &str = env!("APP_VERSION");
+pub const APP_REPO: &str = env!("CARGO_PKG_REPOSITORY");
 
 #[tokio::main]
 async fn main() {
@@ -31,6 +32,7 @@ async fn main() {
 {}
 
 Feature-rich handmade Meshtastic® console client written in Rust.
+\x1b[4m\x1b[34m{}\x1b[0m\x1b[24m
 
 \x1b[1mUsage\x1b[22m: {}{} [OPTIONS]
 
@@ -44,6 +46,7 @@ Feature-rich handmade Meshtastic® console client written in Rust.
             APP_NAME,
             APP_VERSION,
             ui::logo::LOGO_ASCII.join("\n"),
+            APP_REPO,
             APP_NAME,
             if cfg!(target_os = "windows") { ".exe" } else { "" },
             data_dir.display(),
