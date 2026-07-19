@@ -175,7 +175,19 @@ impl NodesService {
             from_radio::PayloadVariant::NodeInfo(node_info) => {
                 match Node::try_from(&node_info) {
                     Ok(node) => {
+                        let node_key = node.key;
+                        let last_heard = node.last_heard.unwrap_or(Utc::now());
+
                         self.state_action_tx.send(StateAction::NodesStashPush(node))?;
+
+                        if let Some(device_metrics) = node_info.device_metrics {
+                            self.state_action_tx
+                                .send(StateAction::NodeLastTelemetrySet(NodeTelemetry {
+                                    node_key,
+                                    datetime: last_heard,
+                                    variant: meshtastic::protobufs::telemetry::Variant::DeviceMetrics(device_metrics),
+                                }))?;
+                        }
                     }
                     Err(e) => {
                         tracing::debug!(node_key = node_info.num, "can't convert NodeInfo into Node: {}", e);

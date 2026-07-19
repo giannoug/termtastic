@@ -25,8 +25,7 @@ const BLE_CONNECTION_TIMEOUT_SECS: u64 = 60;
 const TCP_CONNECTION_TIMEOUT_SECS: u64 = 5;
 const SERIAL_CONNECTION_TIMEOUT_SECS: u64 = 5;
 const SAVE_CONFIG_TIMEOUT_SECS: u64 = 5;
-const SAVE_CONFIG_AFTER_PAUSE_MILLIS: u64 = 100;
-const SAVE_SET_CHANNEL_DELAY_MILLIS: u64 = 80;
+const SAVE_CONFIG_DELAY_MILLIS: u64 = 100;
 
 pub struct MeshtasticService {
     command_rx: mpsc::UnboundedReceiver<CommandToMeshtastic>,
@@ -291,6 +290,8 @@ impl MeshtasticService {
                 match async {
                     api.start_config_transaction().await?;
 
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
+
                     api.update_config(
                         &mut packet_router,
                         Config {
@@ -299,9 +300,11 @@ impl MeshtasticService {
                     )
                     .await?;
 
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
+
                     api.commit_config_transaction().await?;
 
-                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
 
                     Ok::<(), anyhow::Error>(())
                 }
@@ -332,6 +335,8 @@ impl MeshtasticService {
                 match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
                     api.start_config_transaction().await?;
 
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
+
                     api.update_module_config(
                         &mut packet_router,
                         ModuleConfig {
@@ -340,9 +345,11 @@ impl MeshtasticService {
                     )
                     .await?;
 
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
+
                     api.commit_config_transaction().await?;
 
-                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
 
                     Ok::<(), anyhow::Error>(())
                 })
@@ -378,7 +385,7 @@ impl MeshtasticService {
                 match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
                     api.update_user(&mut packet_router, user).await?;
 
-                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
 
                     Ok::<(), anyhow::Error>(())
                 })
@@ -439,14 +446,16 @@ impl MeshtasticService {
                 match timeout(Duration::from_secs(SAVE_CONFIG_TIMEOUT_SECS), async {
                     api.start_config_transaction().await?;
 
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
+
                     for channel in channels {
                         api.update_channel_config(&mut packet_router, channel).await?;
-                        sleep(Duration::from_millis(SAVE_SET_CHANNEL_DELAY_MILLIS)).await;
+                        sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
                     }
 
                     api.commit_config_transaction().await?;
 
-                    sleep(Duration::from_millis(SAVE_CONFIG_AFTER_PAUSE_MILLIS)).await;
+                    sleep(Duration::from_millis(SAVE_CONFIG_DELAY_MILLIS)).await;
 
                     Ok::<(), anyhow::Error>(())
                 })

@@ -8,14 +8,14 @@ macro_rules! power_metrics {
             paste::paste! {
                 $items.push(TelemetryItem::item(
                     concat!("ch", $ch, "_voltage"),
-                    $power_metrics.[<ch $ch _voltage>],
-                    $power_metrics.[<ch $ch _voltage>].map(|v| format!("{:.1}V", v)),
+                    $power_metrics.data.[<ch $ch _voltage>],
+                    $power_metrics.data.[<ch $ch _voltage>].map(|v| format!("{:.1}V", v)),
                 ));
 
                 $items.push(TelemetryItem::item(
                     concat!("ch", $ch, " current"),
-                    $power_metrics.[<ch $ch _current>],
-                    $power_metrics.[<ch $ch _current>].and_then(|v| Some(format!("{:.1}A", v))),
+                    $power_metrics.data.[<ch $ch _current>],
+                    $power_metrics.data.[<ch $ch _current>].and_then(|v| Some(format!("{:.1}A", v))),
                 ));
             }
         )*
@@ -37,39 +37,43 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(device_metrics) = &last_telemetry.device_metrics {
         items.push(TelemetryItem::group(
             "Device Metrics",
-            serde_json::to_string_pretty(device_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&device_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "battery level",
-            device_metrics.battery_level,
-            device_metrics.battery_level.and_then(|v| Some(format!("{}%", v))),
+            device_metrics.data.battery_level,
+            device_metrics.data.battery_level.and_then(|v| Some(format!("{}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "voltage",
-            device_metrics.voltage,
-            device_metrics.voltage.and_then(|v| Some(format!("{:.1}V", v))),
+            device_metrics.data.voltage,
+            device_metrics.data.voltage.and_then(|v| Some(format!("{:.1}V", v))),
         ));
 
         items.push(TelemetryItem::item(
             "air util tx",
-            device_metrics.air_util_tx,
-            device_metrics.air_util_tx.and_then(|v| Some(format!("{:.2}%", v))),
+            device_metrics.data.air_util_tx,
+            device_metrics.data.air_util_tx.and_then(|v| Some(format!("{:.2}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "channel util",
-            device_metrics.channel_utilization,
+            device_metrics.data.channel_utilization,
             device_metrics
+                .data
                 .channel_utilization
                 .and_then(|v| Some(format!("{:.2}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "uptime",
-            device_metrics.uptime_seconds,
-            device_metrics.uptime_seconds.and_then(|v| Some(humanize_uptime(v))),
+            device_metrics.data.uptime_seconds,
+            device_metrics
+                .data
+                .uptime_seconds
+                .and_then(|v| Some(humanize_uptime(v))),
         ));
     }
 
@@ -77,155 +81,191 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(environment_metrics) = &last_telemetry.environment_metrics {
         items.push(TelemetryItem::group(
             "Environment Metrics",
-            serde_json::to_string_pretty(environment_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&environment_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "temperature",
-            environment_metrics.temperature,
+            environment_metrics.data.temperature,
             environment_metrics
+                .data
                 .temperature
                 .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
 
         items.push(TelemetryItem::item(
             "relative humidity",
-            environment_metrics.relative_humidity,
+            environment_metrics.data.relative_humidity,
             environment_metrics
+                .data
                 .relative_humidity
                 .and_then(|v| Some(format!("{:.1}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "barometric pressure",
-            environment_metrics.barometric_pressure,
+            environment_metrics.data.barometric_pressure,
             environment_metrics
+                .data
                 .barometric_pressure
                 .and_then(|v| Some(format!("{:.1}hPA", v))),
         ));
 
         items.push(TelemetryItem::item(
             "gas resistance",
-            environment_metrics.gas_resistance,
+            environment_metrics.data.gas_resistance,
             environment_metrics
+                .data
                 .gas_resistance
                 .and_then(|v| Some(format!("{:.1}MOhm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "current",
-            environment_metrics.current,
-            environment_metrics.current.and_then(|v| Some(format!("{:.1}A", v))),
+            environment_metrics.data.current,
+            environment_metrics
+                .data
+                .current
+                .and_then(|v| Some(format!("{:.1}A", v))),
         ));
 
         items.push(TelemetryItem::item(
             "voltage",
-            environment_metrics.voltage,
-            environment_metrics.voltage.and_then(|v| Some(format!("{:.1}V", v))),
+            environment_metrics.data.voltage,
+            environment_metrics
+                .data
+                .voltage
+                .and_then(|v| Some(format!("{:.1}V", v))),
         ));
 
         items.push(TelemetryItem::item(
             "IAQ",
-            environment_metrics.iaq,
-            environment_metrics.iaq.and_then(|v| Some(v)),
+            environment_metrics.data.iaq,
+            environment_metrics.data.iaq.and_then(|v| Some(v)),
         ));
 
         items.push(TelemetryItem::item(
             "distance",
-            environment_metrics.distance,
-            environment_metrics.distance.and_then(|v| Some(format!("{:.3}mm", v))),
+            environment_metrics.data.distance,
+            environment_metrics
+                .data
+                .distance
+                .and_then(|v| Some(format!("{:.3}mm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "lux",
-            environment_metrics.lux,
-            environment_metrics.lux.and_then(|v| Some(format!("{:.2}", v))),
+            environment_metrics.data.lux,
+            environment_metrics.data.lux.and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "white lux",
-            environment_metrics.white_lux,
-            environment_metrics.white_lux.and_then(|v| Some(format!("{:.2}", v))),
+            environment_metrics.data.white_lux,
+            environment_metrics
+                .data
+                .white_lux
+                .and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "infrared lux",
-            environment_metrics.ir_lux,
-            environment_metrics.ir_lux.and_then(|v| Some(format!("{:.2}", v))),
+            environment_metrics.data.ir_lux,
+            environment_metrics.data.ir_lux.and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "ultraviolet lux",
-            environment_metrics.uv_lux,
-            environment_metrics.uv_lux.and_then(|v| Some(format!("{:.2}", v))),
+            environment_metrics.data.uv_lux,
+            environment_metrics.data.uv_lux.and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "wind direction",
-            environment_metrics.wind_direction,
-            environment_metrics.wind_direction.and_then(|v| Some(format!("{}°", v))),
+            environment_metrics.data.wind_direction,
+            environment_metrics
+                .data
+                .wind_direction
+                .and_then(|v| Some(format!("{}°", v))),
         ));
 
         items.push(TelemetryItem::item(
             "wind speed",
-            environment_metrics.wind_speed,
+            environment_metrics.data.wind_speed,
             environment_metrics
+                .data
                 .wind_speed
                 .and_then(|v| Some(format!("{:.2}m/s", v))),
         ));
 
         items.push(TelemetryItem::item(
             "wind gust",
-            environment_metrics.wind_gust,
-            environment_metrics.wind_gust.and_then(|v| Some(format!("{:.2}m/s", v))),
+            environment_metrics.data.wind_gust,
+            environment_metrics
+                .data
+                .wind_gust
+                .and_then(|v| Some(format!("{:.2}m/s", v))),
         ));
 
         items.push(TelemetryItem::item(
             "wind lull",
-            environment_metrics.wind_lull,
-            environment_metrics.wind_lull.and_then(|v| Some(format!("{:.2}m/s", v))),
+            environment_metrics.data.wind_lull,
+            environment_metrics
+                .data
+                .wind_lull
+                .and_then(|v| Some(format!("{:.2}m/s", v))),
         ));
 
         items.push(TelemetryItem::item(
             "weight",
-            environment_metrics.weight,
-            environment_metrics.weight.and_then(|v| Some(format!("{:.3}kg", v))),
+            environment_metrics.data.weight,
+            environment_metrics
+                .data
+                .weight
+                .and_then(|v| Some(format!("{:.3}kg", v))),
         ));
 
         items.push(TelemetryItem::item(
             "radiation",
-            environment_metrics.radiation,
+            environment_metrics.data.radiation,
             environment_metrics
+                .data
                 .radiation
                 .and_then(|v| Some(format!("{:.3}µR/h", v))),
         ));
 
         items.push(TelemetryItem::item(
             "rainfall 1h",
-            environment_metrics.rainfall_1h,
+            environment_metrics.data.rainfall_1h,
             environment_metrics
+                .data
                 .rainfall_1h
                 .and_then(|v| Some(format!("{:.1}mm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "rainfall 24h",
-            environment_metrics.rainfall_24h,
+            environment_metrics.data.rainfall_24h,
             environment_metrics
+                .data
                 .rainfall_24h
                 .and_then(|v| Some(format!("{:.1}mm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "soil moisture",
-            environment_metrics.soil_moisture,
-            environment_metrics.soil_moisture.and_then(|v| Some(format!("{}%", v))),
+            environment_metrics.data.soil_moisture,
+            environment_metrics
+                .data
+                .soil_moisture
+                .and_then(|v| Some(format!("{}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "soil temperature",
-            environment_metrics.soil_temperature,
+            environment_metrics.data.soil_temperature,
             environment_metrics
+                .data
                 .soil_temperature
                 .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
@@ -235,197 +275,227 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(air_quality_metrics) = &last_telemetry.air_quality_metrics {
         items.push(TelemetryItem::group(
             "Air Quality Metrics",
-            serde_json::to_string_pretty(air_quality_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&air_quality_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "PM1.0 standard",
-            air_quality_metrics.pm10_standard,
+            air_quality_metrics.data.pm10_standard,
             air_quality_metrics
+                .data
                 .pm10_standard
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM2.5 standard",
-            air_quality_metrics.pm25_standard,
+            air_quality_metrics.data.pm25_standard,
             air_quality_metrics
+                .data
                 .pm25_standard
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM10 standard",
-            air_quality_metrics.pm100_standard,
+            air_quality_metrics.data.pm100_standard,
             air_quality_metrics
+                .data
                 .pm100_standard
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM1.0 environmental",
-            air_quality_metrics.pm10_environmental,
+            air_quality_metrics.data.pm10_environmental,
             air_quality_metrics
+                .data
                 .pm10_environmental
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM2.5 environmental",
-            air_quality_metrics.pm25_environmental,
+            air_quality_metrics.data.pm25_environmental,
             air_quality_metrics
+                .data
                 .pm25_environmental
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM10 environmental",
-            air_quality_metrics.pm100_environmental,
+            air_quality_metrics.data.pm100_environmental,
             air_quality_metrics
+                .data
                 .pm100_environmental
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "0.3µm particles",
-            air_quality_metrics.particles_03um,
+            air_quality_metrics.data.particles_03um,
             air_quality_metrics
+                .data
                 .particles_03um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "0.5µm particles",
-            air_quality_metrics.particles_05um,
+            air_quality_metrics.data.particles_05um,
             air_quality_metrics
+                .data
                 .particles_05um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "1.0µm particles",
-            air_quality_metrics.particles_10um,
+            air_quality_metrics.data.particles_10um,
             air_quality_metrics
+                .data
                 .particles_10um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "2.5µm particles",
-            air_quality_metrics.particles_25um,
+            air_quality_metrics.data.particles_25um,
             air_quality_metrics
+                .data
                 .particles_25um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "5.0µm particles",
-            air_quality_metrics.particles_50um,
+            air_quality_metrics.data.particles_50um,
             air_quality_metrics
+                .data
                 .particles_50um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "10.0µm particles",
-            air_quality_metrics.particles_100um,
+            air_quality_metrics.data.particles_100um,
             air_quality_metrics
+                .data
                 .particles_100um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "CO2",
-            air_quality_metrics.co2,
-            air_quality_metrics.co2.and_then(|v| Some(format!("{}ppm", v))),
+            air_quality_metrics.data.co2,
+            air_quality_metrics.data.co2.and_then(|v| Some(format!("{}ppm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "CO2 temperature",
-            air_quality_metrics.co2_temperature,
+            air_quality_metrics.data.co2_temperature,
             air_quality_metrics
+                .data
                 .co2_temperature
                 .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
 
         items.push(TelemetryItem::item(
             "CO2 humidity",
-            air_quality_metrics.co2_humidity,
+            air_quality_metrics.data.co2_humidity,
             air_quality_metrics
+                .data
                 .co2_humidity
                 .and_then(|v| Some(format!("{:.1}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "formaldehyde",
-            air_quality_metrics.form_formaldehyde,
+            air_quality_metrics.data.form_formaldehyde,
             air_quality_metrics
+                .data
                 .form_formaldehyde
                 .and_then(|v| Some(format!("{:.1}ppb", v))),
         ));
 
         items.push(TelemetryItem::item(
             "formaldehyde humidity",
-            air_quality_metrics.form_humidity,
+            air_quality_metrics.data.form_humidity,
             air_quality_metrics
+                .data
                 .form_humidity
                 .and_then(|v| Some(format!("{:.1}%RH", v))),
         ));
 
         items.push(TelemetryItem::item(
             "formaldehyde temperature",
-            air_quality_metrics.form_temperature,
+            air_quality_metrics.data.form_temperature,
             air_quality_metrics
+                .data
                 .form_temperature
                 .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM4.0 standard",
-            air_quality_metrics.pm40_standard,
+            air_quality_metrics.data.pm40_standard,
             air_quality_metrics
+                .data
                 .pm40_standard
                 .and_then(|v| Some(format!("{}µg/m³", v))),
         ));
 
         items.push(TelemetryItem::item(
             "4.0µm particles",
-            air_quality_metrics.particles_40um,
+            air_quality_metrics.data.particles_40um,
             air_quality_metrics
+                .data
                 .particles_40um
                 .and_then(|v| Some(format!("{}/0.1L", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM temperature",
-            air_quality_metrics.pm_temperature,
+            air_quality_metrics.data.pm_temperature,
             air_quality_metrics
+                .data
                 .pm_temperature
                 .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM humidity",
-            air_quality_metrics.pm_humidity,
-            air_quality_metrics.pm_humidity.and_then(|v| Some(format!("{:.1}%", v))),
+            air_quality_metrics.data.pm_humidity,
+            air_quality_metrics
+                .data
+                .pm_humidity
+                .and_then(|v| Some(format!("{:.1}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM VOC index",
-            air_quality_metrics.pm_voc_idx,
-            air_quality_metrics.pm_voc_idx.and_then(|v| Some(format!("{:.2}", v))),
+            air_quality_metrics.data.pm_voc_idx,
+            air_quality_metrics
+                .data
+                .pm_voc_idx
+                .and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "PM NOx index",
-            air_quality_metrics.pm_nox_idx,
-            air_quality_metrics.pm_nox_idx.and_then(|v| Some(format!("{:.2}", v))),
+            air_quality_metrics.data.pm_nox_idx,
+            air_quality_metrics
+                .data
+                .pm_nox_idx
+                .and_then(|v| Some(format!("{:.2}", v))),
         ));
 
         items.push(TelemetryItem::item(
             "typical particle size",
-            air_quality_metrics.particles_tps,
+            air_quality_metrics.data.particles_tps,
             air_quality_metrics
+                .data
                 .particles_tps
                 .and_then(|v| Some(format!("{:.2}µm", v))),
         ));
@@ -435,65 +505,67 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(host_metrics) = &last_telemetry.host_metrics {
         items.push(TelemetryItem::group(
             "Host Metrics",
-            serde_json::to_string_pretty(host_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&host_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "uptime",
-            Some(host_metrics.uptime_seconds),
-            Some(humanize_uptime(host_metrics.uptime_seconds)),
+            Some(host_metrics.data.uptime_seconds),
+            Some(humanize_uptime(host_metrics.data.uptime_seconds)),
         ));
 
         items.push(TelemetryItem::item(
             "free memory",
-            Some(host_metrics.freemem_bytes),
-            Some(format!("{}MB", host_metrics.freemem_bytes / 1024)),
+            Some(host_metrics.data.freemem_bytes),
+            Some(format!("{}MB", host_metrics.data.freemem_bytes / 1024)),
         ));
 
         items.push(TelemetryItem::item(
             "disk 1 free space",
-            Some(host_metrics.diskfree1_bytes),
-            Some(format!("{}MB", host_metrics.diskfree1_bytes / 1024)),
+            Some(host_metrics.data.diskfree1_bytes),
+            Some(format!("{}MB", host_metrics.data.diskfree1_bytes / 1024)),
         ));
 
         items.push(TelemetryItem::item(
             "disk 2 free space",
-            host_metrics.diskfree2_bytes,
+            host_metrics.data.diskfree2_bytes,
             host_metrics
+                .data
                 .diskfree2_bytes
                 .and_then(|b| Some(format!("{}MB", b / 1024))),
         ));
 
         items.push(TelemetryItem::item(
             "disk 3 free space",
-            host_metrics.diskfree3_bytes,
+            host_metrics.data.diskfree3_bytes,
             host_metrics
+                .data
                 .diskfree3_bytes
                 .and_then(|b| Some(format!("{}MB", b / 1024))),
         ));
 
         items.push(TelemetryItem::item(
             "load 1 min",
-            Some(host_metrics.load1),
-            Some(host_metrics.load1),
+            Some(host_metrics.data.load1),
+            Some(host_metrics.data.load1),
         ));
 
         items.push(TelemetryItem::item(
             "load 5 min",
-            Some(host_metrics.load5),
-            Some(host_metrics.load5),
+            Some(host_metrics.data.load5),
+            Some(host_metrics.data.load5),
         ));
 
         items.push(TelemetryItem::item(
             "load 15 min",
-            Some(host_metrics.load15),
-            Some(host_metrics.load15),
+            Some(host_metrics.data.load15),
+            Some(host_metrics.data.load15),
         ));
 
         items.push(TelemetryItem::item(
             "user string",
-            host_metrics.user_string.as_ref(),
-            host_metrics.user_string.as_ref(),
+            host_metrics.data.user_string.as_ref(),
+            host_metrics.data.user_string.as_ref(),
         ));
     }
 
@@ -501,7 +573,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(power_metrics) = &last_telemetry.power_metrics {
         items.push(TelemetryItem::group(
             "Power Metrics",
-            serde_json::to_string_pretty(power_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&power_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         power_metrics!(items, power_metrics, "1", "2", "3", "4", "5", "6", "7", "8");
@@ -511,97 +583,97 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(local_stats) = &last_telemetry.local_stats {
         items.push(TelemetryItem::group(
             "Local Stats",
-            serde_json::to_string_pretty(local_stats).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&local_stats.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "uptime",
-            Some(local_stats.uptime_seconds),
-            Some(humanize_uptime(local_stats.uptime_seconds)),
+            Some(local_stats.data.uptime_seconds),
+            Some(humanize_uptime(local_stats.data.uptime_seconds)),
         ));
 
         items.push(TelemetryItem::item(
             "channel utilization",
-            Some(local_stats.channel_utilization),
-            Some(format!("{:.2}%", local_stats.channel_utilization)),
+            Some(local_stats.data.channel_utilization),
+            Some(format!("{:.2}%", local_stats.data.channel_utilization)),
         ));
 
         items.push(TelemetryItem::item(
             "air util tx",
-            Some(local_stats.air_util_tx),
-            Some(format!("{:.2}%", local_stats.air_util_tx)),
+            Some(local_stats.data.air_util_tx),
+            Some(format!("{:.2}%", local_stats.data.air_util_tx)),
         ));
 
         items.push(TelemetryItem::item(
             "packets tx",
-            Some(local_stats.num_packets_tx),
-            Some(format!("{}", local_stats.num_packets_tx)),
+            Some(local_stats.data.num_packets_tx),
+            Some(format!("{}", local_stats.data.num_packets_tx)),
         ));
 
         items.push(TelemetryItem::item(
             "packets rx",
-            Some(local_stats.num_packets_rx),
-            Some(format!("{}", local_stats.num_packets_rx)),
+            Some(local_stats.data.num_packets_rx),
+            Some(format!("{}", local_stats.data.num_packets_rx)),
         ));
 
         items.push(TelemetryItem::item(
             "packets rx bad",
-            Some(local_stats.num_packets_rx_bad),
-            Some(format!("{}", local_stats.num_packets_rx_bad)),
+            Some(local_stats.data.num_packets_rx_bad),
+            Some(format!("{}", local_stats.data.num_packets_rx_bad)),
         ));
 
         items.push(TelemetryItem::item(
             "online nodes",
-            Some(local_stats.num_online_nodes),
-            Some(format!("{}", local_stats.num_online_nodes)),
+            Some(local_stats.data.num_online_nodes),
+            Some(format!("{}", local_stats.data.num_online_nodes)),
         ));
 
         items.push(TelemetryItem::item(
             "total nodes",
-            Some(local_stats.num_total_nodes),
-            Some(format!("{}", local_stats.num_total_nodes)),
+            Some(local_stats.data.num_total_nodes),
+            Some(format!("{}", local_stats.data.num_total_nodes)),
         ));
 
         items.push(TelemetryItem::item(
             "rx dupe",
-            Some(local_stats.num_rx_dupe),
-            Some(format!("{}", local_stats.num_rx_dupe)),
+            Some(local_stats.data.num_rx_dupe),
+            Some(format!("{}", local_stats.data.num_rx_dupe)),
         ));
 
         items.push(TelemetryItem::item(
             "tx relay",
-            Some(local_stats.num_tx_relay),
-            Some(format!("{}", local_stats.num_tx_relay)),
+            Some(local_stats.data.num_tx_relay),
+            Some(format!("{}", local_stats.data.num_tx_relay)),
         ));
 
         items.push(TelemetryItem::item(
             "tx relay canceled",
-            Some(local_stats.num_tx_relay_canceled),
-            Some(format!("{}", local_stats.num_tx_relay_canceled)),
+            Some(local_stats.data.num_tx_relay_canceled),
+            Some(format!("{}", local_stats.data.num_tx_relay_canceled)),
         ));
 
         items.push(TelemetryItem::item(
             "heap total",
-            Some(local_stats.heap_total_bytes),
-            Some(format!("{}KB", local_stats.heap_total_bytes / 1024)),
+            Some(local_stats.data.heap_total_bytes),
+            Some(format!("{}KB", local_stats.data.heap_total_bytes / 1024)),
         ));
 
         items.push(TelemetryItem::item(
             "heap free",
-            Some(local_stats.heap_free_bytes),
-            Some(format!("{}KB", local_stats.heap_free_bytes / 1024)),
+            Some(local_stats.data.heap_free_bytes),
+            Some(format!("{}KB", local_stats.data.heap_free_bytes / 1024)),
         ));
 
         items.push(TelemetryItem::item(
             "tx dropped",
-            Some(local_stats.num_tx_dropped),
-            Some(format!("{}", local_stats.num_tx_dropped)),
+            Some(local_stats.data.num_tx_dropped),
+            Some(format!("{}", local_stats.data.num_tx_dropped)),
         ));
 
         items.push(TelemetryItem::item(
             "noise floor",
-            Some(local_stats.noise_floor),
-            Some(format!("{}dBm", local_stats.noise_floor)),
+            Some(local_stats.data.noise_floor),
+            Some(format!("{}dBm", local_stats.data.noise_floor)),
         ));
     }
 
@@ -609,25 +681,28 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(health_metrics) = &last_telemetry.health_metrics {
         items.push(TelemetryItem::group(
             "Health Metrics",
-            serde_json::to_string_pretty(health_metrics).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&health_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "heart rate",
-            health_metrics.heart_bpm,
-            health_metrics.heart_bpm.and_then(|v| Some(format!("{}bpm", v))),
+            health_metrics.data.heart_bpm,
+            health_metrics.data.heart_bpm.and_then(|v| Some(format!("{}bpm", v))),
         ));
 
         items.push(TelemetryItem::item(
             "SpO2",
-            health_metrics.sp_o2,
-            health_metrics.sp_o2.and_then(|v| Some(format!("{}%", v))),
+            health_metrics.data.sp_o2,
+            health_metrics.data.sp_o2.and_then(|v| Some(format!("{}%", v))),
         ));
 
         items.push(TelemetryItem::item(
             "body temperature",
-            health_metrics.temperature,
-            health_metrics.temperature.and_then(|v| Some(format!("{:.1}°C", v))),
+            health_metrics.data.temperature,
+            health_metrics
+                .data
+                .temperature
+                .and_then(|v| Some(format!("{:.1}°C", v))),
         ));
     }
 
@@ -635,49 +710,49 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(traffic_management_stats) = &last_telemetry.traffic_management_stats {
         items.push(TelemetryItem::group(
             "Traffic Management Stats",
-            serde_json::to_string_pretty(traffic_management_stats).unwrap_or("serialize failed".to_owned()),
+            serde_json::to_string_pretty(&traffic_management_stats.data).unwrap_or("serialize failed".to_owned()),
         ));
 
         items.push(TelemetryItem::item(
             "packets inspected",
-            Some(traffic_management_stats.packets_inspected),
-            Some(format!("{}", traffic_management_stats.packets_inspected)),
+            Some(traffic_management_stats.data.packets_inspected),
+            Some(format!("{}", traffic_management_stats.data.packets_inspected)),
         ));
 
         items.push(TelemetryItem::item(
             "position dedup drops",
-            Some(traffic_management_stats.position_dedup_drops),
-            Some(format!("{}", traffic_management_stats.position_dedup_drops)),
+            Some(traffic_management_stats.data.position_dedup_drops),
+            Some(format!("{}", traffic_management_stats.data.position_dedup_drops)),
         ));
 
         items.push(TelemetryItem::item(
             "nodeinfo cache hits",
-            Some(traffic_management_stats.nodeinfo_cache_hits),
-            Some(format!("{}", traffic_management_stats.nodeinfo_cache_hits)),
+            Some(traffic_management_stats.data.nodeinfo_cache_hits),
+            Some(format!("{}", traffic_management_stats.data.nodeinfo_cache_hits)),
         ));
 
         items.push(TelemetryItem::item(
             "rate limit drops",
-            Some(traffic_management_stats.rate_limit_drops),
-            Some(format!("{}", traffic_management_stats.rate_limit_drops)),
+            Some(traffic_management_stats.data.rate_limit_drops),
+            Some(format!("{}", traffic_management_stats.data.rate_limit_drops)),
         ));
 
         items.push(TelemetryItem::item(
             "unknown packet drops",
-            Some(traffic_management_stats.unknown_packet_drops),
-            Some(format!("{}", traffic_management_stats.unknown_packet_drops)),
+            Some(traffic_management_stats.data.unknown_packet_drops),
+            Some(format!("{}", traffic_management_stats.data.unknown_packet_drops)),
         ));
 
         items.push(TelemetryItem::item(
             "hop exhausted packets",
-            Some(traffic_management_stats.hop_exhausted_packets),
-            Some(format!("{}", traffic_management_stats.hop_exhausted_packets)),
+            Some(traffic_management_stats.data.hop_exhausted_packets),
+            Some(format!("{}", traffic_management_stats.data.hop_exhausted_packets)),
         ));
 
         items.push(TelemetryItem::item(
             "router hops preserved",
-            Some(traffic_management_stats.router_hops_preserved),
-            Some(format!("{}", traffic_management_stats.router_hops_preserved)),
+            Some(traffic_management_stats.data.router_hops_preserved),
+            Some(format!("{}", traffic_management_stats.data.router_hops_preserved)),
         ));
     }
 

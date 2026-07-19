@@ -584,7 +584,11 @@ impl TryFrom<&meshtastic::protobufs::NodeInfo> for Node {
     type Error = anyhow::Error;
 
     fn try_from(value: &meshtastic::protobufs::NodeInfo) -> Result<Self, Self::Error> {
-        let last_heard = DateTime::from_timestamp(value.last_heard as i64, 0);
+        let last_heard = if value.last_heard > 0 {
+            DateTime::from_timestamp(value.last_heard as i64, 0)
+        } else {
+            None
+        };
 
         let mut node = Self {
             key: value.num,
@@ -611,7 +615,11 @@ impl From<&meshtastic::protobufs::MeshPacket> for Node {
             key: packet.from,
             user: None,
             hops: Some(packet.hop_start.saturating_sub(packet.hop_limit)),
-            last_heard: DateTime::from_timestamp(packet.rx_time as i64, 0),
+            last_heard: if packet.rx_time > 0 {
+                DateTime::from_timestamp(packet.rx_time as i64, 0)
+            } else {
+                None
+            },
             snr: packet.rx_snr,
             rssi: Some(packet.rx_rssi),
             is_favorite: false,
@@ -632,7 +640,11 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User)>
     fn try_from(
         (packet, user): (&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::User),
     ) -> Result<Self, Self::Error> {
-        let last_heard = DateTime::from_timestamp(packet.rx_time as i64, 0);
+        let last_heard = if packet.rx_time > 0 {
+            DateTime::from_timestamp(packet.rx_time as i64, 0)
+        } else {
+            None
+        };
 
         let mut node = Self {
             key: packet.from,
@@ -892,14 +904,20 @@ impl TryFrom<(&meshtastic::protobufs::MeshPacket, &meshtastic::protobufs::Data)>
 
 #[derive(Debug, Clone, Default)]
 pub struct NodeLastTelemetry {
-    pub device_metrics: Option<meshtastic::protobufs::DeviceMetrics>,
-    pub environment_metrics: Option<meshtastic::protobufs::EnvironmentMetrics>,
-    pub air_quality_metrics: Option<meshtastic::protobufs::AirQualityMetrics>,
-    pub power_metrics: Option<meshtastic::protobufs::PowerMetrics>,
-    pub local_stats: Option<meshtastic::protobufs::LocalStats>,
-    pub health_metrics: Option<meshtastic::protobufs::HealthMetrics>,
-    pub host_metrics: Option<meshtastic::protobufs::HostMetrics>,
-    pub traffic_management_stats: Option<meshtastic::protobufs::TrafficManagementStats>,
+    pub device_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::DeviceMetrics>>,
+    pub environment_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::EnvironmentMetrics>>,
+    pub air_quality_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::AirQualityMetrics>>,
+    pub power_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::PowerMetrics>>,
+    pub local_stats: Option<NodeLastTelemetryItem<meshtastic::protobufs::LocalStats>>,
+    pub health_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::HealthMetrics>>,
+    pub host_metrics: Option<NodeLastTelemetryItem<meshtastic::protobufs::HostMetrics>>,
+    pub traffic_management_stats: Option<NodeLastTelemetryItem<meshtastic::protobufs::TrafficManagementStats>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeLastTelemetryItem<T: Sized> {
+    pub datetime: DateTime<Utc>,
+    pub data: T,
 }
 
 #[derive(Debug, Clone)]

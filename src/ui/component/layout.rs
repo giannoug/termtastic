@@ -268,8 +268,8 @@ fn build_nodeinfo_context(node_key: u32, state: &State) -> NodeInfoContext<'_> {
         uptime: state
             .nodes_last_telemetry
             .get(&node_key)
-            .and_then(|t| t.device_metrics)
-            .and_then(|m| m.uptime_seconds),
+            .and_then(|t| t.device_metrics.as_ref())
+            .and_then(|m| m.data.uptime_seconds),
         is_my_node: state.my_node_key == Some(node_key),
     }
 }
