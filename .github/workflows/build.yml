@@ -51,6 +51,11 @@ jobs:
             archive_ext: .tar.gz
             binary_name: termtastic
 
+          - target: arm-unknown-linux-gnueabihf
+            os: ubuntu-24.04
+            archive_ext: .tar.gz
+            binary_name: termtastic
+
           - target: x86_64-apple-darwin
             os: macos-latest
             archive_ext: .tar.gz
@@ -77,6 +82,23 @@ jobs:
           sudo apt-get update && \
           sudo apt-get install -y \
             musl-tools
+
+      - name: Install system dependencies for Linux (armhf cross)
+        if: matrix.target == 'arm-unknown-linux-gnueabihf'
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y \
+            gcc-arm-linux-gnueabihf \
+            libc6-dev-armhf-cross
+
+      - name: Configure Rust/C cross linker for armhf
+        if: matrix.target == 'arm-unknown-linux-gnueabihf'
+        shell: bash
+        run: |
+          echo "CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc" >> "$GITHUB_ENV"
+          echo "CC_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc" >> "$GITHUB_ENV"
+          echo "AR_arm_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_ALLOW_CROSS=1" >> "$GITHUB_ENV"
 
       - name: Cache cargo registry
         uses: actions/cache@v5
