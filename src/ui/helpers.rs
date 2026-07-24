@@ -326,7 +326,7 @@ pub fn humanize_last_heard<'a>(delta: TimeDelta) -> Vec<Span<'a>> {
 
     if delta.num_minutes() < 60 {
         return vec![
-            Span::from(format!("{}m", delta.num_minutes())),
+            Span::from(format!("{}m", delta.num_minutes())).yellow(),
             Span::from(" ago").dark_gray(),
         ];
     }

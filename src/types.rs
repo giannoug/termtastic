@@ -931,6 +931,7 @@ pub struct NodeTelemetry {
 pub enum TelemetryItem {
     Group {
         title: String,
+        datetime: DateTime<Utc>,
         json: String,
     },
     Item {
@@ -941,9 +942,10 @@ pub enum TelemetryItem {
 }
 
 impl TelemetryItem {
-    pub fn group(title: impl AsRef<str>, json: String) -> Self {
+    pub fn group(title: impl AsRef<str>, datetime: DateTime<Utc>, json: String) -> Self {
         Self::Group {
             title: title.as_ref().to_owned(),
+            datetime,
             json,
         }
     }

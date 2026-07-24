@@ -131,7 +131,7 @@ impl State {
                     return true;
                 }
 
-                let online_text = if node
+                let online_token = if node
                     .last_heard
                     .and_then(|last_heard| Some((now - last_heard).num_seconds() < ONLINE_NODE_THRESHOLD_SECS))
                     .unwrap_or(false)
@@ -141,9 +141,15 @@ impl State {
                     "$offline"
                 };
 
-                filter
-                    .iter()
-                    .all(|token| node.fulltext.contains(token) || online_text.contains(token))
+                let telemetry_token = if self.nodes_last_telemetry.contains_key(&node.key) {
+                    "$telemetry"
+                } else {
+                    ""
+                };
+
+                filter.iter().all(|token| {
+                    node.fulltext.contains(token) || online_token.contains(token) || telemetry_token.contains(token)
+                })
             })
             .sorted_by(|n1, n2| {
                 match (Some(n1.key) == self.my_node_key, Some(n2.key) == self.my_node_key) {

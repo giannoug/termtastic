@@ -37,6 +37,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(device_metrics) = &last_telemetry.device_metrics {
         items.push(TelemetryItem::group(
             "Device Metrics",
+            device_metrics.datetime,
             serde_json::to_string_pretty(&device_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -81,6 +82,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(environment_metrics) = &last_telemetry.environment_metrics {
         items.push(TelemetryItem::group(
             "Environment Metrics",
+            environment_metrics.datetime,
             serde_json::to_string_pretty(&environment_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -275,6 +277,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(air_quality_metrics) = &last_telemetry.air_quality_metrics {
         items.push(TelemetryItem::group(
             "Air Quality Metrics",
+            air_quality_metrics.datetime,
             serde_json::to_string_pretty(&air_quality_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -505,6 +508,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(host_metrics) = &last_telemetry.host_metrics {
         items.push(TelemetryItem::group(
             "Host Metrics",
+            host_metrics.datetime,
             serde_json::to_string_pretty(&host_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -573,6 +577,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(power_metrics) = &last_telemetry.power_metrics {
         items.push(TelemetryItem::group(
             "Power Metrics",
+            power_metrics.datetime,
             serde_json::to_string_pretty(&power_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -583,6 +588,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(local_stats) = &last_telemetry.local_stats {
         items.push(TelemetryItem::group(
             "Local Stats",
+            local_stats.datetime,
             serde_json::to_string_pretty(&local_stats.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -681,6 +687,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(health_metrics) = &last_telemetry.health_metrics {
         items.push(TelemetryItem::group(
             "Health Metrics",
+            health_metrics.datetime,
             serde_json::to_string_pretty(&health_metrics.data).unwrap_or("serialize failed".to_owned()),
         ));
 
@@ -710,6 +717,7 @@ pub fn update_nodeinfo_telemetry(state: &mut State) -> bool {
     if let Some(traffic_management_stats) = &last_telemetry.traffic_management_stats {
         items.push(TelemetryItem::group(
             "Traffic Management Stats",
+            traffic_management_stats.datetime,
             serde_json::to_string_pretty(&traffic_management_stats.data).unwrap_or("serialize failed".to_owned()),
         ));
 

@@ -1,9 +1,10 @@
 use crate::types::{Hotkey, Node, TelemetryItem};
 use crate::ui::helpers::{
-    Base64EncoderExt, ListStateExt, default_scrollbar, hops_to_spans, humanize_uptime, last_heard_to_spans,
-    short_name_to_span,
+    Base64EncoderExt, ListStateExt, default_scrollbar, hops_to_spans, humanize_last_heard, humanize_uptime,
+    last_heard_to_spans, short_name_to_span,
 };
 use crate::ui::widget::{PlaceholderWidget, PopupConfirmWidget, TabsWidget};
+use chrono::Utc;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     prelude::*,
@@ -414,17 +415,21 @@ struct TelemetryItemWidget<'a> {
 impl<'a> Widget for TelemetryItemWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         match self.item {
-            TelemetryItem::Group { title, .. } => {
-                Line::from(vec![
-                    Span::from("§ ").bold(),
-                    Span::from(title).bold().add_modifier(if self.is_selected {
-                        Modifier::UNDERLINED
-                    } else {
-                        Modifier::empty()
-                    }),
-                ])
+            TelemetryItem::Group { title, datetime, .. } => {
+                let h =
+                    Layout::horizontal([Constraint::Fill(3), Constraint::Fill(2), Constraint::Length(2)]).split(area);
+
+                Line::from(vec![Span::from(title).bold().add_modifier(if self.is_selected {
+                    Modifier::UNDERLINED
+                } else {
+                    Modifier::empty()
+                })])
                 .magenta()
-                .render(area, buf);
+                .render(h[0], buf);
+
+                Line::from(humanize_last_heard(Utc::now().signed_duration_since(datetime)))
+                    .right_aligned()
+                    .render(h[1], buf);
             }
             TelemetryItem::Item {
                 title, formatted_value, ..

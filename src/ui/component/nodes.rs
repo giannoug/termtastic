@@ -97,6 +97,10 @@ impl<'a> Nodes<'a> {
                 Span::from("$unknown    ").magenta(),
                 Span::from("show only unknown nodes"),
             ]),
+            Line::from(vec![
+                Span::from("$telemetry  ").magenta(),
+                Span::from("show only nodes with telemetry"),
+            ]),
         ])
         .wrap(Wrap { trim: false })
         .scroll((self.filter_help_scroll_state.get_position() as u16, 0));
