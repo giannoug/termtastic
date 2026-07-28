@@ -1,4 +1,5 @@
-use btleplug::api::BDAddr;
+use btleplug::api::{BDAddr, Central, Manager as _, Peripheral as _};
+use btleplug::platform::Manager;
 use hostaddr::HostAddr;
 use meshtastic::api::{ConnectedStreamApi, StreamApi};
 use meshtastic::protobufs::FromRadio;
@@ -43,6 +44,30 @@ pub async fn connect_via_ble(
     let connected_stream_api = connected_stream_api.configure(utils::generate_rand_id()).await?;
 
     Ok((from_radio_receiver, connected_stream_api))
+}
+
+/// Explicitly tears down the BLE link at the OS/BlueZ level.
+///
+/// The `meshtastic` crate's `StreamApi::disconnect` only stops its worker tasks
+/// and drops the `btleplug` peripheral handle. Dropping the handle does not
+/// disconnect the GATT connection, so the device stays connected after exit.
+/// Here we look the peripheral up by its address and disconnect it directly.
+pub async fn disconnect_ble(address: BDAddr) -> anyhow::Result<()> {
+    let manager = Manager::new().await?;
+
+    for adapter in manager.adapters().await? {
+        for peripheral in adapter.peripherals().await? {
+            if peripheral.address() == address {
+                if peripheral.is_connected().await.unwrap_or(false) {
+                    peripheral.disconnect().await?;
+                }
+
+                return Ok(());
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn connect_via_serial(

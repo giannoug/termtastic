@@ -1,3 +1,4 @@
+use btleplug::api::BDAddr;
 use meshtastic::{
     Message,
     api::ConnectedStreamApi,
@@ -17,7 +18,7 @@ use tokio_graceful_shutdown::{ErrorAction, NestedSubsystem, SubsystemBuilder, Su
 use tracing_unwrap::OptionExt;
 
 use crate::meshtastic::{
-    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp,
+    RadioService, connect_via_ble, connect_via_serial, connect_via_tcp, disconnect_ble,
     types::{CommandToMeshtastic, MeshtasticEvent, TextMessage},
 };
 
@@ -36,6 +37,7 @@ pub struct MeshtasticService {
     connection_join_handle: Option<JoinHandle<anyhow::Result<()>>>,
     connection_tx: mpsc::Sender<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)>,
     connection_rx: mpsc::Receiver<(mpsc::UnboundedReceiver<FromRadio>, ConnectedStreamApi)>,
+    active_ble_address: Option<BDAddr>,
 }
 
 impl MeshtasticService {
@@ -58,6 +60,7 @@ impl MeshtasticService {
                 connection_join_handle: None,
                 connection_tx,
                 connection_rx,
+                active_ble_address: None,
             },
             command_tx.clone(),
             event_rx,
@@ -112,6 +115,8 @@ impl MeshtasticService {
 
         match cmd {
             CommandToMeshtastic::ConnectViaTcp(address) => {
+                self.active_ble_address = None;
+
                 self.connection_join_handle = Some(tokio::spawn(async move {
                     match timeout(
                         Duration::from_secs(TCP_CONNECTION_TIMEOUT_SECS),
@@ -134,6 +139,8 @@ impl MeshtasticService {
                 }));
             }
             CommandToMeshtastic::ConnectViaBle(address, name) => {
+                self.active_ble_address = Some(address);
+
                 self.connection_join_handle = Some(tokio::spawn(async move {
                     match timeout(
                         Duration::from_secs(BLE_CONNECTION_TIMEOUT_SECS),
@@ -156,6 +163,8 @@ impl MeshtasticService {
                 }));
             }
             CommandToMeshtastic::ConnectViaSerial(address) => {
+                self.active_ble_address = None;
+
                 self.connection_join_handle = Some(tokio::spawn(async move {
                     match timeout(
                         Duration::from_secs(SERIAL_CONNECTION_TIMEOUT_SECS),
@@ -531,6 +540,12 @@ impl MeshtasticService {
                 .disconnect()
                 .await
                 .inspect_err(|e| tracing::error!("stream api disconnect error: {}", e));
+        }
+
+        if let Some(address) = self.active_ble_address.take() {
+            let _ = disconnect_ble(address)
+                .await
+                .inspect_err(|e| tracing::error!("ble peripheral disconnect error: {}", e));
         }
 
         Ok(())
