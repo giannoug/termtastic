@@ -535,6 +535,24 @@ impl Store {
                     true
                 });
             }
+            StateAction::NodeFavoriteSet(node_key, is_favorite) => {
+                self.state_tx.send_if_modified(|state| {
+                    let Some(node) = state.nodes.get_mut(&node_key) else {
+                        return false;
+                    };
+
+                    if node.is_favorite == is_favorite {
+                        return false;
+                    }
+
+                    node.is_favorite = is_favorite;
+                    node.update_fulltext();
+
+                    changed.push(name_of!(nodes in State));
+
+                    true
+                });
+            }
             StateAction::NodeOwnerSet(user) => {
                 self.state_tx.send_if_modified(|state| {
                     if let Some(node) = state.nodes.get_mut(&state.my_node_key.expect("should be Some")) {

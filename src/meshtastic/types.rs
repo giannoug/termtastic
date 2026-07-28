@@ -23,6 +23,8 @@ pub enum MeshtasticEvent {
     NodeInfoBroadcastFailed(String),
     NodeRemoveAccepted,
     NodeRemoveFailed(String),
+    NodeFavoriteAccepted,
+    NodeFavoriteFailed(String),
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +85,11 @@ pub enum CommandToMeshtastic {
     },
     DeleteNode {
         node_num: u32,
+        my_node_num: u32,
+    },
+    SetFavorite {
+        node_num: u32,
+        is_favorite: bool,
         my_node_num: u32,
     },
     LoadCannedMessages {

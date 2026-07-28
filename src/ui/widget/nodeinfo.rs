@@ -57,6 +57,7 @@ pub enum NodeInfoWidgetEvent {
     CloseRequested,
     CopyToClipboardRequested(String),
     NodeDeleteRequested,
+    NodeFavoriteToggleRequested,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +147,10 @@ impl NodeInfoWidgetState {
                     self.is_delete_node_popup_visible = true;
                     return Ok(true);
                 }
+                (NodeInfoTab::Info, KeyCode::Char('f')) if modifiers.is_empty() && !context.is_my_node => {
+                    emit(NodeInfoWidgetEvent::NodeFavoriteToggleRequested)?;
+                    return Ok(true);
+                }
                 (NodeInfoTab::Telemetry, KeyCode::Char('c')) if modifiers.is_empty() => {
                     if let Some(item) = self
                         .telemetry_list_state
@@ -182,6 +187,7 @@ impl NodeInfoWidgetState {
             NodeInfoTab::Info => vec![
                 Some(Hotkey::new("esc", "close")),
                 Some(Hotkey::new("k", "copy public key")),
+                (!is_my_node).then_some(Hotkey::new("f", "favorite")),
                 (!is_my_node).then_some(Hotkey::new("delete", "remove")),
             ]
             .into_iter()
@@ -259,7 +265,21 @@ impl<'a> NodeInfoWidget<'a> {
         .render(v[2], buf);
 
         // fourth line
-        InfoWidget::new("hardware", node.hw_model().to_span().magenta()).render(v[3], buf);
+        ThreeColumnInfoWidget {
+            first: Some(InfoWidget::new("hardware", node.hw_model().to_span().magenta())),
+            second: None,
+            third: (!self.context.is_my_node).then(|| {
+                InfoWidget::new(
+                    "favorite",
+                    if node.is_favorite {
+                        Span::from("YES").yellow()
+                    } else {
+                        Span::from("no").dark_gray()
+                    },
+                )
+            }),
+        }
+        .render(v[3], buf);
 
         // delete popup
         if state.is_delete_node_popup_visible {

@@ -118,7 +118,7 @@
 - [x] Telemetry info
 - [ ] Traceroute feature
 - [ ] Ignore feature
-- [ ] Add to Favorite feature
+- [x] Add to Favorite feature
 - [ ] Position info
 - [ ] TBD
 

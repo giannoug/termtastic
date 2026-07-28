@@ -92,6 +92,10 @@ impl<'a> Component for Layout<'a> {
                         emit(AppEvent::NodeDeleteRequested(node_key))?;
                         Ok(())
                     }
+                    NodeInfoWidgetEvent::NodeFavoriteToggleRequested => {
+                        emit(AppEvent::NodeFavoriteToggleRequested(node_key))?;
+                        Ok(())
+                    }
                 },
             )? {
                 return Ok(true);

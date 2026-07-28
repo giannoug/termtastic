@@ -85,6 +85,7 @@ pub enum AppEvent {
     DisconnectionRequested,
     InitializationRequested,
     NodeDeleteRequested(u32),
+    NodeFavoriteToggleRequested(u32),
     NodeInfoBroadcastRequested,
     NodeInfoPopupCloseRequested,
     NodeInfoPopupOpenRequested(u32),
