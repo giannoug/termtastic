@@ -485,6 +485,22 @@ impl MeshtasticService {
                     Err(e) => self.event_tx.send(MeshtasticEvent::NodeRemoveFailed(e.to_string()))?,
                 };
             }
+            CommandToMeshtastic::SetFavorite {
+                node_num,
+                is_favorite,
+                my_node_num,
+            } => {
+                let payload = if is_favorite {
+                    admin_message::PayloadVariant::SetFavoriteNode(node_num)
+                } else {
+                    admin_message::PayloadVariant::RemoveFavoriteNode(node_num)
+                };
+
+                match self.send_admin_message(my_node_num, payload).await {
+                    Ok(()) => self.event_tx.send(MeshtasticEvent::NodeFavoriteAccepted)?,
+                    Err(e) => self.event_tx.send(MeshtasticEvent::NodeFavoriteFailed(e.to_string()))?,
+                };
+            }
         };
 
         Ok(())

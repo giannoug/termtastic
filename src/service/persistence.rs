@@ -90,6 +90,14 @@ impl PersistenceService {
                         .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
                 }
             }
+            StateAction::NodeFavoriteSet(node_key, is_favorite) => {
+                if let Err(e) = repository.node_set_favorite(*node_key, *is_favorite).await {
+                    tracing::error!("node favorite update failed: {}", e);
+
+                    self.forward_state_action_tx
+                        .send(StateAction::Toast(Toast::error("DB error: see logs")))?;
+                }
+            }
             StateAction::NodeUpdateLastHeard {
                 node_key,
                 hops,

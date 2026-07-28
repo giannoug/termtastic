@@ -119,4 +119,16 @@ impl Repository {
 
         Ok(())
     }
+
+    pub async fn node_set_favorite(&self, key: u32, is_favorite: bool) -> Result<(), RepositoryError> {
+        self.conn
+            .call(move |conn| -> Result<_, RepositoryError> {
+                let mut statement =
+                    conn.prepare(&format!("UPDATE {} SET is_favorite = ?1 WHERE key = ?2", TABLE_NAME))?;
+                statement.execute(params![is_favorite, key]).map_err(|e| e.into())
+            })
+            .await?;
+
+        Ok(())
+    }
 }

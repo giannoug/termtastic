@@ -117,6 +117,16 @@ impl NodesService {
                     self.meshtastic_command_tx
                         .send(CommandToMeshtastic::DeleteNode { node_num, my_node_num })?;
                 }
+                AppEvent::NodeFavoriteToggleRequested(node_num) => {
+                    let my_node_num = state.my_node_key.expect("should be Some");
+                    let is_favorite = state.nodes.get(&node_num).map(|n| n.is_favorite).unwrap_or(false);
+
+                    self.meshtastic_command_tx.send(CommandToMeshtastic::SetFavorite {
+                        node_num,
+                        is_favorite: !is_favorite,
+                        my_node_num,
+                    })?;
+                }
                 _ => {}
             },
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -152,6 +162,15 @@ impl NodesService {
 
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::error("node remove failed")))?;
+                }
+                MeshtasticEvent::NodeFavoriteAccepted => self
+                    .state_action_tx
+                    .send(StateAction::Toast(Toast::success("favorite updated")))?,
+                MeshtasticEvent::NodeFavoriteFailed(e) => {
+                    tracing::error!("favorite update failed: {:?}", e);
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("favorite update failed")))?;
                 }
                 _ => {}
             },
@@ -224,6 +243,14 @@ impl NodesService {
                                 }
                                 Some(admin_message::PayloadVariant::RemoveByNodenum(node_num)) => {
                                     self.state_action_tx.send(StateAction::NodeDelete(node_num))?;
+                                }
+                                Some(admin_message::PayloadVariant::SetFavoriteNode(node_num)) => {
+                                    self.state_action_tx
+                                        .send(StateAction::NodeFavoriteSet(node_num, true))?;
+                                }
+                                Some(admin_message::PayloadVariant::RemoveFavoriteNode(node_num)) => {
+                                    self.state_action_tx
+                                        .send(StateAction::NodeFavoriteSet(node_num, false))?;
                                 }
                                 _ => {}
                             },

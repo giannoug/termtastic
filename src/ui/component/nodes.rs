@@ -454,12 +454,20 @@ impl<'a> Widget for NodeWidget<'a> {
             .split(v[1]);
 
         // first line
-        Line::from(vec![
+        let mut first_line = Vec::new();
+
+        if self.node.is_favorite {
+            first_line.push(Span::from("*").yellow());
+            first_line.push(Span::from(" "));
+        }
+
+        first_line.extend([
             short_name_to_span(self.node, self.is_my_node),
             Span::from(" "),
             Span::from(self.node.long_name()),
-        ])
-        .render(v0_h[0], buf);
+        ]);
+
+        Line::from(first_line).render(v0_h[0], buf);
 
         Line::from(hops_to_spans(self.node, self.is_my_node)).render(v0_h[1], buf);
 

@@ -159,6 +159,12 @@ impl State {
                     _ => {}
                 };
 
+                match (n1.is_favorite, n2.is_favorite) {
+                    (true, false) => return Ordering::Less,
+                    (false, true) => return Ordering::Greater,
+                    _ => {}
+                };
+
                 match &self.nodes_sort_by {
                     NodesSortBy::Hops => n1
                         .hops

@@ -53,6 +53,7 @@ pub enum StateAction {
         rssi: i32,
     },
     NodeDelete(u32),
+    NodeFavoriteSet(u32, bool),
     NodeOwnerSet(NodeUser),
     NodeLastTelemetrySet(NodeTelemetry),
     NodesSortBySet(NodesSortBy),
