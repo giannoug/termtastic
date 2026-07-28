@@ -3,7 +3,9 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use meshtastic::{
     Message as _,
-    protobufs::{AdminMessage, MeshPacket, PortNum, Telemetry, User, admin_message, from_radio, mesh_packet},
+    protobufs::{
+        AdminMessage, MeshPacket, PortNum, RouteDiscovery, Telemetry, User, admin_message, from_radio, mesh_packet,
+    },
 };
 use tokio::{
     sync::{broadcast, mpsc, watch},
@@ -12,7 +14,7 @@ use tokio::{
 use tokio_graceful_shutdown::SubsystemHandle;
 
 use crate::state::State;
-use crate::types::{NodeTelemetry, Toast};
+use crate::types::{NodeTelemetry, NodeTraceroute, Toast};
 use crate::{
     meshtastic::types::{CommandToMeshtastic, MeshtasticEvent},
     state::StateAction,
@@ -127,6 +129,15 @@ impl NodesService {
                         my_node_num,
                     })?;
                 }
+                AppEvent::TracerouteRequested(node_num) => {
+                    let my_node_num = state.my_node_key.expect("should be Some");
+
+                    self.meshtastic_command_tx
+                        .send(CommandToMeshtastic::SendTraceroute { node_num, my_node_num })?;
+
+                    self.state_action_tx
+                        .send(StateAction::NodeTraceroutePending(node_num))?;
+                }
                 _ => {}
             },
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -171,6 +182,12 @@ impl NodesService {
 
                     self.state_action_tx
                         .send(StateAction::Toast(Toast::error("favorite update failed")))?;
+                }
+                MeshtasticEvent::TracerouteRejected(e) => {
+                    tracing::error!("traceroute rejected: {:?}", e);
+
+                    self.state_action_tx
+                        .send(StateAction::Toast(Toast::error("traceroute request rejected")))?;
                 }
                 _ => {}
             },
@@ -280,6 +297,27 @@ impl NodesService {
                             }
                             Err(e) => {
                                 tracing::debug!("can't decode TelemetryApp payload: {:?}", e);
+                            }
+                        },
+                        PortNum::TracerouteApp => match RouteDiscovery::decode(&*data.payload) {
+                            Ok(route_discovery) => {
+                                let node_traceroute = NodeTraceroute {
+                                    node_key: mesh_packet.from,
+                                    datetime: Utc::now(),
+                                    route: route_discovery.route,
+                                    snr_towards: route_discovery.snr_towards,
+                                    route_back: route_discovery.route_back,
+                                    snr_back: route_discovery.snr_back,
+                                };
+
+                                self.app_event_tx
+                                    .send(AppEvent::TracerouteArrived(node_traceroute.clone()))?;
+
+                                self.state_action_tx
+                                    .send(StateAction::NodeTracerouteSet(node_traceroute))?;
+                            }
+                            Err(e) => {
+                                tracing::debug!("can't decode TracerouteApp payload: {:?}", e);
                             }
                         },
                         _ => {}

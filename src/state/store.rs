@@ -10,7 +10,7 @@ use tokio::{
 };
 use tokio_graceful_shutdown::SubsystemHandle;
 
-use crate::service::update_nodeinfo_telemetry;
+use crate::service::{update_nodeinfo_telemetry, update_nodeinfo_traceroute};
 use crate::types::{Chat, NodeLastTelemetry, NodeLastTelemetryItem};
 use crate::{
     state::{State, StateAction},
@@ -462,14 +462,23 @@ impl Store {
                     if update_nodeinfo_telemetry(state) {
                         changed.push(name_of!(nodeinfo_telemetry in State));
                     }
+
+                    if update_nodeinfo_traceroute(state) {
+                        changed.push(name_of!(nodeinfo_traceroute in State));
+                    }
                 });
             }
             StateAction::NodeInfoUnset => {
                 self.state_tx.send_modify(|state| {
                     state.nodeinfo = None;
                     state.nodeinfo_telemetry.clear();
+                    state.nodeinfo_traceroute.clear();
 
-                    changed.extend([name_of!(nodeinfo in State), name_of!(nodeinfo_telemetry in State)]);
+                    changed.extend([
+                        name_of!(nodeinfo in State),
+                        name_of!(nodeinfo_telemetry in State),
+                        name_of!(nodeinfo_traceroute in State),
+                    ]);
                 });
             }
             StateAction::NodeUpdate(node) => {
@@ -677,6 +686,36 @@ impl Store {
 
                     if update_nodeinfo_telemetry(state) {
                         changed.push(name_of!(nodeinfo_telemetry in State));
+                    }
+                });
+            }
+            StateAction::NodeTraceroutePending(node_key) => {
+                self.state_tx.send_modify(|state| {
+                    state.nodes_traceroute_pending.insert(node_key);
+
+                    changed.push(name_of!(nodes_traceroute_pending in State));
+                });
+            }
+            StateAction::NodeTracerouteSet(traceroute) => {
+                self.state_tx.send_modify(|state| {
+                    let node_key = traceroute.node_key;
+
+                    let is_newer = state
+                        .nodes_traceroute
+                        .get(&node_key)
+                        .map_or(true, |t| traceroute.datetime >= t.datetime);
+
+                    if is_newer {
+                        state.nodes_traceroute.insert(node_key, traceroute);
+                        changed.push(name_of!(nodes_traceroute in State));
+                    }
+
+                    if state.nodes_traceroute_pending.remove(&node_key) {
+                        changed.push(name_of!(nodes_traceroute_pending in State));
+                    }
+
+                    if is_newer && update_nodeinfo_traceroute(state) {
+                        changed.push(name_of!(nodeinfo_traceroute in State));
                     }
                 });
             }

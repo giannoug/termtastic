@@ -96,6 +96,10 @@ impl<'a> Component for Layout<'a> {
                         emit(AppEvent::NodeFavoriteToggleRequested(node_key))?;
                         Ok(())
                     }
+                    NodeInfoWidgetEvent::TracerouteRequested => {
+                        emit(AppEvent::TracerouteRequested(node_key))?;
+                        Ok(())
+                    }
                 },
             )? {
                 return Ok(true);
@@ -269,6 +273,8 @@ fn build_nodeinfo_context(node_key: u32, state: &State) -> NodeInfoContext<'_> {
     NodeInfoContext {
         maybe_node: state.nodes.get(&node_key),
         telemetry: &state.nodeinfo_telemetry,
+        traceroute: &state.nodeinfo_traceroute,
+        is_traceroute_pending: state.nodes_traceroute_pending.contains(&node_key),
         uptime: state
             .nodes_last_telemetry
             .get(&node_key)

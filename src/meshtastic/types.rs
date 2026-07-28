@@ -25,6 +25,7 @@ pub enum MeshtasticEvent {
     NodeRemoveFailed(String),
     NodeFavoriteAccepted,
     NodeFavoriteFailed(String),
+    TracerouteRejected(String),
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +91,10 @@ pub enum CommandToMeshtastic {
     SetFavorite {
         node_num: u32,
         is_favorite: bool,
+        my_node_num: u32,
+    },
+    SendTraceroute {
+        node_num: u32,
         my_node_num: u32,
     },
     LoadCannedMessages {

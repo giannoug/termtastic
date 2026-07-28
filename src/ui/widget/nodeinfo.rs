@@ -1,7 +1,7 @@
-use crate::types::{Hotkey, Node, TelemetryItem};
+use crate::types::{Hotkey, Node, TelemetryItem, TracerouteItem};
 use crate::ui::helpers::{
-    Base64EncoderExt, ListStateExt, default_scrollbar, hops_to_spans, humanize_last_heard, humanize_uptime,
-    last_heard_to_spans, short_name_to_span,
+    Base64EncoderExt, ListStateExt, SnrColorExt, default_scrollbar, hops_to_spans, humanize_last_heard,
+    humanize_uptime, last_heard_to_spans, short_name_to_span,
 };
 use crate::ui::widget::{PlaceholderWidget, PopupConfirmWidget, TabsWidget};
 use chrono::Utc;
@@ -58,12 +58,15 @@ pub enum NodeInfoWidgetEvent {
     CopyToClipboardRequested(String),
     NodeDeleteRequested,
     NodeFavoriteToggleRequested,
+    TracerouteRequested,
 }
 
 #[derive(Debug, Clone)]
 pub struct NodeInfoContext<'a> {
     pub maybe_node: Option<&'a Node>,
     pub telemetry: &'a Vec<TelemetryItem>,
+    pub traceroute: &'a Vec<TracerouteItem>,
+    pub is_traceroute_pending: bool,
     pub uptime: Option<u32>,
     pub is_my_node: bool,
 }
@@ -72,6 +75,7 @@ pub struct NodeInfoContext<'a> {
 pub struct NodeInfoWidgetState {
     active_tab: NodeInfoTab,
     telemetry_list_state: ListState,
+    traceroute_list_state: ListState,
     is_delete_node_popup_visible: bool,
 }
 
@@ -80,6 +84,7 @@ impl Default for NodeInfoWidgetState {
         Self {
             active_tab: NodeInfoTab::default(),
             telemetry_list_state: ListState::default(),
+            traceroute_list_state: ListState::default(),
             is_delete_node_popup_visible: false,
         }
     }
@@ -116,6 +121,12 @@ impl NodeInfoWidgetState {
         }
 
         if self.active_tab == NodeInfoTab::Telemetry && self.telemetry_list_state.handle_navigation_events(&event, None)
+        {
+            return Ok(true);
+        }
+
+        if self.active_tab == NodeInfoTab::Traceroutes
+            && self.traceroute_list_state.handle_navigation_events(&event, None)
         {
             return Ok(true);
         }
@@ -170,6 +181,20 @@ impl NodeInfoWidgetState {
                         return Ok(true);
                     }
                 }
+                (NodeInfoTab::Traceroutes, KeyCode::Char('r')) if modifiers.is_empty() => {
+                    emit(NodeInfoWidgetEvent::TracerouteRequested)?;
+                    return Ok(true);
+                }
+                (NodeInfoTab::Traceroutes, KeyCode::Char('c')) if modifiers.is_empty() => {
+                    if let Some(TracerouteItem::Group { json, .. }) = self
+                        .traceroute_list_state
+                        .selected
+                        .and_then(|i| context.traceroute.get(i))
+                    {
+                        emit(NodeInfoWidgetEvent::CopyToClipboardRequested(json.to_owned()))?;
+                        return Ok(true);
+                    }
+                }
                 (_, KeyCode::Esc) if modifiers.is_empty() => {
                     emit(NodeInfoWidgetEvent::CloseRequested)?;
                     return Ok(true);
@@ -194,6 +219,11 @@ impl NodeInfoWidgetState {
             .flatten()
             .collect(),
             NodeInfoTab::Telemetry => vec![Hotkey::new("esc", "close"), Hotkey::new("c", "copy")],
+            NodeInfoTab::Traceroutes => vec![
+                Hotkey::new("esc", "close"),
+                Hotkey::new("r", "run traceroute"),
+                Hotkey::new("c", "copy"),
+            ],
             _ => vec![],
         }
     }
@@ -323,6 +353,47 @@ impl<'a> NodeInfoWidget<'a> {
 
         list.render(area, buf, &mut state.telemetry_list_state);
     }
+
+    fn render_traceroutes(
+        &self,
+        traceroute: &Vec<TracerouteItem>,
+        is_pending: bool,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &mut NodeInfoWidgetState,
+    ) {
+        if traceroute.is_empty() {
+            if is_pending {
+                PlaceholderWidget::dark_gray("tracing route\u{2026}").render(area, buf);
+            } else {
+                PlaceholderWidget::dark_gray("press 'r' to run a traceroute").render(area, buf);
+            }
+            return;
+        };
+
+        let v = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).split(area);
+
+        state.traceroute_list_state.fix_selection(traceroute.len());
+
+        let list_builder = ListBuilder::new(|context| {
+            let widget = TracerouteItemWidget {
+                item: &traceroute[context.index],
+                is_selected: context.is_selected,
+            };
+
+            (widget, 1)
+        });
+
+        let list = ListView::new(list_builder, traceroute.len())
+            .infinite_scrolling(false)
+            .scrollbar(default_scrollbar());
+
+        list.render(v[0], buf, &mut state.traceroute_list_state);
+
+        if is_pending {
+            Line::from(Span::from("tracing route\u{2026}").dark_gray()).render(v[1], buf);
+        }
+    }
 }
 
 impl<'a> StatefulWidget for NodeInfoWidget<'a> {
@@ -365,6 +436,13 @@ impl<'a> StatefulWidget for NodeInfoWidget<'a> {
         match &state.active_tab {
             NodeInfoTab::Info => self.render_info(node, v[2], buf, state),
             NodeInfoTab::Telemetry => self.render_telemetry(self.context.telemetry, v[2], buf, state),
+            NodeInfoTab::Traceroutes => self.render_traceroutes(
+                self.context.traceroute,
+                self.context.is_traceroute_pending,
+                v[2],
+                buf,
+                state,
+            ),
             _ => PlaceholderWidget::red("not implemented").render(v[2], buf),
         }
     }
@@ -476,6 +554,60 @@ impl<'a> Widget for TelemetryItemWidget<'a> {
                         Modifier::empty()
                     })
                     .render(v[1], buf);
+            }
+        }
+    }
+}
+
+struct TracerouteItemWidget<'a> {
+    item: &'a TracerouteItem,
+    is_selected: bool,
+}
+
+impl<'a> Widget for TracerouteItemWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        match self.item {
+            TracerouteItem::Group { title, datetime, .. } => {
+                let h =
+                    Layout::horizontal([Constraint::Fill(3), Constraint::Fill(2), Constraint::Length(2)]).split(area);
+
+                Line::from(vec![Span::from(title).bold().add_modifier(if self.is_selected {
+                    Modifier::UNDERLINED
+                } else {
+                    Modifier::empty()
+                })])
+                .magenta()
+                .render(h[0], buf);
+
+                Line::from(humanize_last_heard(Utc::now().signed_duration_since(datetime)))
+                    .right_aligned()
+                    .render(h[1], buf);
+            }
+            TracerouteItem::Hop { title, snr } => {
+                let v = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(area);
+
+                Line::from(vec![
+                    Span::from("  "),
+                    Span::from(title).add_modifier(if self.is_selected {
+                        Modifier::UNDERLINED | Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+                ])
+                .render(v[0], buf);
+
+                let snr_span = match snr {
+                    Some(snr) => Span::from(format!("{:.2} dB", snr)).fg(snr.snr_to_color()),
+                    None => Span::from("no data").dark_gray(),
+                };
+
+                Line::from(snr_span.add_modifier(if self.is_selected {
+                    Modifier::UNDERLINED | Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }))
+                .right_aligned()
+                .render(v[1], buf);
             }
         }
     }
