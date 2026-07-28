@@ -98,6 +98,8 @@ pub enum AppEvent {
     SettingsFormSelected(FormId),
     SplashLogoRequested,
     TelemetryArrived(NodeTelemetry),
+    TracerouteRequested(u32),
+    TracerouteArrived(NodeTraceroute),
     TabNextRequested,
     TabPreviousRequested,
     TryingToQuit,
@@ -955,6 +957,46 @@ impl TelemetryItem {
             title: title.as_ref().to_owned(),
             value: value.map(|v| v.to_string()),
             formatted_value: formatted_value.map(|v| v.to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NodeTraceroute {
+    pub node_key: u32,
+    pub datetime: DateTime<Utc>,
+    pub route: Vec<u32>,
+    pub snr_towards: Vec<i32>,
+    pub route_back: Vec<u32>,
+    pub snr_back: Vec<i32>,
+}
+
+#[derive(Debug, Clone)]
+pub enum TracerouteItem {
+    Group {
+        title: String,
+        datetime: DateTime<Utc>,
+        json: String,
+    },
+    Hop {
+        title: String,
+        snr: Option<f32>,
+    },
+}
+
+impl TracerouteItem {
+    pub fn group(title: impl AsRef<str>, datetime: DateTime<Utc>, json: String) -> Self {
+        Self::Group {
+            title: title.as_ref().to_owned(),
+            datetime,
+            json,
+        }
+    }
+
+    pub fn hop(title: impl AsRef<str>, snr: Option<f32>) -> Self {
+        Self::Hop {
+            title: title.as_ref().to_owned(),
+            snr,
         }
     }
 }

@@ -4,7 +4,7 @@ use meshtastic::protobufs::{config, module_config, routing};
 
 use crate::types::{
     AppConfig, Channel, Chat, Device, FormData, FormId, FormItemKey, FormValue, LogRecord, Message, Node,
-    NodeTelemetry, NodeUser, NodesSortBy, Toast, UiConfig,
+    NodeTelemetry, NodeTraceroute, NodeUser, NodesSortBy, Toast, UiConfig,
 };
 
 #[derive(Debug)]
@@ -55,6 +55,8 @@ pub enum StateAction {
     NodeDelete(u32),
     NodeOwnerSet(NodeUser),
     NodeLastTelemetrySet(NodeTelemetry),
+    NodeTracerouteSet(NodeTraceroute),
+    NodeTraceroutePending(u32),
     NodesSortBySet(NodesSortBy),
     NodesFilterSet(String),
     NodesOnlineSet(u16),

@@ -163,6 +163,18 @@ impl PersistenceService {
                         }
                     };
                 }
+                AppEvent::TracerouteArrived(packet) => {
+                    let Some(repository) = &self.repository else {
+                        return Ok(());
+                    };
+
+                    match repository.traceroute_insert(packet.try_into()?).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("traceroute store to DB failed: {}", e);
+                        }
+                    };
+                }
                 _ => {}
             },
             Err(broadcast::error::RecvError::Lagged(n)) => {
@@ -236,6 +248,37 @@ impl PersistenceService {
 
                 self.forward_state_action_tx
                     .send(StateAction::Toast(Toast::error("telemetry not loaded from DB")))?;
+
+                return Ok(());
+            }
+        };
+
+        // traceroute
+        match repository.traceroute_find_last_for_each_node().await {
+            Ok(map) => {
+                for (_, traceroute) in map.iter() {
+                    match traceroute.try_into() {
+                        Ok(node_traceroute) => self
+                            .forward_state_action_tx
+                            .send(StateAction::NodeTracerouteSet(node_traceroute))?,
+                        Err(e) => {
+                            tracing::error!(
+                                "traceroute conversion failed, id: {:?}, node_key: {}, error: {}",
+                                traceroute.id,
+                                traceroute.node_key,
+                                e
+                            )
+                        }
+                    }
+                }
+
+                tracing::info!("traceroute data loaded from DB: {} nodes", map.len());
+            }
+            Err(e) => {
+                tracing::error!("traceroute load failed: {}", e);
+
+                self.forward_state_action_tx
+                    .send(StateAction::Toast(Toast::error("traceroute not loaded from DB")))?;
 
                 return Ok(());
             }

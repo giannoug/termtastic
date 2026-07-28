@@ -5,7 +5,7 @@ use itertools::Itertools;
 use ordermap::OrderMap;
 use std::cmp::Ordering;
 use std::{
-    collections::{BTreeSet, HashMap, VecDeque},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
 };
 
@@ -32,10 +32,13 @@ pub struct State {
     pub my_node_user_hash: u64,
     pub nodeinfo: Option<u32>,
     pub nodeinfo_telemetry: Vec<TelemetryItem>,
+    pub nodeinfo_traceroute: Vec<TracerouteItem>,
     pub nodes: HashMap<u32, Node>,
     pub nodes_stash: Vec<Node>,
     pub nodes_stash_cap: u32,
     pub nodes_last_telemetry: HashMap<u32, NodeLastTelemetry>,
+    pub nodes_traceroute: HashMap<u32, NodeTraceroute>,
+    pub nodes_traceroute_pending: HashSet<u32>,
     pub nodes_sort_by: NodesSortBy,
     pub nodes_filter: String,
     pub nodes_view: Vec<u32>,
@@ -79,7 +82,10 @@ impl Default for State {
             my_node_user_hash: Default::default(),
             nodeinfo: None,
             nodeinfo_telemetry: Default::default(),
+            nodeinfo_traceroute: Default::default(),
             nodes_last_telemetry: Default::default(),
+            nodes_traceroute: Default::default(),
+            nodes_traceroute_pending: Default::default(),
             nodes_sort_by: Default::default(),
             nodes_filter: Default::default(),
             nodes_view: Vec::with_capacity(1000),

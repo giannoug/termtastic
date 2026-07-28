@@ -116,7 +116,7 @@
 - [x] Copy public key to clipboard
 - [x] Delete node feature
 - [x] Telemetry info
-- [ ] Traceroute feature
+- [x] Traceroute feature
 - [ ] Ignore feature
 - [ ] Add to Favorite feature
 - [ ] Position info

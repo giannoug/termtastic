@@ -485,6 +485,11 @@ impl MeshtasticService {
                     Err(e) => self.event_tx.send(MeshtasticEvent::NodeRemoveFailed(e.to_string()))?,
                 };
             }
+            CommandToMeshtastic::SendTraceroute { node_num, my_node_num } => {
+                if let Err(e) = self.send_traceroute(my_node_num, node_num).await {
+                    self.event_tx.send(MeshtasticEvent::TracerouteRejected(e.to_string()))?;
+                }
+            }
         };
 
         Ok(())
@@ -565,6 +570,34 @@ impl MeshtasticService {
                 true,  // echo_response
                 None,  // reply_id
                 None,  // emoji
+            )
+            .await?;
+
+        Ok(())
+    }
+
+    async fn send_traceroute(&mut self, my_node_num: u32, node_num: u32) -> anyhow::Result<()> {
+        let mut packet_router = RetransmitPacketRouter {
+            my_node_num,
+            event_tx: &self.event_tx,
+        };
+
+        let packet = meshtastic::protobufs::RouteDiscovery::default();
+
+        self.stream_api
+            .as_mut()
+            .expect_or_log("should be connected")
+            .send_mesh_packet(
+                &mut packet_router,
+                EncodedMeshPacketData::new(packet.encode_to_vec().into()),
+                PortNum::TracerouteApp,
+                PacketDestination::Node(NodeId::from(node_num)),
+                MeshChannel::new(0)?,
+                true, // want_ack
+                true, // want_response
+                true, // echo_response
+                None, // reply_id
+                None, // emoji
             )
             .await?;
 
